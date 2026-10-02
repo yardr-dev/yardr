@@ -257,7 +257,8 @@ func defaultOperator() string {
 
 // installRoles writes the embedded role prompts into dir, naming operator
 // where the templates say {{operator}}, and keeps any file already there.
-func installRoles(dir, operator string) (written, kept []string, err error) {
+// With only, it writes just those files (e.g. "builder.md").
+func installRoles(dir, operator string, only ...string) (written, kept []string, err error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, nil, err
 	}
@@ -266,6 +267,9 @@ func installRoles(dir, operator string) (written, kept []string, err error) {
 		return nil, nil, err
 	}
 	for _, f := range files {
+		if len(only) > 0 && !slices.Contains(only, f.Name()) {
+			continue
+		}
 		body, err := roles.FS.ReadFile(f.Name())
 		if err != nil {
 			return nil, nil, err

@@ -20,3 +20,12 @@ If you are stuck or the bead is unclear: note the question on the bead and
 `yardr bead done <id> --outcome question`, which sends it to a human. If the
 stage offers no `question` outcome, `yardr bead hold <id>` instead; the mayor
 sees held beads.
+
+## In a directory rig
+
+If you work in a directory rig (the brief says which kind of rig it is): no
+branches, no commits. You work in the rig's directory itself, where other
+beads may be at work too, so touch only the files and folders your bead names.
+Name your outputs: your note lists every file you wrote or changed, by path.
+The gate is the rig's `.yardr/check` if it has one (`yardr rig check <rig>`
+passes with "no gate" otherwise); steps 3 and 5 apply only as far as that.
