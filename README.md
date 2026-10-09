@@ -123,3 +123,7 @@ Every command takes `--json`, and `yardr <command> --help` says the rest.
   vocabulary.
 
 Thank you to everyone who built them.
+
+## Licence
+
+Apache License 2.0, see [LICENSE](LICENSE).
