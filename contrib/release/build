@@ -205,8 +205,8 @@ for target in $targets; do
     notarize "$target" "$dir/yardr"
   fi
 
-  # NOTICE goes with LICENSE: Apache 2.0 asks whoever passes the archive on
-  # to keep it.
+  # NOTICE goes with LICENSE: the FSL asks whoever passes the archive on
+  # to keep the terms and the copyright notices with it.
   files="yardr README.md LICENSE NOTICE"
   cp README.md LICENSE NOTICE "$dir/"
   # The v is the tag's, not the version's: yardr_1.2.3_darwin_arm64.tar.gz.
