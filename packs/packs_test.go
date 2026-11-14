@@ -2602,7 +2602,7 @@ func TestPostHogPack(t *testing.T) {
 	for _, c := range d.Commands() {
 		commands = append(commands, c.Key+" "+strings.Join(c.Argv, " "))
 	}
-	if want := []string{"hook.normalize posthog/normalize"}; !slices.Equal(commands, want) {
+	if want := []string{"thread.state posthog/thread state", "hook.normalize posthog/normalize"}; !slices.Equal(commands, want) {
 		t.Fatalf("commands = %q, want %q", commands, want)
 	}
 	if d.Base != "https://us.posthog.com" {
@@ -2611,16 +2611,29 @@ func TestPostHogPack(t *testing.T) {
 	if c := d.Credential; c == nil || c.Env != "POSTHOG_API_KEY" || c.Header != "Authorization: Bearer {credential}" {
 		t.Fatalf("credential = %+v", c)
 	}
-	if d.Hear != nil || d.Thread != nil || d.Notify != nil {
-		t.Fatalf("the pack declares a hear, thread or notify key: it reads PostHog and hears a new error issue, nothing else")
+	if d.Hear != nil || d.Notify != nil {
+		t.Fatalf("the pack declares a hear or notify key: it reads PostHog, hears a new error issue and sets an issue's status, nothing else")
+	}
+	// The thread key sets an issue's status alone: started is active,
+	// done is resolved. No reply, open or read key: an issue takes no
+	// comment for them, so the yard sets statuses and speaks nothing in
+	// threads.
+	th := d.Thread
+	if th == nil || !slices.Equal(th.State, []string{"posthog/thread", "state"}) ||
+		!slices.Equal(th.States, []string{"started", "done"}) {
+		t.Fatalf("thread = %+v, want the state command with started and done", th)
+	}
+	if len(th.Reply) > 0 || len(th.Posted) > 0 || len(th.Read) > 0 || len(th.Open) > 0 ||
+		len(th.Opened) > 0 || th.Place != "" || th.Labels || th.Assignee != "" {
+		t.Fatalf("thread = %+v, want no reply, open, read, place, labels or assignee key: resolving only", th)
 	}
 	// The link key names an error issue's page for a bead's link: the
 	// host of the default base, the page under its project with the
-	// issue's UUID, and the UUID for a thread command.
+	// issue's UUID, and the project and the UUID for a thread command.
 	if l := d.Link; l == nil || l.Host != "us.posthog.com" ||
 		l.Issue != `^/project/([0-9]+)/error-tracking/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})(?:/.*)?$` ||
-		l.Fixed != "https://us.posthog.com/project/{1}/error-tracking/{2}" || l.Thread != "{2}" {
-		t.Fatalf("link = %+v, want the issue's page on the default base's host with the UUID for a thread", l)
+		l.Fixed != "https://us.posthog.com/project/{1}/error-tracking/{2}" || l.Thread != "{1}:{2}" {
+		t.Fatalf("link = %+v, want the issue's page on the default base's host with the project and the UUID for a thread", l)
 	}
 	params := func(c *source.Call) map[string]source.Param {
 		out := map[string]source.Param{}
@@ -2868,6 +2881,7 @@ func TestPostHogPack(t *testing.T) {
 		"Personal API keys",
 		"query:read",
 		"error_tracking:read",
+		"error_tracking:write",
 		"user:read",
 		"session_recording:read",
 		"replay_scanner:read",

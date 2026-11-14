@@ -3,20 +3,23 @@
 The pack wires PostHog into the yard as the declared source `posthog`:
 an agent reads it through `yardr call` (HogQL queries, error tracking
 issues, session recordings, a session's Replay Vision observations),
-and webhooks hear a new error issue, and footplate feedback. One call
-writes: the destination, made once by the hook card; resolving or
-assigning an issue stays in PostHog's pages.
+and webhooks hear a new error issue, and footplate feedback. Two calls
+write: the destination, made once by the hook card, and an issue's
+status, resolved when the bead fixing it lands; assigning an issue
+stays in PostHog's pages.
 
 1. **A personal API key.** In PostHog, your user settings → Personal API
    keys (Settings → Personal API keys,
    `https://us.posthog.com/settings/user-api-keys#personal-api-keys`, or
    `https://eu.posthog.com/settings/user-api-keys#personal-api-keys` on
    EU Cloud): create one with the scopes `query:read`,
-   `error_tracking:read`, `user:read`, `session_recording:read`,
-   `replay_scanner:read`, `hog_function:read` and `hog_function:write`,
-   for the queries, the issues, the check, the recordings, the
-   observations, the register check and the destination below. The yard
-   sends it as `Authorization: Bearer`, read from the variable
+   `error_tracking:read`, `error_tracking:write`, `user:read`,
+   `session_recording:read`, `replay_scanner:read`, `hog_function:read`
+   and `hog_function:write`, for the queries, the issues and resolving
+   them, the check, the recordings, the observations, the register check
+   and the destination below. Resolving an issue needs
+   `error_tracking:write`; the reads and the hook work without it. The
+   yard sends it as `Authorization: Bearer`, read from the variable
    `POSTHOG_API_KEY`, the name and never the value.
 2. **The project id.** In PostHog, the project's settings → Project ID
    (`https://us.posthog.com/settings/project#variables`, or
@@ -39,7 +42,7 @@ assigning an issue stays in PostHog's pages.
    ```sh
    yardr bead ask <bead> - --secret posthog <<'ASK'
    PostHog's personal API key
-   Settings → Personal API keys, scopes query:read, error_tracking:read, user:read, session_recording:read, replay_scanner:read, hog_function:read, hog_function:write.
+   Settings → Personal API keys, scopes query:read, error_tracking:read, error_tracking:write, user:read, session_recording:read, replay_scanner:read, hog_function:read, hog_function:write.
    ASK
    ```
    The key goes nowhere else: not into mail, chat, a bead or a pack.
@@ -106,8 +109,9 @@ assigning an issue stays in PostHog's pages.
    of making another.
    Removing the hook later removes nothing in PostHog: delete the
    destination in error tracking's alerting settings too.
-7. **Without the write scope, by hand.** Where the operator will not
-   give the key `hog_function:write`, step 6's card cannot register,
+7. **Without the destination's write scope, by hand.** Where the
+   operator will not give the key `hog_function:write`, step 6's card
+   cannot register,
    and the secret and the destination are made by hand instead. The
    reads above work either way. Make the secret first: PostHog holds
    whatever the destination is given, and the yard keeps the same in
@@ -195,8 +199,9 @@ assigning an issue stays in PostHog's pages.
    invocation"; posthog.com/docs/cdp/destinations/
    customizing-destinations for the `{event}` template).
 
-   If you later give the key the write scope and add the hook through
-   step 6's card instead, delete this destination first: the card adopts
+   If you later give the key the destination's write scope and add the
+   hook through step 6's card instead, delete this destination first:
+   the card adopts
    a destination already aimed at the hook's URL, and a hand-made one's
    secret is not the hook's.
 8. **Hear new issues, and file beads for them.** A subscription hears

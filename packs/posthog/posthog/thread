@@ -1,0 +1,108 @@
+#!/bin/bash
+# thread: what the yard does in a PostHog thread: state. One JSON object
+# on stdin, one on stdout, as the thread key of the declaration says.
+# POSTHOG_API_KEY (a personal API key with error_tracking:write, sent as
+# a Bearer token) and YARDR_SOURCE_BASE, the declaration's base, are in
+# the environment. Needs curl and jq.
+set -euo pipefail
+in=$(cat)
+arg() { jq -r --arg k "$1" '.[$k] // ""' <<<"$in"; }
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+# api <method> <url> [data]: the answer's body, or the failure on stderr.
+# The token goes to curl as a config line on its stdin, written by the
+# shell itself: an argument can be read by every process on the machine
+# while curl runs.
+api() {
+  local m u code
+  m=$1
+  u=$2
+  if [ $# -ge 3 ]; then
+    code=$(printf 'header = "Authorization: Bearer %s"\n' "$POSTHOG_API_KEY" \
+      | curl -sS -o "$tmp/out" -w '%{http_code}' -K - -X "$m" "$u" \
+      -H 'Accept: application/json' \
+      -H 'Content-Type: application/json' -d "$3") || {
+      echo "could not reach $u (curl exit $?)" >&2
+      return 1
+    }
+  else
+    code=$(printf 'header = "Authorization: Bearer %s"\n' "$POSTHOG_API_KEY" \
+      | curl -sS -o "$tmp/out" -w '%{http_code}' -K - -X "$m" "$u" \
+      -H 'Accept: application/json') || {
+      echo "could not reach $u (curl exit $?)" >&2
+      return 1
+    }
+  fi
+  if [ "${code:0:1}" != 2 ]; then
+    echo "$u: HTTP $code: $(jq -r 'if type == "object" then (.detail // .detail // ([.. | strings][0] // "no answer")) elif type == "string" then . else "no answer" end' "$tmp/out" 2>/dev/null || head -c 200 "$tmp/out")" >&2
+    return 1
+  fi
+  cat "$tmp/out"
+}
+
+# split <thread>: the project and the issue's UUID project:uuid names, or
+# why it is no thread.
+split() {
+  project=${1%%:*}
+  uuid=${1#*:}
+  if [[ $1 != *:* ]] || [[ ! $project =~ ^[0-9]+$ ]] || [[ ! $uuid =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+    echo "thread $1: want project:uuid, the project and the issue's UUID" >&2
+    return 1
+  fi
+}
+
+case "$1" in
+state) # started is active, done is resolved. Suppressed stands past
+  # every status: forward never moves one, and only a direct set reopens
+  # it. An issue has no review status: it is active, resolved or
+  # suppressed.
+  thread=$(arg thread)
+  state=$(arg state)
+  forward=$(arg forward)
+  # Exit 3 tells the yard the refusal is for good: a stage map's move is
+  # skipped at once, where any other exit is tried again until the yard
+  # gives up.
+  split "$thread" || exit 3
+  issue=$(api GET "$YARDR_SOURCE_BASE/api/projects/$project/error_tracking/issues/$uuid/") || exit 1
+  # standing: active stands at started, resolved at done, anything else
+  # (suppressed) at other, past every status.
+  standing=$(jq -r '
+    if .status == "active" then "started"
+    elif .status == "resolved" then "done"
+    else "other" end' <<<"$issue")
+  status=$(jq -r '.status // ""' <<<"$issue")
+  if [ -z "$status" ]; then
+    echo "the answer names no status for $thread" >&2
+    exit 1
+  fi
+  case "$state" in
+  started) want=active ;;
+  done) want=resolved ;;
+  review)
+    echo "an issue has no review status: the states it has are started and done" >&2
+    exit 3
+    ;;
+  *)
+    echo "\"$state\" is no state here: want started, done" >&2
+    exit 1
+    ;;
+  esac
+  if [ "$forward" = true ]; then
+    # A stage map's move, which never moves backwards: started is asked
+    # of nothing, and an issue at or past done is never reopened.
+    if [ "$state" = started ] || [ "$standing" = done ] || [ "$standing" = other ]; then
+      jq -n -c --arg s "$status" '{status: $s, moved: false}'
+      exit 0
+    fi
+  elif [ "$status" = "$want" ]; then
+    # thread state moves exactly: only a thread already in the status stays.
+    jq -n -c --arg s "$status" '{status: $s, moved: false}'
+    exit 0
+  fi
+  api PATCH "$YARDR_SOURCE_BASE/api/projects/$project/error_tracking/issues/$uuid/" \
+    "$(jq -n --arg s "$want" '{status: $s}')" >/dev/null || exit 1
+  jq -n -c --arg s "$want" --arg was "$status" '{status: $s, moved: true, was: $was}' ;;
+
+*) echo "unknown: $1" >&2; exit 2 ;;
+esac

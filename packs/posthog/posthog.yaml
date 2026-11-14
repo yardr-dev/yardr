@@ -1,11 +1,12 @@
 # PostHog as a declared source: what an agent may ask of it through
 # `yardr call` (a HogQL query, the error tracking issues, one issue, the
 # session recordings, one recording, a session's Replay Vision
-# observations), and what it sends in (a new error issue). One call
-# writes: the destination, made once by the hook card; the pack has no
-# thread or notify key, so the yard writes nothing else to PostHog. Its
-# link key names an error issue's page for a bead's link, and writes
-# nothing: a link is made from the URL alone.
+# observations), what it sends in (a new error issue), and what the yard
+# sets in it (an error issue's status, resolved when the bead fixing it
+# lands). Two calls write: the destination, made once by the hook card,
+# and the thread's state; the pack has no notify key, so the yard writes
+# nothing else to PostHog. Its link key names an error issue's page for
+# a bead's link, and writes nothing: a link is made from the URL alone.
 #
 # Checked against PostHog's docs and source on 20 October 2026: the query
 # endpoint (posthog.com/docs/api/queries, and the generated query_create),
@@ -54,12 +55,14 @@ name: posthog
 about: PostHog analytics and error tracking. Answers HogQL queries, lists error issues and session recordings, reads a session's Replay Vision observations, hears a new error issue.
 
 # The name of the variable, never the value. A personal API key with the
-# scopes query:read, error_tracking:read, user:read, session_recording:read,
-# replay_scanner:read, hog_function:read and hog_function:write, sent as
-# a Bearer token (posthog.com/docs/api/personal-api-keys). The write scope is
-# for the destination call alone, which the hook card makes once, and the
-# read scope beside it for the check that lists what stands before a
-# retry registers again. hook.normalize is handed no credential at all.
+# scopes query:read, error_tracking:read, error_tracking:write,
+# user:read, session_recording:read, replay_scanner:read,
+# hog_function:read and hog_function:write, sent as a Bearer token
+# (posthog.com/docs/api/personal-api-keys). The write scopes are the
+# destination call's, which the hook card makes once (with the read scope
+# beside it for the check that lists what stands before a retry registers
+# again), and the thread state's, which resolves an error issue.
+# hook.normalize is handed no credential at all.
 credential:
   env: POSTHOG_API_KEY
   header: "Authorization: Bearer {credential}"
@@ -112,19 +115,33 @@ hook:
   # and the OS), which a feedback subscription filters on.
   keys: [project, session, replay, survey, email, footplate_version, os]
 
+# ---- what the yard sets in its threads ------------------------------------
+# An error issue's status, resolved when the bead fixing it lands: started
+# is active, done is resolved. The call takes the thread's id, the project
+# and the issue's UUID the link key reads (48291:<uuid>), and PATCHes the
+# issue the issue call reads. Suppressed stands past every status: forward
+# never moves one, and only a direct set reopens it. No reply, open or read
+# key: an issue takes no comment for them (the viewset's actions at
+# posthog/posthog 7c5ab18, 14 November 2026), so the yard sets statuses
+# and speaks nothing in threads.
+thread:
+  state:  [posthog/thread, state]   # in  {thread, state, forward?}        out {status, moved, was?}
+  states: [started, done]            # the words it has a status for: active or resolved
+
 # ---- its issues as a bead's link ------------------------------------------
 # The host of the default base, an error issue's page under its project,
 # and over the groups: the issue's one fixed form, and the id a thread
-# command takes for it (the UUID the issue call takes). The page is
-# /project/<id>/error-tracking/<uuid>, as the hook's normalize builds
-# it (products/error_tracking/manifest.tsx, checked 14 November 2026 at
-# posthog/posthog a843202). A yard on the EU cloud moves its issues by
-# the same path, but link add takes a URL on the host below.
+# command takes for it (the project and the UUID the issue call takes as
+# its params). The page is /project/<id>/error-tracking/<uuid>, as the
+# hook's normalize builds it (products/error_tracking/manifest.tsx,
+# checked 14 November 2026 at posthog/posthog 7c5ab18). A yard on the EU
+# cloud reads and moves its issues by the same path, and a link matches
+# either cloud's host, keeping the one the URL arrived on.
 link:
   host: us.posthog.com
   issue: '^/project/([0-9]+)/error-tracking/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})(?:/.*)?$'
   fixed: "https://us.posthog.com/project/{1}/error-tracking/{2}"
-  thread: "{2}"
+  thread: "{1}:{2}"
 
 # ---- (today) what an agent may ask of it, through `yardr call` ------------
 # Declared HTTPS requests, granted one by one. A command is never something

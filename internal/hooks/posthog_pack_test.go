@@ -13,7 +13,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -71,10 +73,11 @@ func posthogDecl(t *testing.T) hooks.Declared {
 // in its header, deduped by the event's own id, with the project, the
 // session and the replay link as its keys, and the survey, the email,
 // the footplate version and the OS a feedback subscription filters on,
-// and registered by the yard itself on the hook card, and the link key
-// that names an issue's page for a bead's link. No hear key: every
-// verified delivery is kept. No thread or notify key: the destination
-// call is the one thing the yard writes to PostHog.
+// and registered by the yard itself on the hook card, the thread key
+// that sets an issue's status alone, and the link key that names an
+// issue's page for a bead's link. No hear key: every verified delivery
+// is kept. No notify key: the destination call and the thread's state
+// are the two things the yard writes to PostHog.
 func TestPostHogPackDeclaration(t *testing.T) {
 	d, dir, _ := posthogParse(t)
 	if d.Name != "posthog" {
@@ -109,8 +112,25 @@ func TestPostHogPackDeclaration(t *testing.T) {
 	if ex := h.Register.Existing; ex == nil || ex.Call != "destinations" || ex.In != "results" || ex.Field != "inputs.url.value" {
 		t.Errorf("existing = %+v, want the destinations call with results and inputs.url.value", h.Register.Existing)
 	}
-	if d.Hear != nil || d.Thread != nil || d.Notify != nil {
-		t.Error("the pack declares a hear, thread or notify key: it reads PostHog and hears a new error issue, and only its destination call writes")
+	if d.Hear != nil || d.Notify != nil {
+		t.Error("the pack declares a hear or notify key: it reads PostHog, hears a new error issue and sets an issue's status, nothing else")
+	}
+	// The thread key sets an issue's status alone: the state command
+	// with started and done, and no reply, open or read key. The pack
+	// resolves through thread state, and speaks nothing in threads.
+	th := d.Thread
+	if th == nil || strings.Join(th.State, " ") != "posthog/thread state" ||
+		strings.Join(th.States, ",") != "started,done" {
+		t.Errorf("thread = %+v, want the state command with started and done", th)
+	} else if len(th.Reply) > 0 || len(th.Posted) > 0 || len(th.Read) > 0 || len(th.Open) > 0 ||
+		len(th.Opened) > 0 || th.Place != "" || th.Labels || th.Assignee != "" {
+		t.Errorf("thread = %+v, want no reply, open, read, place, labels or assignee key: resolving only", th)
+	}
+	if !slices.Contains(hooks.Stateable(d), "posthog") {
+		t.Error("Stateable holds no posthog: a thread's status cannot be set in it")
+	}
+	if _, ok := hooks.ReplierFor("posthog", d, "", ""); ok {
+		t.Error("ReplierFor answers for posthog: the pack declares the status keys without the reply keys")
 	}
 	if l := d.Link; l == nil || l.Host != "us.posthog.com" {
 		t.Error("the pack declares no link key on the default base's host: a bead cannot link to an error issue's page")
@@ -139,6 +159,215 @@ func TestPostHogPackDeclaration(t *testing.T) {
 	}
 }
 
+// The pack's thread state command against a canned PostHog: resolving
+// moves an active issue with was, an issue already there stays, forward
+// never moves backwards or reopens, a direct set from suppressed reopens,
+// and review, a malformed id and a missing issue are refused in the
+// script's own words. The command runs as the yard runs it: the input
+// object on its stdin, POSTHOG_API_KEY and YARDR_SOURCE_BASE in its
+// environment, from the yard's home. No live PostHog is called.
+func TestPostHogPackThreadState(t *testing.T) {
+	if _, err := exec.LookPath("jq"); err != nil {
+		t.Skip("jq is not installed, and the pack's thread command is written in it")
+	}
+	if _, err := exec.LookPath("curl"); err != nil {
+		t.Skip("curl is not installed, and the pack's thread command calls PostHog with it")
+	}
+	const cred = "phx_test_key"
+	const project = "48291"
+	const activeID = "11111111-1111-4111-8111-111111111111"
+	const resolvedID = "22222222-2222-4222-8222-222222222222"
+	const suppressedID = "33333333-3333-4333-8333-333333333333"
+	const missingID = "44444444-4444-4444-8444-444444444444"
+	var mu sync.Mutex
+	statuses := map[string]string{}
+	var hits []string // METHOD path body, every call the script made
+	reset := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		statuses = map[string]string{activeID: "active", resolvedID: "resolved", suppressedID: "suppressed"}
+		hits = nil
+	}
+	reset()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fail := func(code int, body string) {
+			mu.Lock()
+			hits = append(hits, r.Method+" "+r.URL.Path)
+			mu.Unlock()
+			w.WriteHeader(code)
+			fmt.Fprint(w, body)
+		}
+		if r.Header.Get("Authorization") != "Bearer "+cred {
+			fail(http.StatusUnauthorized, `{"Detail":"Authentication credentials were not provided."}`)
+			return
+		}
+		rest, ok := strings.CutPrefix(r.URL.Path, "/api/projects/"+project+"/error_tracking/issues/")
+		id := strings.TrimSuffix(rest, "/")
+		mu.Lock()
+		st, known := statuses[id]
+		mu.Unlock()
+		if !ok || !known || strings.Contains(id, "/") {
+			fail(http.StatusNotFound, `{"Detail":"Issue not found"}`)
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			mu.Lock()
+			hits = append(hits, "GET "+r.URL.Path)
+			mu.Unlock()
+			fmt.Fprintf(w, `{"id":%q,"status":%q}`, id, st)
+		case http.MethodPatch:
+			var body struct {
+				Status string `json:"status"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				fail(http.StatusBadRequest, `{"Detail":"The answer is no JSON object."}`)
+				return
+			}
+			if body.Status != "active" && body.Status != "resolved" && body.Status != "" {
+				w.WriteHeader(http.StatusBadRequest)
+				fmt.Fprintf(w, `{"status":[%q is not a valid choice."]}`, body.Status)
+				return
+			}
+			mu.Lock()
+			hits = append(hits, "PATCH "+r.URL.Path+" "+body.Status)
+			if body.Status != "" {
+				statuses[id] = body.Status
+			}
+			st = statuses[id]
+			mu.Unlock()
+			fmt.Fprintf(w, `{"id":%q,"status":%q}`, id, st)
+		default:
+			fail(http.StatusMethodNotAllowed, `{"Detail":"Method not allowed."}`)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	ad := posthogDecl(t)
+	ad.D.Base = srv.URL
+	prog := filepath.Join(ad.Home, "sources", ad.D.Name, ad.D.Thread.State[0])
+	args := ad.D.Thread.State[1:]
+	run := func(in map[string]any) (stdout, stderr string, code int) {
+		t.Helper()
+		raw, err := json.Marshal(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command(prog, args...)
+		cmd.Env = ad.D.CommandEnv(cred)
+		cmd.Dir = ad.Home
+		cmd.Stdin = bytes.NewReader(raw)
+		var out, errb bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &out, &errb
+		if err := cmd.Run(); err != nil {
+			if exit, ok := err.(*exec.ExitError); ok {
+				code = exit.ExitCode()
+			} else {
+				t.Fatal(err)
+			}
+		}
+		return out.String(), errb.String(), code
+	}
+	calls := func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]string{}, hits...)
+	}
+	for _, tc := range []struct {
+		name      string
+		thread    string
+		state     string
+		forward   bool
+		wantCode  int
+		wantOut   string // exact stdout; "" for a refusal, which prints none
+		wantErr   string // stderr carries it; "" wants stderr empty
+		wantErr2  string // and this too; "" for nothing more
+		wantCalls int    // calls the script made
+		wantPATCH string // the PATCH's path and status; "" for no PATCH
+	}{
+		{"resolve moves with was",
+			project + ":" + activeID, "done", false,
+			0, `{"status":"resolved","moved":true,"was":"active"}`, "", "", 2,
+			"PATCH /api/projects/48291/error_tracking/issues/" + activeID + "/ resolved"},
+		{"reopen moves with was",
+			project + ":" + resolvedID, "started", false,
+			0, `{"status":"active","moved":true,"was":"resolved"}`, "", "", 2,
+			"PATCH /api/projects/48291/error_tracking/issues/" + resolvedID + "/ active"},
+		{"already resolved stays",
+			project + ":" + resolvedID, "done", false,
+			0, `{"status":"resolved","moved":false}`, "", "", 1, ""},
+		{"forward from resolved stays",
+			project + ":" + resolvedID, "done", true,
+			0, `{"status":"resolved","moved":false}`, "", "", 1, ""},
+		{"forward from suppressed stays",
+			project + ":" + suppressedID, "done", true,
+			0, `{"status":"suppressed","moved":false}`, "", "", 1, ""},
+		{"forward started asks nothing",
+			project + ":" + activeID, "started", true,
+			0, `{"status":"active","moved":false}`, "", "", 1, ""},
+		{"direct from suppressed reopens",
+			project + ":" + suppressedID, "done", false,
+			0, `{"status":"resolved","moved":true,"was":"suppressed"}`, "", "", 2,
+			"PATCH /api/projects/48291/error_tracking/issues/" + suppressedID + "/ resolved"},
+		{"review is refused for good",
+			project + ":" + activeID, "review", false,
+			3, "", "an issue has no review status", "", 1, ""},
+		{"a bare UUID is refused for good",
+			activeID, "done", false,
+			3, "", "want project:uuid", "", 0, ""},
+		{"an empty thread is refused for good",
+			"", "done", false,
+			3, "", "want project:uuid", "", 0, ""},
+		{"a project that is no digits is refused for good",
+			"acme:" + activeID, "done", false,
+			3, "", "want project:uuid", "", 0, ""},
+		{"an issue that is no UUID is refused for good",
+			project + ":not-a-uuid", "done", false,
+			3, "", "want project:uuid", "", 0, ""},
+		{name: "a missing issue words with the code",
+			thread: project + ":" + missingID, state: "done",
+			wantCode: 1, wantErr: "HTTP 404", wantErr2: "Issue not found", wantCalls: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reset()
+			in := map[string]any{"thread": tc.thread, "state": tc.state}
+			if tc.forward {
+				in["forward"] = true
+			}
+			stdout, stderr, code := run(in)
+			if code != tc.wantCode {
+				t.Fatalf("exit %d, want %d: stdout %q stderr %q", code, tc.wantCode, stdout, stderr)
+			}
+			if out := strings.TrimSpace(stdout); out != tc.wantOut {
+				t.Errorf("stdout = %q, want %q (stderr %q)", out, tc.wantOut, stderr)
+			}
+			if tc.wantErr == "" {
+				if stderr != "" {
+					t.Errorf("stderr = %q, want nothing", stderr)
+				}
+			} else if !strings.Contains(stderr, tc.wantErr) {
+				t.Errorf("stderr = %q, want it to carry %q", stderr, tc.wantErr)
+			}
+			if tc.wantErr2 != "" && !strings.Contains(stderr, tc.wantErr2) {
+				t.Errorf("stderr = %q, want it to carry %q too", stderr, tc.wantErr2)
+			}
+			got := calls()
+			if len(got) != tc.wantCalls {
+				t.Errorf("calls = %q, want %d", got, tc.wantCalls)
+			}
+			var patch string
+			for _, h := range got {
+				if strings.HasPrefix(h, "PATCH ") {
+					patch = h
+				}
+			}
+			if patch != tc.wantPATCH {
+				t.Errorf("PATCH = %q, want %q", patch, tc.wantPATCH)
+			}
+		})
+	}
+}
+
 // The recorded issue and feedback bodies normalize to their full
 // envelopes, with fields limited to the hook's declared keys.
 func TestPostHogPackNormalize(t *testing.T) {
@@ -154,7 +383,7 @@ func TestPostHogPackNormalize(t *testing.T) {
 		{
 			name: "issue-created", fixture: "posthog_issue_created.json",
 			want: hooks.Envelope{Source: "posthog", Type: "error_issue", Action: "created",
-				Thread:   hooks.Thread{ID: id, Title: "TypeError: Cannot read properties of undefined", URL: url},
+				Thread:   hooks.Thread{ID: "48291:" + id, Title: "TypeError: Cannot read properties of undefined", URL: url},
 				Mentions: []string{}, Text: "TypeError: Cannot read properties of undefined (reading 'id')",
 				URL: url, Entity: id, Fields: map[string][]string{"project": {"48291"}}},
 		},
@@ -227,7 +456,7 @@ func TestPostHogPackNormalizeSession(t *testing.T) {
 			url := "https://us.posthog.com/project/48291/error-tracking/" + tc.id
 			replay := "https://us.posthog.com/project/48291/replay/" + tc.session
 			want := hooks.Envelope{Source: "posthog", Type: "error_issue", Action: "created",
-				Thread:   hooks.Thread{ID: tc.id, Title: tc.title, URL: url},
+				Thread:   hooks.Thread{ID: "48291:" + tc.id, Title: tc.title, URL: url},
 				Mentions: []string{}, Text: tc.text,
 				URL: url, Entity: tc.id, Fields: map[string][]string{"project": {"48291"}, "session": {tc.session}, "replay": {replay}}}
 			got, err := ad.Normalize(nil, fixture(t, tc.fixture))
@@ -298,43 +527,47 @@ func TestPostHogPackNormalizeShapes(t *testing.T) {
 		{"no project",
 			created(`"name":"boom","description":"it went boom"`, ""),
 			"error_issue", "created", "it went boom",
-			hooks.Thread{ID: id, Title: "boom"}, nil, ""},
+			hooks.Thread{ID: "", Title: "boom"}, nil, ""},
 		{"null name and description",
 			created(`"name":null,"description":null`, ","+project),
 			"error_issue", "created", "",
-			hooks.Thread{ID: id, Title: "", URL: url}, map[string][]string{"project": {"48291"}}, url},
+			hooks.Thread{ID: "48291:" + id, Title: "", URL: url}, map[string][]string{"project": {"48291"}}, url},
 		{"long description is cut",
 			created(`"name":"boom","description":"`+long+`"`, ","+project),
 			"error_issue", "created", strings.TrimRight(long, " ")[:499] + "…",
-			hooks.Thread{ID: id, Title: "boom", URL: url}, map[string][]string{"project": {"48291"}}, url},
+			hooks.Thread{ID: "48291:" + id, Title: "boom", URL: url}, map[string][]string{"project": {"48291"}}, url},
 		{"no distinct_id falls back to the properties",
 			[]byte(`{"event":{"event":"$error_tracking_issue_created","uuid":"019f7c3a-1b2d-7e4f-9a1c-3d5e6f708192","properties":{"name":"boom","description":"it went boom","$exception_issue_id":"` + id + `"}},` + project + `}`),
 			"error_issue", "created", "it went boom",
-			hooks.Thread{ID: id, Title: "boom", URL: url}, map[string][]string{"project": {"48291"}}, url},
+			hooks.Thread{ID: "48291:" + id, Title: "boom", URL: url}, map[string][]string{"project": {"48291"}}, url},
 		{"a trailing slash leaves the URL",
 			[]byte(`{"event":{` + event + `,"properties":{"name":"boom","description":"it went boom"}},"project":{"id":48291,"url":"https://us.posthog.com/project/48291/"}}`),
 			"error_issue", "created", "it went boom",
-			hooks.Thread{ID: id, Title: "boom", URL: url}, map[string][]string{"project": {"48291"}}, url},
+			hooks.Thread{ID: "48291:" + id, Title: "boom", URL: url}, map[string][]string{"project": {"48291"}}, url},
 		{"a person is ignored",
 			[]byte(`{"event":{` + event + `,"properties":{"name":"boom","description":"it went boom"}},"person":{"id":"1","name":"Ada"},` + project + `}`),
 			"error_issue", "created", "it went boom",
-			hooks.Thread{ID: id, Title: "boom", URL: url}, map[string][]string{"project": {"48291"}}, url},
+			hooks.Thread{ID: "48291:" + id, Title: "boom", URL: url}, map[string][]string{"project": {"48291"}}, url},
 		{"a session under exception_props",
 			created(`"name":"boom","description":"it went boom","exception_props":{"$session_id":"`+session+`"}`, ","+project),
 			"error_issue", "created", "it went boom",
-			hooks.Thread{ID: id, Title: "boom", URL: url}, map[string][]string{"project": {"48291"}, "session": {session}, "replay": {replay}}, url},
+			hooks.Thread{ID: "48291:" + id, Title: "boom", URL: url}, map[string][]string{"project": {"48291"}, "session": {session}, "replay": {replay}}, url},
 		{"a message too large carries no session",
 			created(`"name":"boom","description":"it went boom","message_was_too_large":true`, ","+project),
 			"error_issue", "created", "it went boom",
-			hooks.Thread{ID: id, Title: "boom", URL: url}, map[string][]string{"project": {"48291"}}, url},
+			hooks.Thread{ID: "48291:" + id, Title: "boom", URL: url}, map[string][]string{"project": {"48291"}}, url},
 		{"a session id that is no string",
 			created(`"name":"boom","description":"it went boom","exception_props":{"$session_id":42}`, ","+project),
 			"error_issue", "created", "it went boom",
-			hooks.Thread{ID: id, Title: "boom", URL: url}, map[string][]string{"project": {"48291"}}, url},
+			hooks.Thread{ID: "48291:" + id, Title: "boom", URL: url}, map[string][]string{"project": {"48291"}}, url},
 		{"a session without a project is heard with no link",
 			created(`"name":"boom","description":"it went boom","exception_props":{"$session_id":"`+session+`"}`, ""),
 			"error_issue", "created", "it went boom",
-			hooks.Thread{ID: id, Title: "boom"}, map[string][]string{"session": {session}}, ""},
+			hooks.Thread{ID: "", Title: "boom"}, map[string][]string{"session": {session}}, ""},
+		{"a project URL without an id still links, with no thread id",
+			created(`"name":"boom","description":"it went boom"`, `,"project":{"url":"https://us.posthog.com/project/48291"}`),
+			"error_issue", "created", "it went boom",
+			hooks.Thread{ID: "", Title: "boom", URL: url}, nil, url},
 		{"another event is type event",
 			[]byte(`{"event":{"event":"$error_tracking_issue_reopened","uuid":"019f7c3a-1b2d-7e4f-9a1c-3d5e6f708193","distinct_id":"` + id + `","properties":{"name":"boom"}},` + project + `}`),
 			"event", "", "",
@@ -431,20 +664,20 @@ func TestPostHogPackNormalizeLinks(t *testing.T) {
 		name       string
 		body       []byte
 		wantURL    string
-		wantThread string // issue id the thread still carries
+		wantThread string // thread id the issue still carries
 	}{
 		{"an https project and a UUID issue",
 			body(id, "https://us.posthog.com/project/48291"),
-			"https://us.posthog.com/project/48291/error-tracking/" + id, id},
+			"https://us.posthog.com/project/48291/error-tracking/" + id, "48291:" + id},
 		{"a script scheme in the project url",
 			body(id, "javascript:alert(1)//evil"),
-			"", id},
+			"", "48291:" + id},
 		{"a plain http project url",
 			body(id, "http://us.posthog.com/project/48291"),
-			"", id},
+			"", "48291:" + id},
 		{"an issue id that leaves its segment",
 			body("abc/../../x?y=1#frag", "https://us.posthog.com/project/48291"),
-			"", "abc/../../x?y=1#frag"},
+			"", "48291:abc/../../x?y=1#frag"},
 	} {
 		got, err := ad.Normalize(nil, tc.body)
 		if err != nil {

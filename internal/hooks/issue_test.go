@@ -469,9 +469,9 @@ func posthogPackDecl(t *testing.T) *source.Declaration {
 // The pack's link fixes a PostHog issue URL on either cloud: one fixed
 // form per cloud however it was copied, whatever follows the issue left
 // out, the host it arrived on kept. The id keeps its case, as the issue
-// call takes it. A replay link is no issue. The thread is the issue's
-// UUID, read from the path alone, so a stage map's move reads it on
-// either cloud.
+// call takes it. A replay link is no issue. The thread is the project
+// and the issue's UUID, read from the path alone, so a stage map's move
+// reads it on either cloud.
 func TestPostHogPackLinkFixedForm(t *testing.T) {
 	ph := posthogPackDecl(t)
 	const id = "019f7c39-8a4b-7c2d-b3e5-1f2a3b4c5d6e"
@@ -545,11 +545,11 @@ func TestPostHogPackLinkFixedForm(t *testing.T) {
 		!strings.Contains(err.Error(), "where yardr knows no issues (it does on none of the yard's sources)") {
 		t.Errorf("no declaration: %v", err)
 	}
-	// The thread is the issue's UUID on either cloud: a stage map's
-	// move reads the path, never the host.
+	// The thread is the project and the issue's UUID on either cloud:
+	// a stage map's move reads the path, never the host.
 	for _, raw := range []string{fixed, "https://eu.posthog.com/project/48291/error-tracking/" + id} {
-		if thread, err := (Declared{D: ph}).IssueThread(raw); err != nil || thread != id {
-			t.Errorf("IssueThread(%q) = %q, %v; want %q", raw, thread, err, id)
+		if thread, err := (Declared{D: ph}).IssueThread(raw); err != nil || thread != "48291:"+id {
+			t.Errorf("IssueThread(%q) = %q, %v; want %q", raw, thread, err, "48291:"+id)
 		}
 	}
 }

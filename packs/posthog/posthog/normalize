@@ -55,11 +55,15 @@ def trunc: (gsub("^[[:space:]]+|[[:space:]]+$"; "") | gsub("[[:space:]]+"; " "))
     | ((if $fields == null then {} else $fields end)
        | (if $session != "" then . + {session: [$session]} else . end)
        | (if $replay != "" then . + {replay: [$replay]} else . end)) as $all
+    # The thread is the project and the issue, which the state command
+    # splits back into its path; without a project it is empty, so a move
+    # reads the thread from the issue URL instead, and never ":uuid".
+    | (if $project != "" then "\($project):\($id)" else "" end) as $thread
     # No mentions: the description is an error message, and an @word in
     # one names nobody. The entity is the issue, whose description
     # persists across its deliveries.
     | {source: "posthog", type: "error_issue", action: "created",
-       actor: {}, thread: {id: $id, title: $name, url: $url},
+       actor: {}, thread: {id: $thread, title: $name, url: $url},
        text: $text, url: $url, entity: $id, mentions: []}
     | if ($all | length) == 0 then . else . + {fields: $all} end
   elif ($e.event // "") == "survey sent" then
