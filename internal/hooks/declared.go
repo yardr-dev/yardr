@@ -68,8 +68,10 @@ func declaredName(name string, d *source.Declaration) bool {
 
 // What a declared source answers in its threads with, and what each
 // interface takes of it: the commands of its thread key, the variable of
-// its credential, and its link. An interface is a unit: a Stater is a
-// Replier, so one without reply keys is none.
+// its credential, and its link. Each interface takes only what it runs: a
+// Stater the state keys, so a source with a status write and no comments
+// still sets statuses, while an Opener takes the open keys with the reply
+// keys, so one without reply keys opens nothing.
 func (d Declared) repliable() bool {
 	t := d.D.Thread
 	return d.D.Credential != nil && t != nil && len(t.Reply) > 0 && len(t.Posted) > 0 && len(t.Read) > 0
@@ -87,7 +89,7 @@ func (d Declared) openable() bool {
 
 func (d Declared) stateable() bool {
 	t := d.D.Thread
-	return d.repliable() && len(t.State) > 0 && len(t.States) > 0
+	return d.D.Credential != nil && t != nil && len(t.State) > 0 && len(t.States) > 0
 }
 
 func (d Declared) forwardable() bool {

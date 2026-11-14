@@ -651,25 +651,30 @@ func limitsSays(d *source.Declaration) string {
 }
 
 // threadSays is how the source speaks in threads beside its commands: the
-// place, the words state takes, labels and the assignee.
+// place, the words state takes, labels and the assignee. A thread with
+// the state keys but no reply keys sets statuses and speaks nothing, so it
+// says only the state words and the labels: the place and the assignee are
+// what opening takes, which still needs the reply keys.
 func threadSays(d *source.Declaration) string {
 	t := d.Thread
+	states := "it names no state words"
+	if len(t.States) > 0 {
+		states = fmt.Sprintf("the words state takes are %s", strings.Join(t.States, ", "))
+	}
+	labels := "it takes no labels"
+	if t.Labels {
+		labels = "it takes labels (label:<name> adds one, never removes)"
+	}
+	if len(t.State) > 0 && len(t.States) > 0 && !(len(t.Reply) > 0 && len(t.Posted) > 0 && len(t.Read) > 0) {
+		return "it sets a thread's status but speaks nothing in threads: " + states + "; " + labels + "."
+	}
 	var parts []string
 	if t.Place != "" {
 		parts = append(parts, fmt.Sprintf("a place to open one is called %s", t.Place))
 	} else {
 		parts = append(parts, "it names no place to open one")
 	}
-	if len(t.States) > 0 {
-		parts = append(parts, fmt.Sprintf("the words state takes are %s", strings.Join(t.States, ", ")))
-	} else {
-		parts = append(parts, "it names no state words")
-	}
-	if t.Labels {
-		parts = append(parts, "it takes labels (label:<name> adds one, never removes)")
-	} else {
-		parts = append(parts, "it takes no labels")
-	}
+	parts = append(parts, states, labels)
 	if t.Assignee != "" {
 		parts = append(parts, fmt.Sprintf("an assignee is a person's %s in the source", t.Assignee))
 	} else {

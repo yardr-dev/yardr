@@ -56,9 +56,13 @@ type Stated struct {
 	Instead string `json:"instead,omitempty"`
 }
 
-// Stater is what a Replier whose source lets a thread's status be set adds.
+// Stater is what a source whose threads' statuses can be set adds. It is
+// no Replier: a source with a status write and no comments sets statuses
+// but speaks nothing in threads.
 type Stater interface {
-	Replier
+	// Credential is the caller's credential for the source, read from the
+	// calling process's environment (a crew member's env_file or env_command sets it).
+	Credential(ctx context.Context) (string, error)
 	// SetState moves the thread (its id as deliveries name it) to the
 	// status state means in this source, or adds the label a label:<name>
 	// names. A thread already there is left as it is, and a word the source

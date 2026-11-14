@@ -165,9 +165,9 @@ func TestDeclaredCapabilities(t *testing.T) {
 		link bool
 	}{
 		{"all keys", full, []string{reply, open, state, forward}, true},
-		{"no reply", without(func(d *source.Declaration) { d.Thread.Reply = nil }), nil, true},
-		{"no posted", without(func(d *source.Declaration) { d.Thread.Posted = nil }), nil, true},
-		{"no read", without(func(d *source.Declaration) { d.Thread.Read = nil }), nil, true},
+		{"no reply", without(func(d *source.Declaration) { d.Thread.Reply = nil }), []string{state, forward}, true},
+		{"no posted", without(func(d *source.Declaration) { d.Thread.Posted = nil }), []string{state, forward}, true},
+		{"no read", without(func(d *source.Declaration) { d.Thread.Read = nil }), []string{state, forward}, true},
 		{"no credential", without(func(d *source.Declaration) { d.Credential = nil }), nil, true},
 		{"no thread", without(func(d *source.Declaration) { d.Thread = nil }), nil, true},
 		{"no open", without(func(d *source.Declaration) { d.Thread.Open = nil }), []string{reply, state, forward}, true},
@@ -176,10 +176,19 @@ func TestDeclaredCapabilities(t *testing.T) {
 		{"no state", without(func(d *source.Declaration) { d.Thread.State = nil }), []string{reply, open}, true},
 		{"no states", without(func(d *source.Declaration) { d.Thread.States = nil }), []string{reply, open}, true},
 		{"no link", without(func(d *source.Declaration) { d.Link = nil }), []string{reply, open, state}, false},
+		{"status only", without(func(d *source.Declaration) {
+			d.Thread.Reply, d.Thread.Posted, d.Thread.Read = nil, nil, nil
+			d.Thread.Open, d.Thread.Opened, d.Thread.Place = nil, nil, ""
+		}), []string{state, forward}, true},
+		{"status only without link", without(func(d *source.Declaration) {
+			d.Thread.Reply, d.Thread.Posted, d.Thread.Read = nil, nil, nil
+			d.Thread.Open, d.Thread.Opened, d.Thread.Place = nil, nil, ""
+			d.Link = nil
+		}), []string{state}, false},
 		{"files", without(func(d *source.Declaration) { d.Thread.Files = true }), []string{reply, files, open, state, forward}, true},
 		{"files without reply", without(func(d *source.Declaration) {
 			d.Thread.Files, d.Thread.Reply = true, nil
-		}), nil, true},
+		}), []string{state, forward}, true},
 	} {
 		r, _ := hooks.ReplierFor("acme", tc.d, "", "")
 		fl, _ := hooks.FilerFor("acme", tc.d, "", "")
@@ -235,6 +244,24 @@ func TestDeclaredCapabilities(t *testing.T) {
 	stateless := without(func(d *source.Declaration) { d.Thread.State, d.Thread.States, d.Link = nil, nil, nil })
 	if got := hooks.Stateable(stateless); len(got) != 0 {
 		t.Errorf("stateable without state keys = %v", got)
+	}
+	// A status-only declaration is named where its state keys put it, and
+	// nowhere else: setting and moving, never replying or opening.
+	statusOnly := without(func(d *source.Declaration) {
+		d.Thread.Reply, d.Thread.Posted, d.Thread.Read = nil, nil, nil
+		d.Thread.Open, d.Thread.Opened, d.Thread.Place = nil, nil, ""
+	})
+	if got := hooks.Stateable(statusOnly); len(got) != 1 || got[0] != "acme" {
+		t.Errorf("status-only stateable = %v", got)
+	}
+	if got := hooks.Forwardable(statusOnly); len(got) != 1 || got[0] != "acme" {
+		t.Errorf("status-only forwardable = %v", got)
+	}
+	if got := hooks.Repliable(statusOnly); len(got) != 0 {
+		t.Errorf("status-only repliable = %v", got)
+	}
+	if got := hooks.Openable(statusOnly); len(got) != 0 {
+		t.Errorf("status-only openable = %v", got)
 	}
 	if got := hooks.LinkSources(stateless); len(got) != 0 {
 		t.Errorf("link sources without link = %v", got)
@@ -671,6 +698,36 @@ func TestDeclaredForward(t *testing.T) {
 	missing := (*hooks.MissingCredential)(nil)
 	if _, err := ad.CredentialFrom(func(string) string { return "" }); !errors.As(err, &missing) {
 		t.Fatalf("credential from nothing: %v", err)
+	}
+	// A status-only declaration moves through its Forwarder: the same
+	// thread.state with forward, without any reply key in its file.
+	statusOnly := strings.NewReplacer(
+		"  reply: [reply]\n", "",
+		"  posted: [posted]\n", "",
+		"  read: [read]\n", "",
+		"  place: team\n", "",
+		"  open: [open]\n", "",
+		"  opened: [opened]\n", "",
+	).Replace(acmeThread)
+	sdir := t.TempDir()
+	sad := threadDecl(t, statusOnly, map[string]string{
+		"normalize": "#!/bin/sh\nprintf '%s' '{\"type\":\"ping\"}'\n",
+		"state":     "#!/bin/sh\n{ cat; echo; } >> " + sdir + "/state.stdin\nprintf '%s' '{\"status\":\"Done\",\"moved\":true,\"was\":\"Todo\"}'\n",
+	})
+	f, ok := hooks.ForwarderFor("acme", sad.D, sad.Home, "")
+	if !ok {
+		t.Fatal("a status-only declaration has no Forwarder")
+	}
+	fw, err = f.Forward(ctx, "issue-1", "done", "tok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fw.Status != "Done" || fw.Was != "Todo" || !fw.Changed {
+		t.Fatalf("status-only forward = %+v", fw)
+	}
+	in = readJSON(t, filepath.Join(sdir, "state.stdin"))
+	if in["thread"] != "issue-1" || in["state"] != "done" || in["forward"] != true || len(in) != 3 {
+		t.Fatalf("status-only forward stdin = %v", in)
 	}
 }
 

@@ -467,6 +467,58 @@ func TestThreadStateDeclaredSource(t *testing.T) {
 	if out != "acme thread issue-1 was already Done; nothing set\n" {
 		t.Fatalf("not moved: %q", out)
 	}
+
+	// A source with status keys but no reply keys still sets a status by
+	// source and id; replies, reads and opens still refuse it.
+	ctx := context.Background()
+	statusOnly := strings.NewReplacer(
+		"  reply: [reply]\n", "",
+		"  posted: [posted]\n", "",
+		"  read: [read]\n", "",
+		"  files: true\n", "",
+		"  place: team\n", "",
+		"  open: [open]\n", "",
+		"  opened: [opened]\n", "",
+	).Replace(acmeCLI)
+	if _, err := st.PutSource(ctx, "acme.yaml", statusOnly, "me"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := run(t, a.crewCmd(), "add", "yardmaster", "--replace", "--dir", t.TempDir(), "--set", "set_state=acme"); err != nil {
+		t.Fatal(err)
+	}
+	// A crew member sets the status only of a thread it takes part in; with
+	// no reply keys there is no reply to take part by, so it follows.
+	if err := st.FollowThread(ctx, "yardmaster", "acme", "issue-1", "me"); err != nil {
+		t.Fatal(err)
+	}
+	restate(`{"status":"In Progress","moved":true}`)
+
+	// By source and id, status works even though the source has no reply keys.
+	out, err = run(t, a.threadStateCmd(), "--source", "acme", "issue-1", "started")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != "acme thread issue-1 is now In Progress\n" {
+		t.Fatalf("output %q", out)
+	}
+	in = lastStdin(t, dir, "state")
+	if in["thread"] != "issue-1" || in["state"] != "started" || len(in) != 2 {
+		t.Fatalf("state stdin = %v", in)
+	}
+	// Replying and reading by a delivery's seq go through hookEvent, which
+	// answers only where yardr can answer, as before.
+	if _, err := run(t, a.replyCmd(), seq, "answer"); err == nil ||
+		!strings.Contains(err.Error(), "came from acme, which yardr cannot answer in (it can in none of the yard's sources)") {
+		t.Fatalf("reply: %v", err)
+	}
+	if _, err := run(t, a.threadShowCmd(), seq); err == nil ||
+		!strings.Contains(err.Error(), "came from acme, which yardr cannot answer in (it can in none of the yard's sources)") {
+		t.Fatalf("show: %v", err)
+	}
+	if _, err := run(t, a.threadOpenCmd(), "acme", "Made", "--in", "ENG"); err == nil ||
+		!strings.Contains(err.Error(), "yardr cannot open threads in acme (it can in none of the yard's sources)") {
+		t.Fatalf("open: %v", err)
+	}
 }
 
 // acmeRegionCLI is acmeCLI with a second base, as a source with regions

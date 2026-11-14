@@ -46,16 +46,16 @@ in token (it can in github, linear)`). Only the first is required.
 | link | `Linker` (`issue.go`) | no | yes, with a `link` key in its file | no |
 | reply, read a thread | `Replier` (`reply.go`) | no | yes, with `thread.reply`, `thread.posted` and `thread.read` in its file | no |
 | open a thread | `Opener` (`open.go`) | no | yes, with `thread.open`, `thread.opened` and `thread.place` in its file, and the reply keys | no |
-| set a thread's status | `Stater` (`state.go`) | no | yes, with `thread.state` and `thread.states` in its file, and the reply keys | no |
+| set a thread's status | `Stater` (`state.go`) | no | yes, with `thread.state` and `thread.states` in its file | no |
 | move with a bead's stage | `Forwarder` (`forward.go`) | no | yes, with the status keys and a `link` key in its file | no |
 | tell a user outside the yard | `Notifier` (`notify.go`) | no | yes, with a `notify` key in its file | no |
 | say what a harness kind's subscription still carries | none: a command the source's file names, run by `internal/limits` | no | yes, with a `limits` key in its file | no |
 | be read by a session or a crew member | none: a read call of the source's file, made by the server (`store.CallSource`) | no | yes, for whoever the operator granted it ([below](#a-call-by-a-session-or-a-crew-member)) | no, it has no read call |
 | be updated by a session or a crew member | none: an update call of the source's file, made the same way | no | yes, for whoever the operator granted that call by its name ([below](#an-update)) | yes, `send`, to the URL that is its credential |
 
-The interfaces build on each other: an `Opener` and a `Stater` are each a
-`Replier`, and a `Forwarder` is a `Stater`. `token` is the smallest
-integration there is: it receives and nothing else.
+The interfaces build on each other: an `Opener` is a `Replier`, and a
+`Forwarder` is a `Stater`. `token` is the smallest integration there is:
+it receives and nothing else.
 
 One source has no adapter and no file: `peer`, the yards this one is linked
 with, heard about the beads this yard has away at them
@@ -300,7 +300,7 @@ type Opener interface {
 }
 
 type Stater interface {
-    Replier
+    Credential(ctx context.Context) (string, error)
     SetState(ctx context.Context, thread, state, cred string) (Stated, error)
 }
 ```
