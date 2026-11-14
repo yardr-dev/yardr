@@ -106,7 +106,9 @@ func PullerFor(source string, d *source.Declaration) (Puller, bool) {
 // ThreadAlias is the other URL the source uses for the same numbered
 // thread: an issue and its pull request share their groups, and a bead
 // may have been linked with either form. "" when raw names no thread of
-// the source's, or the source has one shape alone.
+// the source's, or the source has one shape alone, or its shapes number
+// apart (link.pull.apart): an issue and a pull request of one number are
+// then two threads, and a caller looks no further than the URL it has.
 func ThreadAlias(source string, d *source.Declaration, raw string) string {
 	if dec, ok := declared(source, d, "", ""); ok {
 		if dec.D.Link == nil || dec.D.Link.Pull == nil {

@@ -129,7 +129,7 @@ func TestTemplateAppliesAsANewSourcePack(t *testing.T) {
 		t.Fatalf("thread = %+v", th)
 	}
 	if l := decl.Link; l.Host == "" || l.Issue == "" || l.Fixed == "" || l.Thread == "" ||
-		l.Pull == nil || l.Repos == "" {
+		l.Pull == nil || !l.Pull.Apart || l.Repos == "" {
 		t.Fatalf("link = %+v", l)
 	}
 	if ev := decl.Events; len(ev.Runs) == 0 || len(ev.HeadFrom) == 0 || len(ev.PR) == 0 || len(ev.CI) == 0 {

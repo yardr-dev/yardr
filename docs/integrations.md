@@ -1240,10 +1240,19 @@ git:                                  # what git uses to reach the source's repo
   path segments and the number. From it the core reads a pull request's
   thread, builds its URL from repository and number, and names each
   shape's form of a thread from the other, so a bead linked with one
-  form is found by an event in the other. `link.repos` is the pattern a
-  repository's path matches, as a depot's origin remote carries it past
-  the host: the bead an event makes goes in the depot whose repository
-  the event is in.
+  form is found by an event in the other: GitHub's issue 7 and pull
+  request 7 are one thread. `apart: true` says the source numbers the
+  two apart, as GitLab does with an issue `#7` and a merge request `!7`.
+  The core then names neither form from the other: an event finds only
+  the bead that tracks its own thread, and a bead closed on one holds
+  back nothing a `makes` line would make of the other. That look is the
+  only thing `apart` turns off. A pull request's own URL still names
+  its thread for `yardr reply` and `yardr thread state`, and its URL,
+  number and repository read as before. Without `apart`, or with
+  `apart: false`, the two shapes are one thread. `link.repos` is the
+  pattern a repository's path matches, as a depot's origin remote
+  carries it past the host: the bead an event makes goes in the depot
+  whose repository the event is in.
 - **A command's files.** A program with no `/` at its start is a file
   beside the declaration's file: `yardr source add` copies each into
   `~/.yardr/sources/<name>/` (the relative path kept, each mode 0700) and

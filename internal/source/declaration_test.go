@@ -1387,6 +1387,81 @@ func TestParseLinkPullAndRepos(t *testing.T) {
 			t.Fatal("half a path is a repository")
 		}
 	}
+	// A link that does not say apart stores no key for it, so a standing
+	// declaration reads back as it was written.
+	if strings.Contains(string(raw), "apart") {
+		t.Fatalf("a link without apart is stored as %s", raw)
+	}
+
+	// A pull shape that says apart numbers issues and pull requests apart:
+	// neither shape names the other, while the pull request's own form,
+	// thread, parts and URL read as they do without it, kept through the
+	// store as written. false is as good as absent: aliasing as above.
+	const pullThread = "    thread: \"{1}/{2}#{3}\"\n"
+	withApart := func(line string) *Link {
+		t.Helper()
+		src := strings.Replace(text, pullThread, pullThread+line, 1)
+		if src == text {
+			t.Fatal("the declaration has no pull thread to say apart after")
+		}
+		d, err := Parse("forge.yaml", []byte(src))
+		if err != nil {
+			t.Fatalf("%q: %v", line, err)
+		}
+		return d.Link
+	}
+	apart := withApart("    apart: true\n")
+	if !apart.Pull.Apart {
+		t.Fatalf("apart: true is read as %+v", apart.Pull)
+	}
+	raw, _ = json.Marshal(apart)
+	if !strings.Contains(string(raw), `"apart":true`) {
+		t.Fatalf("a link that says apart is stored as %s", raw)
+	}
+	var apartBack Link
+	if err := json.Unmarshal(raw, &apartBack); err != nil {
+		t.Fatal(err)
+	}
+	if !apartBack.Pull.Apart {
+		t.Fatalf("apart is lost through the store: %+v", apartBack.Pull)
+	}
+	for _, l := range []*Link{apart, &apartBack} {
+		for _, path := range []string{"/acme/webapp/issues/7", "/Acme/WebApp/pull/7"} {
+			if alias, ok := l.AliasOf(path); ok || alias != "" {
+				t.Fatalf("AliasOf(%q) = %q, %v with the shapes apart", path, alias, ok)
+			}
+		}
+		if fixed, ok := l.FixedForm("/Acme/WebApp/issues/7"); !ok || fixed != "https://forge.example/acme/webapp/issues/7" {
+			t.Fatalf("issue fixed = %q, %v", fixed, ok)
+		}
+		if fixed, ok := l.PullFixedForm("/Acme/WebApp/pull/7"); !ok || fixed != "https://forge.example/acme/webapp/pull/7" {
+			t.Fatalf("pull fixed = %q, %v", fixed, ok)
+		}
+		if thread, ok := l.PullThreadOf("/Acme/WebApp/pull/7"); !ok || thread != "acme/webapp#7" {
+			t.Fatalf("pull thread = %q, %v", thread, ok)
+		}
+		if repo, number, ok := l.PullParts("/Acme/WebApp/pull/7"); !ok || repo != "acme/webapp" || number != "7" {
+			t.Fatalf("pull parts = %q, %q, %v", repo, number, ok)
+		}
+		if url, ok := l.PullURL("acme/webapp", "7"); !ok || url != "https://forge.example/acme/webapp/pull/7" {
+			t.Fatalf("pull URL = %q, %v", url, ok)
+		}
+	}
+	notApart := withApart("    apart: false\n")
+	if notApart.Pull.Apart {
+		t.Fatalf("apart: false is read as %+v", notApart.Pull)
+	}
+	raw, _ = json.Marshal(notApart)
+	if strings.Contains(string(raw), "apart") {
+		t.Fatalf("a link that says apart: false is stored as %s", raw)
+	}
+	if alias, ok := notApart.AliasOf("/acme/webapp/issues/7"); !ok || alias != "https://forge.example/acme/webapp/pull/7" {
+		t.Fatalf("alias of the issue with apart: false = %q, %v", alias, ok)
+	}
+	if alias, ok := notApart.AliasOf("/acme/webapp/pull/7"); !ok || alias != "https://forge.example/acme/webapp/issues/7" {
+		t.Fatalf("alias of the pull request with apart: false = %q, %v", alias, ok)
+	}
+
 	plain, err := Parse("lin.yaml", []byte(linearish))
 	if err != nil {
 		t.Fatal(err)
@@ -1451,7 +1526,9 @@ func TestParseThreadLinkRefusals(t *testing.T) {
 		"a pull group it has not":        {src(link + "  pull:\n    issue: '^/([^/]+)/pull/([0-9]+)'\n    fixed: x\n    thread: \"{3}\"\n"), "link.pull.thread: {3} names a group link.pull.issue has not (it has 2)"},
 		"a pull with no fixed":           {src(link + "  pull:\n    issue: '^/([^/]+)/pull/([0-9]+)'\n    thread: y\n"), "link.pull.fixed: missing: the pull request's one fixed form"},
 		"a pull with no thread":          {src(link + "  pull:\n    issue: '^/([^/]+)/pull/([0-9]+)'\n    fixed: x\n"), "link.pull.thread: missing: the id a thread command takes for the pull request"},
-		"a key pull does not have":       {src(link + "  pull:\n    issue: '^/([^/]+)/pull/([0-9]+)'\n    fixed: x\n    thread: y\n    base: main\n"), "link.pull.base: unknown key (known here: issue, fixed, thread)"},
+		"a key pull does not have":       {src(link + "  pull:\n    issue: '^/([^/]+)/pull/([0-9]+)'\n    fixed: x\n    thread: y\n    base: main\n"), "link.pull.base: unknown key (known here: issue, fixed, thread, apart)"},
+		"an apart that is no boolean":    {src(link + "  pull:\n    issue: '^/([^/]+)/pull/([0-9]+)'\n    fixed: x\n    thread: y\n    apart: sometimes\n"), "link.pull.apart: want true or false, got \"sometimes\""},
+		"an apart that is a number":      {src(link + "  pull:\n    issue: '^/([^/]+)/pull/([0-9]+)'\n    fixed: x\n    thread: y\n    apart: 1\n"), "link.pull.apart: want true or false, got int 1"},
 		"a repos pattern that is none":   {src(link + "  repos: '^/([('\n"), "link.repos: error parsing regexp"},
 	} {
 		_, err := Parse("f", []byte(tc.text))

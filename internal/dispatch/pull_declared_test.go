@@ -51,12 +51,30 @@ const (
 	forgePull  = "https://forge.test/acme/webapp/pull/7"
 )
 
+// forgeApartDecl is forgeDecl whose pull shape says that issues and pull
+// requests number apart: issue 7 and pull request 7 are two threads.
+func forgeApartDecl(t *testing.T) string {
+	t.Helper()
+	const pullThread = "    thread: \"{1}/{2}#{3}\"\n  repos:"
+	decl := strings.Replace(forgeDecl, pullThread, "    thread: \"{1}/{2}#{3}\"\n    apart: true\n  repos:", 1)
+	if decl == forgeDecl {
+		t.Fatal("forgeDecl has no pull thread to say apart after")
+	}
+	return decl
+}
+
 // forgeHook gives the yard the forge source and a forge hook fg carrying
 // says lines, beside the github hook the depot came with.
 func forgeHook(t *testing.T, r *ghDepot, lines ...string) {
 	t.Helper()
+	forgeHookOf(t, r, forgeDecl, lines...)
+}
+
+// forgeHookOf is forgeHook with the declaration decl of the forge source.
+func forgeHookOf(t *testing.T, r *ghDepot, decl string, lines ...string) {
+	t.Helper()
 	ctx := context.Background()
-	_, err := r.api.PutSource(ctx, "forge.yaml", forgeDecl, "me")
+	_, err := r.api.PutSource(ctx, "forge.yaml", decl, "me")
 	must(t, err)
 	_, err = r.api.PutHook(ctx, store.Hook{Name: "fg", Source: "forge",
 		SecretFile: "/nonexistent/forge.secret", Says: says(t, lines...)}, "me")
@@ -106,26 +124,100 @@ func TestForgePullRequestMovesTheBeadThatTracksIt(t *testing.T) {
 }
 
 // An event in one form finds the bead linked with the other: an issue
-// and its pull request share their groups, so each names the other.
+// and its pull request share their groups, so each names the other. A
+// source that says its shapes number apart has two threads of issue 7 and
+// pull request 7, and an event finds the bead that tracks its own and no
+// other.
 func TestForgeEventFindsTheBeadByTheOtherForm(t *testing.T) {
 	t.Parallel()
-	for _, c := range []struct{ name, tracked, event, typ string }{
-		{"issue linked, pull event", forgeIssue, forgePull, "pull_request"},
-		{"pull linked, issue event", forgePull, forgeIssue, "issues"},
+	for _, c := range []struct {
+		name, tracked, event, typ string
+		apart, moved              bool
+	}{
+		{"issue linked, pull event", forgeIssue, forgePull, "pull_request", false, true},
+		{"pull linked, issue event", forgePull, forgeIssue, "issues", false, true},
+		{"apart, issue linked, pull event", forgeIssue, forgePull, "pull_request", true, false},
+		{"apart, pull linked, issue event", forgePull, forgeIssue, "issues", true, false},
+		{"apart, issue linked, issue event", forgeIssue, forgeIssue, "issues", true, true},
+		{"apart, pull linked, pull event", forgePull, forgePull, "pull_request", true, true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			r := newTrackingDepot(t)
-			forgeHook(t, r,
+			decl := forgeDecl
+			if c.apart {
+				decl = forgeApartDecl(t)
+			}
+			forgeHookOf(t, r, decl,
 				"event=pull_request action=labeled label=accepted -> accepted",
 				"event=issues action=labeled label=accepted -> accepted")
 			forgeTracker(t, r, "yard-t", "triage", c.tracked)
 			forgeDeliver(t, r, c.typ, "labeled", c.event,
 				map[string][]string{"repo": {"acme/webapp"}, "number": {"7"}, "label": {"accepted"}})
 			r.pass(t)
+			if !c.moved {
+				if st := r.stageOf(t, "yard-t"); st != "triage" {
+					t.Fatalf("yard-t in %s after an event on a thread it does not track, want triage", st)
+				}
+				wantRules(t, r.rules(t, "yard-t"))
+				return
+			}
 			if st := r.stageOf(t, "yard-t"); st != "backlog" {
 				t.Fatalf("yard-t in %s, want backlog", st)
 			}
 			wantRules(t, r.rules(t, "yard-t"), "accepted triage -> backlog")
+		})
+	}
+}
+
+// What a hook's table makes of an event looks at the beads of the event's
+// own thread where the shapes number apart: a bead that tracks the issue,
+// open or closed since the event, is neither the pull request's tracker
+// nor the reason its make is withheld. Where the shapes are one thread it
+// is both.
+func TestForgeMakesLookAtTheEventsOwnThreadWhereTheShapesAreApart(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name                string
+		apart, closed, made bool
+	}{
+		{"one thread, issue bead open", false, false, false},
+		{"one thread, issue bead closed", false, true, false},
+		{"apart, issue bead open", true, false, true},
+		{"apart, issue bead closed", true, true, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := newTrackingDepot(t)
+			decl := forgeDecl
+			if c.apart {
+				decl = forgeApartDecl(t)
+			}
+			forgeHookOf(t, r, decl)
+			ctx := context.Background()
+			h, err := r.api.GetHook(ctx, "fg")
+			must(t, err)
+			m, err := store.ParseMake("event=pull_request action=opened -> issue:triage@yard")
+			must(t, err)
+			h.Makes = []store.Make{m}
+			_, err = r.api.PutHook(ctx, *h, "me")
+			must(t, err)
+			forgeTracker(t, r, "yard-t", "triage", forgeIssue)
+			forgeDeliver(t, r, "pull_request", "opened", forgePull,
+				map[string][]string{"repo": {"acme/webapp"}, "number": {"7"}})
+			if c.closed {
+				_, err := r.api.CloseBead(ctx, "yard-t", "done", store.Expect{}, "me")
+				must(t, err)
+			}
+			r.pass(t)
+			want := 0
+			if c.made {
+				want = 1
+			}
+			if tracks, _ := r.tracking(t, forgePull); len(tracks) != want {
+				t.Fatalf("beads tracking %s: %v, want %d", forgePull, tracks, want)
+			}
+			if tracks, _ := r.tracking(t, forgeIssue); len(tracks) != 1 || tracks[0] != "yard-t" {
+				t.Fatalf("beads tracking %s: %v, want yard-t alone", forgeIssue, tracks)
+			}
 		})
 	}
 }

@@ -122,6 +122,13 @@ type PullShape struct {
 	Issue  string `json:"issue"`
 	Fixed  string `json:"fixed"`
 	Thread string `json:"thread"`
+	// Apart is that the source numbers its issues and its pull requests
+	// apart: issue 7 and pull request 7 of one repository are two
+	// threads, not one. It turns off the one thing that equates the two
+	// shapes, AliasOf; a pull request's own URL still names its thread.
+	// False, which a stored declaration leaves out, is a source whose two
+	// shapes are one numbered thread.
+	Apart bool `json:"apart,omitempty"`
 }
 
 // Groups are what link.issue reads from path, the groups of the expression
@@ -231,11 +238,14 @@ func (l *Link) PullThreadOf(path string) (thread string, ok bool) {
 
 // AliasOf is the other fixed form of the thread whose URL has path: the
 // pull shape's over the groups the issue shape reads, or the issue
-// shape's over the pull shape's. An issue and its pull request share
-// their groups, so one names the other. ok is false when the path is no
-// thread of either shape, or the source has one shape alone.
+// shape's over the pull shape's. Where an issue and its pull request are
+// one numbered thread they share their groups, so one names the other.
+// ok is false when the path is no thread of either shape, or the source
+// has one shape alone, or its shapes number apart: an issue and a pull
+// request of one number are then two threads, and neither names the
+// other.
 func (l *Link) AliasOf(path string) (string, bool) {
-	if l.Pull == nil {
+	if l.Pull == nil || l.Pull.Apart {
 		return "", false
 	}
 	if g := l.Groups(path); g != nil {
@@ -526,13 +536,14 @@ func (r *reader) link(e entry) *Link {
 
 // linkPull reads the source's second thread shape, its pull requests: a
 // pattern with its own fixed and thread templates, over the same groups
-// in the same order. It returns the shape and its issue entry: the
-// group count is checked by link, with both expressions read. l carries
-// the compiled form, as it carries the issue's.
+// in the same order, and whether the two shapes number apart. It returns
+// the shape and its issue entry: the group count is checked by link, with
+// both expressions read. l carries the compiled form, as it carries the
+// issue's.
 func (r *reader) linkPull(e entry, l *Link) (*PullShape, *entry) {
 	p := &PullShape{}
 	var issue, fixed, thread *entry
-	for _, f := range r.entries(e.v, e.path, "issue", "fixed", "thread") {
+	for _, f := range r.entries(e.v, e.path, "issue", "fixed", "thread", "apart") {
 		switch f.key {
 		case "issue":
 			issue = &f
@@ -552,6 +563,8 @@ func (r *reader) linkPull(e entry, l *Link) (*PullShape, *entry) {
 		case "thread":
 			thread = &f
 			p.Thread, _ = r.str(f.v, f.path)
+		case "apart":
+			p.Apart, _ = r.boolean(f.v, f.path)
 		}
 	}
 	if e.v.Kind != yaml.MappingNode {

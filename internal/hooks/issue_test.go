@@ -150,10 +150,11 @@ func TestDeclaredLinkFold(t *testing.T) {
 
 // A declared source with a pull shape has pull requests: PullerFor finds
 // the declaration, PullOf reads a pull request's thread, PullURL builds
-// its URL from the parts, ThreadAlias names the other shape's form, and
-// PullParts reads the repository and number back out. A link is made
-// from either shape, and a thread named from either fixed form. Without
-// a pull shape the source has none of them.
+// its URL from the parts, ThreadAlias names the other shape's form (none
+// where the shapes number apart), and PullParts reads the repository and
+// number back out. A link is made from either shape, and a thread named
+// from either fixed form. Without a pull shape the source has none of
+// them.
 func TestDeclaredPullShapes(t *testing.T) {
 	text := "name: acme\nbase: https://acme.test\ncalls:\n  ping: { kind: read, request: { method: GET, path: /me } }\n" +
 		"link:\n  host: acme.test\n  issue: '^/([^/]+)/([^/]+)/issues/([0-9]+)'\n" +
@@ -223,6 +224,37 @@ func TestDeclaredPullShapes(t *testing.T) {
 	}
 	if got := ThreadAlias("one", one, "https://one.test/issue/X-1"); got != "" {
 		t.Errorf("one shape aliases %q", got)
+	}
+	// A source whose shapes number apart has no alias for either: issue 7
+	// and pull request 7 are two threads. What the pull shape reads is
+	// unchanged, so a pull request's own URL still names its thread.
+	apart, err := source.Parse("acme.yaml", []byte(text+"    apart: true\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, raw := range []string{issue, pull, "https://acme.test/Acme/WebApp/pull/7"} {
+		if got := ThreadAlias("acme", apart, raw); got != "" {
+			t.Errorf("ThreadAlias(%q) of a source whose shapes number apart = %q, want none", raw, got)
+		}
+	}
+	ap, ok := PullerFor("acme", apart)
+	if !ok {
+		t.Fatal("declared acme with its shapes apart has no Puller")
+	}
+	if got := ap.PullOf("https://acme.test/Acme/WebApp/pull/7"); got != "acme/webapp#7" {
+		t.Errorf("PullOf(pull) with the shapes apart = %q, want acme/webapp#7", got)
+	}
+	if got := ap.PullURL("acme/webapp", "7"); got != pull {
+		t.Errorf("PullURL with the shapes apart = %q, want %q", got, pull)
+	}
+	if repo, number := PullParts("acme", apart, pull); repo != "acme/webapp" || number != "7" {
+		t.Errorf("PullParts(pull) with the shapes apart = %q, %q", repo, number)
+	}
+	if name, fixed, err := Issue(pull, apart); err != nil || name != "acme" || fixed != pull {
+		t.Errorf("Issue(%q) with the shapes apart = %q, %q, %v; want acme, %q", pull, name, fixed, err, pull)
+	}
+	if thread, err := (Declared{D: apart}).IssueThread(pull); err != nil || thread != "acme/webapp#7" {
+		t.Errorf("IssueThread(%q) with the shapes apart = %q, %v; want acme/webapp#7", pull, thread, err)
 	}
 	if repo, number := PullParts("acme", d, pull); repo != "acme/webapp" || number != "7" {
 		t.Errorf("PullParts(pull) = %q, %q", repo, number)

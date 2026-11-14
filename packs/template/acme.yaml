@@ -153,6 +153,13 @@ link:
     issue: '^/([^/]+)/pull/([0-9]+)'
     fixed: "https://acme.example.com/{1}/pull/{2}"
     thread: "{1}#{2}"
+    # Drop apart where an issue and a pull request of one number are one
+    # thread: without it the yard takes each shape's URL for the other's
+    # too, so a bead linked with one is found by an event in the other.
+    # With it the two are numbered apart, and an event finds only the
+    # bead that tracks its own thread; a pull request's own URL still
+    # names its thread.
+    apart: true
   repos: '[^/]+/[^/]+'
 
 # ---- what an agent may ask of it, through `yardr call` --------------------
