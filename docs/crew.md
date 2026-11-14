@@ -423,14 +423,20 @@ use first, by the clock as a failsafe.
 
 On a pass where the session is idle, yardr reads what its agent holds from
 the agent's own session file: Claude Code's last assistant line's usage,
-Muse's last `model_completed` input, or Codex's last `token_count` call's
-input (not its running total). Muse and Codex input already includes its
-cache. Codex's window is read from the same call's `model_context_window`;
-without it, no reading is recorded. The window is declared by the harness
-where known (1,007,997 tokens for Muse); otherwise it is 200k tokens, or 1M
-where the model the crew member asks for carries `[1m]`
-(`--set model=opus[1m]`). A session with no reading
-yet, or no unique file matching its worktree, waits for a later pass.
+Muse's last `model_completed` input, Codex's last `token_count` call's
+input (not its running total), or pi's last assistant message's usage (its
+`input`, `cacheRead` and `cacheWrite`, without the `output` that pi's own
+footer adds). Muse and Codex input already includes its cache. Codex's
+window is read from the same call's `model_context_window`; without it, no
+reading is recorded. The window is declared by the harness where known
+(1,007,997 tokens for Muse); otherwise it is 200k tokens, or 1M where the
+model the crew member asks for carries `[1m]` (`--set model=opus[1m]`). pi's
+file names no window, so the yard uses the asked model name's window: 200k
+by default, or the size in a bracketed suffix. When that estimate differs
+from the model's actual window, a larger estimate delays the handoff and a
+smaller one brings it sooner. A session with no reading yet (pi writes its
+file at its first reply), or no unique file matching its worktree, waits for
+a later pass.
 At `--context-handoff` percent (60 unless set, 0
 for never) it nudges once: "Your context is N% of the window. Write your
 handoff when this conversation allows …". The nudge is asked once per

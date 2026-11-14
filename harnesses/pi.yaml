@@ -23,3 +23,33 @@ flags:
 errors:
   - reason: other
     pattern: '^Error: Retry failed after \d+ attempts'
+
+# The model of the first assistant message, read from pi's own session file,
+# <agent dir>/sessions/<working directory, its slashes as dashes>/<start
+# time>_<id>.jsonl, the agent dir being PI_CODING_AGENT_DIR, else ~/.pi/agent.
+# pi writes the file at its first reply, not at start. herdr names a pi session
+# by the path of that file and by no id of its own (`herdr agent get`: an
+# agent_session of kind "path"), so {session} is the file's name, whole: the
+# yard takes it out of herdr's path. Only an assistant line carries a model.
+# Read with pi 0.84.3 (session format 3) under herdr 0.9.5.
+model:
+  home: .pi/agent
+  home_env: PI_CODING_AGENT_DIR
+  glob: sessions/*/{session}
+  type: message
+  field: message.model
+
+# Context use is read from the same file: the last assistant message's usage,
+# whose input, cacheRead and cacheWrite add up to what the last request sent.
+# The rest of it is left out: cacheWrite1h is a part of cacheWrite and
+# reasoning a part of output. pi's own footer adds that reply's output too
+# (totalTokens), where the yard counts what was sent, as for every kind, so its
+# figure is lower by that. A turn that ended in an error carries a usage of
+# zeros, which reads as a use of 0 until the next reply, as Claude Code's
+# API-error line does. The file names no window, so the yard uses the asked
+# model name's window: 200k by default, or a bracketed size such as [1m].
+context:
+  type_field: message.role
+  type: assistant
+  usage: message.usage
+  tokens: [input, cacheRead, cacheWrite]

@@ -766,11 +766,14 @@ func TestPlaceholderSGR(t *testing.T) {
 // another type, one without the field, one that is not JSON and a name the
 // harness made up itself name none. Muse's lines name their type
 // "payload_type" (type_field): its startup metadata and its nested
-// permission records name none.
+// permission records name none. pi's lines are all of type "message": only
+// an assistant's names a model, and its model_change line, which says what the
+// session was started with, is none of them.
 func TestModelIn(t *testing.T) {
 	claude, _ := Lookup("claude")
 	codex, _ := Lookup("codex")
 	muse, _ := Lookup("muse")
+	pi, _ := Lookup("pi")
 	for _, c := range []struct {
 		src        *store.ModelSource
 		line, want string
@@ -790,6 +793,11 @@ func TestModelIn(t *testing.T) {
 		{muse.Model, `{"type":"run.model.configured","payload":{"record":{"model_id":"muse-spark-1.3"}}}`, ""},
 		{muse.Model, `{"payload_type":"run.model.configured","payload":{"record":{"model_id":7}}}`, ""},
 		{muse.Model, `{"payload_type":"run.model.configured`, ""},
+		{pi.Model, `{"type":"message","id":"a1","parentId":"u1","message":{"role":"assistant","api":"openai-completions","provider":"deepseek","model":"deepseek-v4-flash","stopReason":"stop"}}`, "deepseek-v4-flash"},
+		{pi.Model, `{"type":"message","id":"u1","parentId":"m1","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}`, ""},
+		{pi.Model, `{"type":"message","id":"t1","parentId":"a1","message":{"role":"toolResult","toolName":"bash","isError":false}}`, ""},
+		{pi.Model, `{"type":"model_change","id":"m1","parentId":null,"provider":"deepseek","modelId":"deepseek-v4-flash"}`, ""},
+		{pi.Model, `{"type":"session","version":3,"id":"s1","timestamp":"2026-10-28T09:00:00.000Z","cwd":"/work/w"}`, ""},
 		{&store.ModelSource{Field: "model"}, `{"type":"anything","model":"m"}`, "m"},
 		{&store.ModelSource{TypeField: "kind", Type: "a", Field: "model"}, `{"kind":"a","model":"m"}`, "m"},
 		{&store.ModelSource{TypeField: "kind", Type: "a", Field: "model"}, `{"kind":"b","model":"m"}`, ""},
@@ -802,6 +810,10 @@ func TestModelIn(t *testing.T) {
 		t.Errorf("pattern %q, want %q", got, want)
 	}
 	if got, want := muse.Model.Pattern("/h", "x1"), "/h/sessions/[0-9]*/[0-9]*/[0-9]*/x1/session.jsonl"; got != want {
+		t.Errorf("pattern %q, want %q", got, want)
+	}
+	// pi's id is its file's name, which herdr's path for the session ends in.
+	if got, want := pi.Model.Pattern("/h", "2026-10-28T09-00-00-000Z_s1.jsonl"), "/h/sessions/*/2026-10-28T09-00-00-000Z_s1.jsonl"; got != want {
 		t.Errorf("pattern %q, want %q", got, want)
 	}
 }
@@ -856,10 +868,12 @@ func TestWorkspaceIn(t *testing.T) {
 // A matched file names its session in the segment where the glob has
 // {session}. A path outside the harness's own directory, one with not the
 // glob's segments, and a glob that holds {session} inside a longer word,
-// as codex's does, name none.
+// as codex's does, name none. herdr names a pi session by the path of its
+// file, and the id is the file's name, which pi's glob holds whole.
 func TestSessionIn(t *testing.T) {
 	muse, _ := Lookup("muse")
 	codex, _ := Lookup("codex")
+	pi, _ := Lookup("pi")
 	for _, c := range []struct {
 		src       *store.ModelSource
 		dir, path string
@@ -873,6 +887,10 @@ func TestSessionIn(t *testing.T) {
 		{muse.Model, "/h", "/other/sessions/2026/10/21/abc/session.jsonl", "", false},
 		{muse.Model, "/h", "/h/../sessions/2026/10/21/abc/session.jsonl", "", false},
 		{codex.Model, "/h", "/h/sessions/2026/10/21/rollout-2026-10-21T20-10-45-x1.jsonl", "", false},
+		{pi.Model, "/h", "/h/sessions/--work-w--/2026-10-28T09-00-00-000Z_s1.jsonl", "2026-10-28T09-00-00-000Z_s1.jsonl", true},
+		{pi.Model, "/h", "/h/sessions/2026-10-28T09-00-00-000Z_s1.jsonl", "", false},
+		{pi.Model, "/h", "/h/sessions/--work-w--/sub/2026-10-28T09-00-00-000Z_s1.jsonl", "", false},
+		{pi.Model, "/h", "/other/sessions/--work-w--/2026-10-28T09-00-00-000Z_s1.jsonl", "", false},
 	} {
 		if got, ok := c.src.SessionIn(c.dir, c.path); got != c.want || ok != c.ok {
 			t.Errorf("%s in %s under %s: %q, %v; want %q, %v", c.src.Glob, c.path, c.dir, got, ok, c.want, c.ok)
@@ -1012,9 +1030,18 @@ func TestHarnessVersion(t *testing.T) {
 	}
 }
 
-// Claude adds input and cache; Muse and Codex input already includes cache.
+// Claude adds input and cache; Muse and Codex input already includes cache;
+// pi names its own fields for the same three.
 func TestContextSource(t *testing.T) {
 	for _, h := range Harnesses {
+		if h.Kind == "pi" {
+			if h.Context == nil || h.Context.TypeField != "message.role" || h.Context.Type != "assistant" ||
+				h.Context.Usage != "message.usage" || !slices.Equal(h.Context.Tokens, []string{"input", "cacheRead", "cacheWrite"}) ||
+				h.Context.Window != 0 || h.Context.WindowField != "" {
+				t.Fatalf("pi's context source = %+v", h.Context)
+			}
+			continue
+		}
 		if h.Kind == "claude" {
 			if h.Context == nil || h.Context.Type != "assistant" || h.Context.Usage != "message.usage" || h.Context.Window != 0 {
 				t.Fatalf("claude's context source = %+v", h.Context)
@@ -1069,6 +1096,36 @@ func TestContextSource(t *testing.T) {
 	}
 	if _, ok := custom.UsageIn([]byte(`{"type":"turn","use":{"total_tokens":9}}`)); ok {
 		t.Fatal("the type is read from type_field, not type")
+	}
+
+	// pi's lines are trimmed from real session files of pi 0.84.3 (session
+	// format 3): the first seven are one session's, with three turns at 150k
+	// of use, nearly all of it cache read; the next two are the first turns of
+	// another, the first of which writes the cache the second reads. A
+	// message's type is always "message" and its role is in message.role. What
+	// is left out is each message's content, its ids and its cost.
+	pi, _ := Lookup("pi")
+	for _, c := range []struct {
+		line string
+		used int
+		ok   bool
+	}{
+		{`{"type":"session","version":3,"id":"s1","timestamp":"2026-10-28T09:00:00.000Z","cwd":"/work/w"}`, 0, false},
+		{`{"type":"model_change","id":"m1","parentId":null,"provider":"kimi-coding","modelId":"k3"}`, 0, false},
+		{`{"type":"message","id":"u1","parentId":"m1","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}`, 0, false},
+		{`{"type":"message","id":"a1","parentId":"u1","message":{"role":"assistant","provider":"kimi-coding","model":"k3","usage":{"input":809,"output":188,"cacheRead":149760,"cacheWrite":0,"cacheWrite1h":0,"reasoning":69,"totalTokens":150757},"stopReason":"toolUse"}}`, 150569, true},
+		{`{"type":"message","id":"t1","parentId":"a1","message":{"role":"toolResult","toolCallId":"c1","toolName":"bash","content":[{"type":"text","text":"ok"}],"isError":false}}`, 0, false},
+		{`{"type":"message","id":"a2","parentId":"t1","message":{"role":"assistant","provider":"kimi-coding","model":"k3","usage":{"input":367,"output":163,"cacheRead":150528,"cacheWrite":0,"cacheWrite1h":0,"reasoning":0,"totalTokens":151058},"stopReason":"toolUse"}}`, 150895, true},
+		{`{"type":"message","id":"a3","parentId":"t2","message":{"role":"assistant","provider":"kimi-coding","model":"k3","usage":{"input":329,"output":789,"cacheRead":150784,"cacheWrite":0,"cacheWrite1h":0,"reasoning":34,"totalTokens":151902},"stopReason":"toolUse"}}`, 151113, true},
+		{`{"type":"message","id":"b1","parentId":"u2","message":{"role":"assistant","provider":"github-copilot","model":"claude-sonnet-4.6","usage":{"input":3,"output":142,"cacheRead":0,"cacheWrite":4551,"cacheWrite1h":0,"reasoning":27,"totalTokens":4696},"stopReason":"toolUse"}}`, 4554, true},
+		{`{"type":"message","id":"b2","parentId":"t3","message":{"role":"assistant","provider":"github-copilot","model":"claude-sonnet-4.6","usage":{"input":1,"output":249,"cacheRead":4551,"cacheWrite":275,"cacheWrite1h":0,"reasoning":0,"totalTokens":5076},"stopReason":"stop"}}`, 4827, true},
+		// The same turn with what pi's source fills for a cache kept an hour:
+		// the part of cacheWrite that was, which is not added again.
+		{`{"type":"message","id":"b2","parentId":"t3","message":{"role":"assistant","provider":"github-copilot","model":"claude-sonnet-4.6","usage":{"input":1,"output":249,"cacheRead":4551,"cacheWrite":275,"cacheWrite1h":275,"reasoning":0,"totalTokens":5076},"stopReason":"stop"}}`, 4827, true},
+	} {
+		if used, ok := pi.Context.UsageIn([]byte(c.line)); used != c.used || ok != c.ok {
+			t.Errorf("pi in %.90q: %d, %v; want %d, %v", c.line, used, ok, c.used, c.ok)
+		}
 	}
 }
 

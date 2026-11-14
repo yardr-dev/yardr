@@ -33,7 +33,7 @@ func TestHarnessListAndShow(t *testing.T) {
 		"codex     Codex        v1    pane marks, error lines, dialogs told of, reported model, context use, token count, trust dialog, unattended flags, model flag, effort flag, flags always passed,",
 		"muse      Muse Code    v1    pane marks, error lines, login screen, background work, reported model, context use, token count, trust dialog, unattended flags,",
 		"kimi      Kimi         v1    pane marks, error lines, dialogs told of, hints, trust dialog, trust environment, unattended flags,",
-		"pi        pi           v1    error lines, model flag, version flag, one-shot call\n",
+		"pi        pi           v1    error lines, reported model, context use, model flag, version flag, one-shot call\n",
 		"No file, so started as herdr starts it and nothing more known: gemini, cursor,")
 	var listed struct {
 		Harnesses []store.Harness `json:"harnesses"`

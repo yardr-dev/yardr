@@ -231,6 +231,62 @@ esac`)}
 		}
 	})
 
+	// pi's file stands under a directory of its own and is named by its start
+	// time before its id, and herdr 0.9.5 names a pi session by the path of that
+	// file and by no id: the id is the file's name. pi writes the file at its
+	// first reply, so a session that has had none has no file yet. The lines
+	// are trimmed from a real session file of pi 0.84.3: its use is what the
+	// last request sent, the cache included, and not what pi's footer adds.
+	t.Run("pi names its session by the path of its file", func(t *testing.T) {
+		pi := t.TempDir()
+		name := "2026-10-28T09-00-00-000Z_s1.jsonl"
+		path := filepath.Join(pi, "sessions", "--work-w--", name)
+		bin := fakeHerdrBin(t, fmt.Sprintf(`agent() { echo '{"id":"x","result":{"type":"agent_info","agent":{"agent":"pi","agent_session":{"agent":"pi","kind":"path","source":"herdr:pi","value":"'"$1"'"},"agent_status":"idle"}}}'; }
+case "$3" in
+  inside)  agent '%s' ;;
+  outside) agent '/elsewhere/sessions/--work-w--/%s' ;;
+  *)       echo '{"error":{"code":"server_not_running","message":"no herdr server"},"id":"x"}' >&2; exit 1 ;;
+esac`, path, name))
+		h := &Herdr{AgentHomes: map[string]string{"pi": pi}, Bin: bin}
+		check := func(agent string, wantUsed int, wantOK bool) {
+			t.Helper()
+			used, window, ok, err := h.Context(ctx, map[string]any{"agent": agent}, time.Time{})
+			if err != nil || ok != wantOK || used != wantUsed || window != 0 {
+				t.Fatalf("pi context of %s = %d, %d, %v, %v; want %d, 0, %v, nil", agent, used, window, ok, err, wantUsed, wantOK)
+			}
+		}
+		check("inside", 0, false) // no reply yet, so no file
+		write(path, `{"type":"session","version":3,"id":"s1","timestamp":"2026-10-28T09:00:00.000Z","cwd":"/work/w"}
+{"type":"model_change","id":"m1","parentId":null,"provider":"kimi-coding","modelId":"k3"}
+{"type":"message","id":"u1","parentId":"m1","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}
+`)
+		check("inside", 0, false) // prompted, no reply yet
+		appendLine(t, path, `{"type":"message","id":"a1","parentId":"u1","message":{"role":"assistant","api":"anthropic-messages","provider":"kimi-coding","model":"k3","usage":{"input":809,"output":188,"cacheRead":149760,"cacheWrite":0,"cacheWrite1h":0,"reasoning":69,"totalTokens":150757},"stopReason":"toolUse"}}
+`)
+		check("inside", 150569, true) // input and cache, not the 188 it said
+		appendLine(t, path, `{"type":"message","id":"t1","parentId":"a1","message":{"role":"toolResult","toolCallId":"c1","toolName":"bash","content":[{"type":"text","text":"ok"}],"isError":false}}
+{"type":"message","id":"a2","parentId":"t1","message":{"role":"assistant","api":"anthropic-messages","provider":"kimi-coding","model":"k3","usage":{"input":367,"output":163,"cacheRead":150528,"cacheWrite":0,"cacheWrite1h":0,"reasoning":0,"totalTokens":151058},"stopReason":"toolUse"}}
+{"type":"message","id":"t2","parentId":"a2","message":{"role":"toolResult","toolCallId":"c2","toolName":"bash","content":[{"type":"text","text":"ok"}],"isError":false}}
+`)
+		check("inside", 150895, true) // a tool result is no reading
+		appendLine(t, path, `{"type":"message","id":"a3","parentId":"t2","message":{"role":"assistant","api":"anthropic-messages","provider":"kimi-coding","model":"k3","usage":{"input":329,"output":789,"cacheRead":150784,"cacheWrite":0,"cacheWrite1h":0,"reasoning":34,"totalTokens":151902},"stopReason":"toolUse"}}
+`)
+		check("inside", 151113, true)
+		// The path gives the file, the model and the id by the same read.
+		handle := map[string]any{"agent": "inside"}
+		if id, err := h.SessionID(ctx, handle, time.Time{}); err != nil || id != name {
+			t.Errorf("pi session id = %q, %v; want %q", id, err, name)
+		}
+		if model, err := h.Model(ctx, handle, time.Time{}); err != nil || model != "k3" {
+			t.Errorf("pi model = %q, %v; want k3", model, err)
+		}
+		// A path outside pi's own directory names no session.
+		check("outside", 0, false)
+		if id, err := h.SessionID(ctx, map[string]any{"agent": "outside"}, time.Time{}); err != nil || id != "" {
+			t.Errorf("pi session id of a path outside its directory = %q, %v; want none", id, err)
+		}
+	})
+
 	t.Run("Muse worktree match", func(t *testing.T) {
 		muse := t.TempDir()
 		shell, err := peer.Describe(os.Getpid())

@@ -37,6 +37,8 @@ import (
 //	muse    ~/.local/share/muse/sessions/<y>/<m>/<d>/<id>/session.jsonl:
 //	        the model_id of the first run.model.configured line, which is
 //	        what the run was started or reconfigured with
+//	pi      ~/.pi/agent/sessions/<dir>/<time>_<id>.jsonl: the model of the
+//	        first assistant message; herdr names the session by this path
 //
 // A kind whose file names no source reports nothing, as does one with no
 // session id and no worktree match for it.
@@ -154,6 +156,12 @@ func fileNamesWorktree(src *store.ModelSource, path, worktree string, begin, end
 // plain id (it goes into a glob, where one finds nothing); kind is still
 // herdr's when it named an agent, so the worktree match knows what matched
 // nothing.
+//
+// herdr names some agents' sessions by the path of the file (pi's, whose
+// file stands under a directory of its own and is named by its start time
+// before its id): the id of such a session is what the kind's glob holds at
+// {session} in that path (ModelSource.SessionIn). A path the glob does not
+// hold, outside the agent's own directory or of another shape, names none.
 func (h *Herdr) sessionKind(ctx context.Context, handle map[string]any) (store.Harness, string, error) {
 	name, _ := handle["agent"].(string)
 	if name == "" {
@@ -171,6 +179,7 @@ func (h *Herdr) sessionKind(ctx context.Context, handle map[string]any) (store.H
 		Agent struct {
 			Kind    string `json:"agent"`
 			Session struct {
+				Kind  string `json:"kind"`
 				Value string `json:"value"`
 			} `json:"agent_session"`
 		} `json:"agent"`
@@ -179,7 +188,11 @@ func (h *Herdr) sessionKind(ctx context.Context, handle map[string]any) (store.H
 		return store.Harness{}, "", err
 	}
 	kind, _ := agents.Lookup(info.Agent.Kind)
-	if id := info.Agent.Session.Value; plainSessionID(id) {
+	id := info.Agent.Session.Value
+	if info.Agent.Session.Kind == "path" && kind.Model != nil {
+		id, _ = kind.Model.SessionIn(h.agentHome(kind), id)
+	}
+	if plainSessionID(id) {
 		return kind, id, nil
 	}
 	return kind, "", nil
