@@ -71,9 +71,10 @@ func posthogDecl(t *testing.T) hooks.Declared {
 // in its header, deduped by the event's own id, with the project, the
 // session and the replay link as its keys, and the survey, the email,
 // the footplate version and the OS a feedback subscription filters on,
-// and registered by the yard itself on the hook card. No hear key:
-// every verified delivery is kept. No thread, link or notify key: the
-// destination call is the one thing the yard writes to PostHog.
+// and registered by the yard itself on the hook card, and the link key
+// that names an issue's page for a bead's link. No hear key: every
+// verified delivery is kept. No thread or notify key: the destination
+// call is the one thing the yard writes to PostHog.
 func TestPostHogPackDeclaration(t *testing.T) {
 	d, dir, _ := posthogParse(t)
 	if d.Name != "posthog" {
@@ -108,8 +109,11 @@ func TestPostHogPackDeclaration(t *testing.T) {
 	if ex := h.Register.Existing; ex == nil || ex.Call != "destinations" || ex.In != "results" || ex.Field != "inputs.url.value" {
 		t.Errorf("existing = %+v, want the destinations call with results and inputs.url.value", h.Register.Existing)
 	}
-	if d.Hear != nil || d.Thread != nil || d.Link != nil || d.Notify != nil {
-		t.Error("the pack declares a hear, thread, link or notify key: it reads PostHog and hears a new error issue, and only its destination call writes")
+	if d.Hear != nil || d.Thread != nil || d.Notify != nil {
+		t.Error("the pack declares a hear, thread or notify key: it reads PostHog and hears a new error issue, and only its destination call writes")
+	}
+	if l := d.Link; l == nil || l.Host != "us.posthog.com" {
+		t.Error("the pack declares no link key on the default base's host: a bead cannot link to an error issue's page")
 	}
 	var update []string
 	for _, c := range d.Calls {

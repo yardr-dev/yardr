@@ -339,7 +339,7 @@ func TestHookRegisterPostHogDestination(t *testing.T) {
 	var hits []registerHit
 	status := http.StatusOK
 	y := registerYardText(t, &hits, &status, "posthog",
-		strings.ReplaceAll(string(raw), "https://us.posthog.com", "http://127.0.0.1:9"))
+		strings.Replace(string(raw), "base: https://us.posthog.com", "base: http://127.0.0.1:9", 1))
 	ask := y.ask(t, Ask{Question: "Hook PostHog's new error issues up?", To: "mckean", Context: []string{"a", "b"}, Run: &AskRun{Argv: []string{"hook", "add", "posthog", "--source", "posthog"}}}, "yardmaster")
 	got := y.asked(t, ask)
 	if len(got.Ask.Run.Ask) != 1 || got.Ask.Run.Ask[0] != "project" {

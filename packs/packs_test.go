@@ -2578,9 +2578,10 @@ func TestSlackPack(t *testing.T) {
 // declared source with the read calls an agent makes of it (a HogQL
 // query, the error issues, one issue, the session recordings, one
 // recording, a session's Replay Vision observations, the destinations
-// the register check scans) and the hook key that hears a new error
-// issue. The source is named posthog. One call writes: the destination
-// the hook card makes; it has no thread, notify or link key.
+// the register check scans), the hook key that hears a new error issue
+// and the link key that names an issue's page for a bead's link. The
+// source is named posthog. One call writes: the destination the hook
+// card makes; it has no thread or notify key.
 func TestPostHogPack(t *testing.T) {
 	sub, err := fs.Sub(packs.FS, "posthog")
 	if err != nil {
@@ -2610,8 +2611,16 @@ func TestPostHogPack(t *testing.T) {
 	if c := d.Credential; c == nil || c.Env != "POSTHOG_API_KEY" || c.Header != "Authorization: Bearer {credential}" {
 		t.Fatalf("credential = %+v", c)
 	}
-	if d.Hear != nil || d.Thread != nil || d.Notify != nil || d.Link != nil {
-		t.Fatalf("the pack declares a hear, thread, notify or link key: it reads PostHog and hears a new error issue, nothing else")
+	if d.Hear != nil || d.Thread != nil || d.Notify != nil {
+		t.Fatalf("the pack declares a hear, thread or notify key: it reads PostHog and hears a new error issue, nothing else")
+	}
+	// The link key names an error issue's page for a bead's link: the
+	// host of the default base, the page under its project with the
+	// issue's UUID, and the UUID for a thread command.
+	if l := d.Link; l == nil || l.Host != "us.posthog.com" ||
+		l.Issue != `^/project/([0-9]+)/error-tracking/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})(?:/.*)?$` ||
+		l.Fixed != "https://us.posthog.com/project/{1}/error-tracking/{2}" || l.Thread != "{2}" {
+		t.Fatalf("link = %+v, want the issue's page on the default base's host with the UUID for a thread", l)
 	}
 	params := func(c *source.Call) map[string]source.Param {
 		out := map[string]source.Param{}

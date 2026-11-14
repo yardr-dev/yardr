@@ -347,6 +347,84 @@ func TestLinearPackLinkFixedForm(t *testing.T) {
 	}
 }
 
+// posthogPackDecl is the PostHog source as packs/posthog declares it.
+func posthogPackDecl(t *testing.T) *source.Declaration {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("..", "..", "packs", "posthog", "posthog.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := source.Parse(filepath.Join("..", "..", "packs", "posthog", "posthog.yaml"), raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Name != "posthog" || d.Link == nil {
+		t.Fatalf("declaration = %+v", d)
+	}
+	return d
+}
+
+// The pack's link fixes a PostHog issue URL: one fixed form however it
+// was copied, whatever follows the issue left out. The id keeps its
+// case, as the issue call takes it. A replay link is no issue, and a
+// URL on the EU cloud is none of this link's: the link is on the host
+// of the default base. The thread is the issue's UUID, read from the
+// path alone, so a stage map's move reads it on either cloud.
+func TestPostHogPackLinkFixedForm(t *testing.T) {
+	ph := posthogPackDecl(t)
+	const id = "019f7c39-8a4b-7c2d-b3e5-1f2a3b4c5d6e"
+	const fixed = "https://us.posthog.com/project/48291/error-tracking/" + id
+	for _, raw := range []string{
+		"https://us.posthog.com/project/48291/error-tracking/" + id,
+		"https://us.posthog.com/project/48291/error-tracking/" + id + "/",
+		"https://us.posthog.com/project/48291/error-tracking/" + id + "?filter=test",
+		"https://us.posthog.com/project/48291/error-tracking/" + id + "#volume",
+		"https://US.posthog.com/project/48291/error-tracking/" + id,
+		" https://us.posthog.com/project/48291/error-tracking/" + id + "\n",
+	} {
+		name, got, err := Issue(raw, ph)
+		if err != nil || name != "posthog" || got != fixed {
+			t.Errorf("Issue(%q) = %q, %q, %v; want posthog, %q", raw, name, got, err, fixed)
+		}
+		if in, err := IssueIn("posthog", raw, ph); err != nil || in != fixed {
+			t.Errorf("IssueIn(%q) = %q, %v; want %q", raw, in, err, fixed)
+		}
+	}
+	upper := "https://us.posthog.com/project/48291/error-tracking/019F7C39-8A4B-7C2D-B3E5-1F2A3B4C5D6E"
+	if _, got, err := Issue(upper, ph); err != nil || got != upper {
+		t.Errorf("Issue(%q) = %q, %v; want the URL as typed", upper, got, err)
+	}
+	for _, c := range []struct{ raw, why string }{
+		{"https://us.posthog.com/project/48291/error-tracking/", "is no posthog issue"},
+		{"https://us.posthog.com/project/48291/error-tracking/not-a-uuid", "is no posthog issue"},
+		{"https://us.posthog.com/project/acme/error-tracking/" + id, "is no posthog issue"},
+		{"https://us.posthog.com/project/48291/replay/" + id, "is no posthog issue"},
+		{"https://us.posthog.com/project/48291/error-tracking", "is no posthog issue"},
+		{"https://eu.posthog.com/project/48291/error-tracking/" + id, "is on eu.posthog.com, not on us.posthog.com: no posthog issue"},
+	} {
+		if got, err := IssueIn("posthog", c.raw, ph); err == nil || !strings.Contains(err.Error(), c.why) {
+			t.Errorf("IssueIn(%q) = %q, %v; want an error with %q", c.raw, got, err, c.why)
+		}
+	}
+	if _, _, err := Issue("https://us.posthog.com.evil.example/project/48291/error-tracking/"+id, ph); err == nil ||
+		!strings.Contains(err.Error(), "where yardr knows no issues") {
+		t.Errorf("evil host: %v", err)
+	}
+	// Without the pack's declaration, us.posthog.com is a host yardr
+	// knows no issues on.
+	if _, _, err := Issue(fixed); err == nil ||
+		!strings.Contains(err.Error(), "where yardr knows no issues (it does on none of the yard's sources)") {
+		t.Errorf("no declaration: %v", err)
+	}
+	// The thread is the issue's UUID on either cloud: a stage map's
+	// move reads the path, never the host.
+	for _, raw := range []string{fixed, "https://eu.posthog.com/project/48291/error-tracking/" + id} {
+		if thread, err := (Declared{D: ph}).IssueThread(raw); err != nil || thread != id {
+			t.Errorf("IssueThread(%q) = %q, %v; want %q", raw, thread, err, id)
+		}
+	}
+}
+
 // When two declared sources share a host, the yard's hooks decide: a
 // declared source with a hook wins over one with none, else the first as
 // given. A URL one takes and the other refuses is still that one's.
