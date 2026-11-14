@@ -10,6 +10,7 @@ import (
 
 	"io"
 	"yardr.dev/yardr/internal/hooks"
+	"yardr.dev/yardr/internal/source"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -287,20 +288,20 @@ refuses the whole move. Undo it by moving back.`,
 }
 
 // checkLinkSources refuses a move of links between sources that are no
-// link sources, or not on one host: the URLs stay as they are, so the new
-// source must read them as the old one did.
+// link sources, or share no host of the sets their links match: the URLs
+// stay as they are, so the new source must read them as the old one did.
 func checkLinkSources(ctx context.Context, st store.API, from, to string) error {
 	decls := allDeclarations(ctx, st)
-	var fromHost, toHost string
+	var fromHosts, toHosts []string
 	for _, name := range []string{from, to} {
-		var host string
+		var hosts []string
 		if b, ok := hooks.Adapters[name].(hooks.Linker); ok {
-			host = b.IssueHost()
+			hosts = []string{b.IssueHost()}
 		} else {
 			found := false
 			for _, d := range decls {
 				if d != nil && d.Name == name && d.Link != nil {
-					host, found = d.Link.Host, true
+					hosts, found = d.LinkHosts(), true
 					break
 				}
 			}
@@ -309,13 +310,13 @@ func checkLinkSources(ctx context.Context, st store.API, from, to string) error 
 			}
 		}
 		if name == from {
-			fromHost = host
+			fromHosts = hosts
 		} else {
-			toHost = host
+			toHosts = hosts
 		}
 	}
-	if !strings.EqualFold(fromHost, toHost) {
-		return fmt.Errorf("%s is on %s and %s on %s: a move keeps the URLs, so both sources must share the host", from, fromHost, to, toHost)
+	if _, ok := source.SharedLinkHost(fromHosts, toHosts); !ok {
+		return fmt.Errorf("%s is on %s and %s on %s: a move keeps the URLs, so both sources must share the host", from, strings.Join(fromHosts, ", "), to, strings.Join(toHosts, ", "))
 	}
 	return nil
 }

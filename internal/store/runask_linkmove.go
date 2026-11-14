@@ -23,6 +23,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"yardr.dev/yardr/internal/source"
 )
 
 // linkMoveUse is how a refusal names the link move a run ask takes.
@@ -77,16 +79,16 @@ func checkLinkMove(ctx context.Context, w *wtx, argv []string, actor string) err
 }
 
 // linkSourcesShareAHost refuses a move of links between sources that are no
-// link sources, or not on one host: the URLs stay as they are, so the new
-// source must read them as the old one did. It is the check yardr link move
-// makes before it moves them, from the declared sources of the yard, and
-// answers the host they share.
+// link sources, or share no host of the sets their links match: the URLs
+// stay as they are, so the new source must read them as the old one did.
+// It is the check yardr link move makes before it moves them, from the
+// declared sources of the yard, and answers the host they share.
 func (w *wtx) linkSourcesShareAHost(from, to string) (string, error) {
-	var hosts []string
+	var sets [][]string
 	for _, name := range []string{from, to} {
 		_, d, err := sourceIn(w.Tx, name)
 		if err == nil && d.Link != nil {
-			hosts = append(hosts, d.Link.Host)
+			sets = append(sets, d.LinkHosts())
 			continue
 		}
 		if err != nil && !errors.Is(err, ErrNotFound) {
@@ -104,10 +106,10 @@ func (w *wtx) linkSourcesShareAHost(from, to string) (string, error) {
 		slices.Sort(linking)
 		return "", fmt.Errorf("%s is no link source (links go to %s)", name, or(strings.Join(linking, ", "), "none"))
 	}
-	if !strings.EqualFold(hosts[0], hosts[1]) {
-		return "", fmt.Errorf("%s is on %s and %s on %s: a move keeps the URLs, so both sources must share the host", from, hosts[0], to, hosts[1])
+	if shared, ok := source.SharedLinkHost(sets[0], sets[1]); ok {
+		return shared, nil
 	}
-	return hosts[1], nil
+	return "", fmt.Errorf("%s is on %s and %s on %s: a move keeps the URLs, so both sources must share the host", from, strings.Join(sets[0], ", "), to, strings.Join(sets[1], ", "))
 }
 
 // linkMoveCard is the card of link move --from-source <from> --to-source

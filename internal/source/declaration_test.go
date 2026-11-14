@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -1480,6 +1481,74 @@ func TestParseLinkPullAndRepos(t *testing.T) {
 	}
 	if _, ok := plain.Link.RepoOf("acme"); ok {
 		t.Fatal("no repos pattern matches a repository")
+	}
+}
+
+// LinkHosts are the hosts a link matches: link.host first, then the hosts
+// of the declaration's named bases, each once. base: is the API endpoint,
+// never an issue host, and stays out: github's api.github.com matches
+// nothing, and a declaration without bases matches its host alone. A
+// declaration without a link matches nothing.
+func TestDeclarationLinkHosts(t *testing.T) {
+	link := "link:\n  host: HOST\n  issue: '^/issue/([A-Z]+-[0-9]+)'\n  fixed: \"https://HOST/issue/{1}\"\n  thread: \"{1}\"\n"
+	decl := func(host, base, bases string) *Declaration {
+		t.Helper()
+		text := "name: q\nbase: " + base + "\n" + bases +
+			"calls:\n  ping: { kind: read, request: { method: GET, path: /me } }\n" +
+			strings.ReplaceAll(link, "HOST", host)
+		d, err := Parse("q.yaml", []byte(text))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	for _, tc := range []struct {
+		name  string
+		d     *Declaration
+		hosts []string
+	}{
+		{"one region", decl("linear.app", "https://api.linear.app", ""), []string{"linear.app"}},
+		{"base is no issue host", decl("github.com", "https://api.github.com", ""), []string{"github.com"}},
+		{"two regions", decl("us.posthog.com", "https://us.posthog.com",
+			"bases:\n  us: https://us.posthog.com\n  eu: https://eu.posthog.com\n"),
+			[]string{"us.posthog.com", "eu.posthog.com"}},
+		{"a base on the link's host adds nothing", decl("acme.example.com", "https://acme.example.com",
+			"bases:\n  us: https://acme.example.com\n  eu: https://eu.acme.example.com\n"),
+			[]string{"acme.example.com", "eu.acme.example.com"}},
+	} {
+		if hosts := tc.d.LinkHosts(); !slices.Equal(hosts, tc.hosts) {
+			t.Errorf("%s: LinkHosts = %q, want %q", tc.name, hosts, tc.hosts)
+		}
+	}
+	plain, err := Parse("q.yaml", []byte("name: q\nbase: https://q.example.com\ncalls:\n  ping: { kind: read, request: { method: GET, path: /me } }\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hosts := plain.LinkHosts(); hosts != nil {
+		t.Errorf("no link matches %q, want nothing", hosts)
+	}
+	var missing *Declaration
+	if hosts := missing.LinkHosts(); hosts != nil {
+		t.Errorf("no declaration matches %q, want nothing", hosts)
+	}
+	// SharedLinkHost is the first host of to that any host of from
+	// matches, in to's spelling; "" when the sets share none. One host
+	// each is the move's check as it was.
+	for _, tc := range []struct {
+		from, to []string
+		shared   string
+		ok       bool
+	}{
+		{[]string{"linear.app"}, []string{"linear.app"}, "linear.app", true},
+		{[]string{"linear.app"}, []string{"Linear.App"}, "Linear.App", true},
+		{[]string{"linear.app"}, []string{"github.com"}, "", false},
+		{[]string{"us.posthog.com", "eu.posthog.com"}, []string{"eu.posthog.com"}, "eu.posthog.com", true},
+		{[]string{"eu.posthog.com"}, []string{"us.posthog.com", "eu.posthog.com"}, "eu.posthog.com", true},
+		{[]string{"us.posthog.com", "eu.posthog.com"}, []string{"github.com"}, "", false},
+	} {
+		if shared, ok := SharedLinkHost(tc.from, tc.to); shared != tc.shared || ok != tc.ok {
+			t.Errorf("SharedLinkHost(%q, %q) = %q, %v; want %q, %v", tc.from, tc.to, shared, ok, tc.shared, tc.ok)
+		}
 	}
 }
 

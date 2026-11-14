@@ -257,14 +257,18 @@ type Linker interface {
 }
 ```
 
-`IssueHost` is the host the source's issue URLs are on (`linear.app`,
-`github.com`); `Issue` turns a URL on it into the issue's one fixed form
-and refuses what is no issue of the source (a Linear project, a GitHub pull
-request). The call is made from the URL alone, without asking the service.
+`IssueHost` is the primary host the source's issue URLs are on
+(`linear.app`, `github.com`); a declared source matches the hosts of its
+named bases too (`bases:`), so a PostHog issue links on `us.posthog.com`
+and `eu.posthog.com`. `Issue` turns a URL on one of them into the issue's
+one fixed form — on the host it arrived on — and refuses what is no issue
+of the source (a Linear project, a GitHub pull request). The call is made
+from the URL alone, without asking the service.
 A declared source says the three as data under `link`: the host, an
 expression that reads an issue from a URL's path, and two templates over
 its groups, the fixed form and the id a thread command takes for the issue
-([below](#commands-a-file-names)). A URL on a host a built-in source has
+([below](#commands-a-file-names)). `base:` is the API endpoint and is
+never matched as an issue host. A URL on a host a built-in source has
 issues on is the built-in's, unless the declared source has a hook in the
 yard and the built-in has none: then it is the declared's, and `link add
 --source` says which either way. By a delivery's thread each is its own.
@@ -1234,6 +1238,12 @@ git:                                  # what git uses to reach the source's repo
   `identity: {fold: lower}` keeps a crew member's keys folded, as the
   source's deliveries carry them (`yardr crew identity`). Without either,
   keys and groups keep their case.
+- **A link matches the named bases' hosts too.** Beside `link.host`, an
+  issue URL on any host of `bases:` links, and its fixed form keeps the
+  host it arrived on, lowercased, so the same path in two regions is two
+  issues. `base:` is the API endpoint and is never matched. A source
+  whose regions' API and web hosts differ does not fit this and needs
+  link-level hosts of its own.
 - **A source with pull requests declares its second thread shape.**
   `link.pull` has its own `issue` pattern with `fixed` and `thread`
   templates, over the same groups in the same order: the repository's

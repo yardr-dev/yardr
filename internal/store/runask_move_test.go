@@ -31,6 +31,32 @@ calls:
   ping: { kind: read, request: { method: GET, path: /me } }
 `
 
+// moveRegions is a link source on two hosts, as a yard whose source runs
+// in two regions has it; moveEuOnly is a link source on the second alone.
+const moveRegions = `name: lin-regions
+base: https://api.linear.app
+bases:
+  eu: https://eu.linear.app
+link:
+  host: linear.app
+  issue: '^/([^/]+)/issue/([A-Z][A-Z0-9]*-[0-9]+)'
+  fixed: "https://linear.app/{1}/issue/{2}"
+  thread: "{2}"
+calls:
+  ping: { kind: read, request: { method: GET, path: /me } }
+`
+
+const moveEuOnly = `name: eu-only
+base: https://eu.linear.app
+link:
+  host: eu.linear.app
+  issue: '^/([^/]+)/issue/([A-Z][A-Z0-9]*-[0-9]+)'
+  fixed: "https://eu.linear.app/{1}/issue/{2}"
+  thread: "{2}"
+calls:
+  ping: { kind: read, request: { method: GET, path: /me } }
+`
+
 func moveAsk(command string) Ask {
 	return Ask{Question: "Move them?", To: "mckean", Context: []string{"the source moved to a declared one"},
 		Run: &AskRun{Argv: []string{command}}}
@@ -115,6 +141,42 @@ func TestRunAskLinkMove(t *testing.T) {
 	if linked != 2 {
 		t.Fatalf("the approval logged %d moved links among %+v", linked, evs)
 	}
+	// A move between sources that share any host of their sets moves:
+	// lin-regions links on linear.app and eu.linear.app, eu-only on the
+	// second alone.
+	if _, err := y.PutSource(y.ctx, "lin-regions.yaml", moveRegions, "mckean"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := y.PutSource(y.ctx, "eu-only.yaml", moveEuOnly, "mckean"); err != nil {
+		t.Fatal(err)
+	}
+	const euurl = "https://eu.linear.app/acme/issue/YRD-7"
+	if _, err := y.AddLink(y.ctx, beads[0], NewLink{Kind: LinkTracks, Source: "lin-regions", URL: euurl}, "mckean"); err != nil {
+		t.Fatal(err)
+	}
+	seq = y.ask(t, moveAsk("link move --from-source lin-regions --to-source eu-only"), "yardmaster")
+	run = y.asked(t, seq).Ask.Run
+	joined = strings.Join(run.Does, "\n")
+	if !strings.Contains(joined, "moves 1 link of the source lin-regions to the source eu-only") ||
+		!strings.Contains(joined, "both sources are on eu.linear.app.") {
+		t.Fatalf("the shared-host card says %q", run.Does)
+	}
+	done, err = y.ApproveAsk(y.ctx, y.bead, seq, "mckean", false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done.Result != "moved 1 links from lin-regions to eu-only" {
+		t.Fatalf("the approval recorded %q", done.Result)
+	}
+	ls, err := y.Links(y.ctx, beads[0])
+	if err != nil || len(ls) != 2 {
+		t.Fatalf("the links of %s = %+v, %v", beads[0], ls, err)
+	}
+	for _, l := range ls {
+		if l.Source == "eu-only" && l.URL != euurl {
+			t.Fatalf("the moved link is %+v", l)
+		}
+	}
 }
 
 func head(t *testing.T, y *askYard) uint64 {
@@ -136,11 +198,15 @@ func TestRunAskLinkMoveRefusals(t *testing.T) {
 	if _, err := y.PutSource(y.ctx, "ghost.yaml", "name: ghost\nbase: https://ghost.example.com\ncalls:\n  ping: { kind: read, request: { method: GET, path: /me } }\n", "mckean"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := y.PutSource(y.ctx, "lin-regions.yaml", moveRegions, "mckean"); err != nil {
+		t.Fatal(err)
+	}
 	for _, c := range []struct {
 		name, command, asker, want string
 	}{
-		{"no link source", "link move --from-source linear --to-source ghost", "yardmaster", "ghost is no link source (links go to gh, lin-new, linear)"},
+		{"no link source", "link move --from-source linear --to-source ghost", "yardmaster", "ghost is no link source (links go to gh, lin-new, lin-regions, linear)"},
 		{"another host", "link move --from-source linear --to-source gh", "yardmaster", "linear is on linear.app and gh on github.com: a move keeps the URLs, so both sources must share the host"},
+		{"regions share no host", "link move --from-source lin-regions --to-source gh", "yardmaster", "lin-regions is on linear.app, eu.linear.app and gh on github.com: a move keeps the URLs, so both sources must share the host"},
 		{"itself", "link move --from-source linear --to-source linear", "yardmaster", "move links from linear to itself: give two sources"},
 		{"the peer source", "link move --from-source peer --to-source linear", "yardmaster", "nothing moves them"},
 		{"nothing to move", "link move --from-source lin-new --to-source linear", "yardmaster", "no link names the source lin-new"},

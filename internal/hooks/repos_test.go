@@ -9,7 +9,8 @@ import (
 // A declared source with a repos pattern reads a depot's repository from
 // its origin remote: the remote's path past the source's host, however
 // the URL is written, when the pattern matches it whole. A pattern that
-// lets repositories nest reads those too.
+// lets repositories nest reads those too. A source with named bases
+// reads it on any of the link's hosts.
 func TestRemoteRepo(t *testing.T) {
 	d, err := source.Parse("acme.yaml", []byte(
 		"name: acme\nbase: https://acme.test\ncalls:\n  ping: { kind: read, request: { method: GET, path: /me } }\n"+
@@ -50,6 +51,20 @@ func TestRemoteRepo(t *testing.T) {
 	if !ok {
 		t.Fatal("declared nest has no Repoer")
 	}
+	regions, err := source.Parse("regions.yaml", []byte(
+		"name: regions\nbase: https://api.acme.test\n"+
+			"bases:\n  us: https://acme.test\n  eu: https://eu.acme.test\n"+
+			"calls:\n  ping: { kind: read, request: { method: GET, path: /me } }\n"+
+			"link:\n  host: acme.test\n  issue: '^/([^/]+)/([^/]+)/issues/([0-9]+)'\n"+
+			"  fixed: \"https://acme.test/{1}/{2}/issues/{3}\"\n  thread: \"{1}/{2}#{3}\"\n  fold: lower\n"+
+			"  repos: '[^/]+/[^/]+'\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr, ok := RepoerFor("regions", regions)
+	if !ok {
+		t.Fatal("declared regions has no Repoer")
+	}
 	for _, c := range []struct {
 		repoer interface{ RemoteRepo(string) string }
 		raw    string
@@ -65,6 +80,11 @@ func TestRemoteRepo(t *testing.T) {
 		{n, "https://nest.test/group/sub/name", "group/sub/name"},
 		{n, "git@nest.test:group/sub/name.git", "group/sub/name"},
 		{n, "https://nest.test/group/name", ""},
+		{rr, "git@acme.test:acme/webapp.git", "acme/webapp"},
+		{rr, "git@eu.acme.test:acme/webapp.git", "acme/webapp"},
+		{rr, "https://eu.acme.test/Acme/WebApp", "acme/webapp"},
+		{rr, "https://api.acme.test/acme/webapp", ""},
+		{rr, "git@eu.acme.test.evil.example:acme/webapp.git", ""},
 	} {
 		if got := c.repoer.RemoteRepo(c.raw); got != c.want {
 			t.Errorf("RemoteRepo(%q) = %q, want %q", c.raw, got, c.want)

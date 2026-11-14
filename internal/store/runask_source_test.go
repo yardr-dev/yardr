@@ -361,6 +361,8 @@ calls:
 		"hear:\n  field: team\n  address: { env: WIRED_USER }\n" +
 		"link:\n  host: wired.example.com\n  issue: '^/([^/]+)/issue/([A-Z]+-[0-9]+)'\n  fixed: \"https://wired.example.com/{1}/issue/{2}\"\n  thread: \"{2}\"\n" +
 		"identity:\n  fold: lower\n"
+	everythingRegions := strings.Replace(everything, "base: https://wired.example.com/v1\n",
+		"base: https://wired.example.com/v1\nbases:\n  eu: https://eu.wired.example.com/v1\n", 1)
 	const checkedLacks = "it has no way to tell a user, no way to hear deliveries, no limits command, no way to speak in threads, no bead link, no identity fold (its identity keys keep their case), no hook deliveries into the yard and no pull-request or CI events."
 	for _, tc := range []struct {
 		name  string
@@ -386,8 +388,10 @@ calls:
 			[]string{"Its check call is ping, and updates carry their key in the header Idempotency-Key."}},
 		{"everything", everything, "",
 			[]string{"Its check call is ping, and updates carry their key in the header Idempotency-Key.", "it can tell a user: ", "it hears deliveries: ",
-				"its limits command ", "it speaks in threads: ", "its issues are a bead's link: ", "its identity keys fold to lowercase ",
+				"its limits command ", "it speaks in threads: ", "its issues are a bead's link: host wired.example.com, ", "its identity keys fold to lowercase ",
 				"what it sends in: ", "what it sends of pull requests and CI: "}},
+		{"everything, two link hosts", everythingRegions, "",
+			[]string{"its issues are a bead's link: hosts wired.example.com and eu.wired.example.com, "}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d, err := source.Parse("test.yaml", []byte(tc.decl))

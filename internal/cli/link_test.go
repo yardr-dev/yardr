@@ -316,6 +316,32 @@ calls:
   ping: { kind: read, request: { method: GET, path: /me } }
 `
 
+// linRegions is a link source on two hosts, as a yard whose source runs
+// in two regions has it; euOnly is a link source on the second alone.
+const linRegions = `name: lin-regions
+base: https://api.linear.app
+bases:
+  eu: https://eu.linear.app
+link:
+  host: linear.app
+  issue: '^/([^/]+)/issue/([A-Z][A-Z0-9]*-[0-9]+)'
+  fixed: "https://linear.app/{1}/issue/{2}"
+  thread: "{2}"
+calls:
+  ping: { kind: read, request: { method: GET, path: /me } }
+`
+
+const euOnly = `name: eu-only
+base: https://eu.linear.app
+link:
+  host: eu.linear.app
+  issue: '^/([^/]+)/issue/([A-Z][A-Z0-9]*-[0-9]+)'
+  fixed: "https://eu.linear.app/{1}/issue/{2}"
+  thread: "{2}"
+calls:
+  ping: { kind: read, request: { method: GET, path: /me } }
+`
+
 // ghDeclared is a declared source on github.com beside the builtin:
 // a link to a GitHub issue can belong to either.
 const ghDeclared = `name: gh-declared
@@ -458,5 +484,25 @@ func TestLinkMoveSource(t *testing.T) {
 	}
 	if _, err := link(t, a, "move", "--from-source", "linear", "--to-source", "github"); err == nil || !strings.Contains(err.Error(), "must share the host") {
 		t.Fatalf("different hosts: %v", err)
+	}
+	// Sources that share any host of their sets move: lin-regions links
+	// on linear.app and eu.linear.app, eu-only on the second alone. A
+	// refusal names every host of each set.
+	if _, err := st.PutSource(ctx, "lin-regions.yaml", linRegions, "me"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.PutSource(ctx, "eu-only.yaml", euOnly, "me"); err != nil {
+		t.Fatal(err)
+	}
+	const euu = "https://eu.linear.app/acme/issue/YRD-7"
+	if _, err := link(t, a, "add", "yard-2", euu, "--source", "lin-regions"); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := link(t, a, "move", "--from-source", "lin-regions", "--to-source", "eu-only"); err != nil || out != "moved 1 links from lin-regions to eu-only\n" {
+		t.Fatalf("shared-host move: %q, %v", out, err)
+	}
+	if _, err := link(t, a, "move", "--from-source", "lin-regions", "--to-source", "github"); err == nil ||
+		!strings.Contains(err.Error(), "lin-regions is on linear.app, eu.linear.app and github on github.com") {
+		t.Fatalf("regions to github: %v", err)
 	}
 }

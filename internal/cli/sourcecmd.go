@@ -889,7 +889,7 @@ credential in it whether their file sets that. The value is never printed.
 					}
 				}
 				if d.Link != nil {
-					fmt.Fprintf(w, "  link: issues of %s (%s)\n", d.Link.Host, d.Link.Issue)
+					fmt.Fprintf(w, "  link: issues of %s (%s)\n", strings.Join(d.LinkHosts(), ", "), d.Link.Issue)
 					fmt.Fprintf(w, "    fixed: %s\n", d.Link.Fixed)
 					fmt.Fprintf(w, "    thread: %s\n", d.Link.Thread)
 					if d.Link.Fold != "" {

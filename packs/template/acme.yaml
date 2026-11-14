@@ -133,7 +133,11 @@ identity:
 # Drop the whole key where the service has no issues to link: without it
 # the yard links nothing there. The host its issue URLs are on, what
 # reads an issue from a URL's path, and over the groups: the issue's one
-# fixed form, and the id a thread command takes for it.
+# fixed form, and the id a thread command takes for it. The link matches
+# the host below plus the hosts of the named bases further below (us, eu)
+# as issue hosts: an issue URL on any of them links, and its fixed form
+# keeps the host it arrived on. base: is the API endpoint and is never
+# matched as an issue host.
 
 link:
   host: acme.example.com
@@ -176,7 +180,10 @@ base: https://acme.example.com
 # source declares no calls. Each name is a region the operator picks with
 # `yardr source set acme base=eu`; base stays the default, and each URL is
 # held to the same checks as base. Only a name written here is accepted,
-# since the pick decides where the credential is sent.
+# since the pick decides where the credential is sent. The link above
+# matches each named base's host as an issue host beside link.host: a
+# source whose regions' API and web hosts differ does not fit this (its
+# base: is never matched) and files its own bead for link-level hosts.
 bases:
   us: https://acme.example.com
   eu: https://eu.acme.example.com

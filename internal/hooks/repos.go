@@ -35,12 +35,12 @@ func RepoerFor(source string, d *source.Declaration) (Repoer, bool) {
 
 // RemoteRepo is the repository the git remote raw points at: its path
 // past "host/", however the URL is written (store.RemoteForm), when the
-// link's repos pattern matches it. "" for a remote elsewhere, and for
-// one that names no repository.
+// host is one of the link's and the repos pattern matches the path. ""
+// for a remote elsewhere, and for one that names no repository.
 func (d Declared) RemoteRepo(raw string) string {
 	form := store.RemoteForm(raw)
 	host, path, _ := strings.Cut(form, "/")
-	if !strings.EqualFold(host, d.D.Link.Host) {
+	if _, ok := matchLinkHost(d, host); !ok {
 		return ""
 	}
 	repo, _ := d.D.Link.RepoOf(path)

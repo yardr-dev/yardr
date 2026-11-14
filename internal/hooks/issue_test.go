@@ -279,6 +279,108 @@ func TestDeclaredPullShapes(t *testing.T) {
 	if got := ThreadAlias("token", nil, "https://github.com/acme/webapp/pull/7"); got != "" {
 		t.Errorf("a source with no pull requests aliases %q", got)
 	}
+	testDeclaredLinkNamedBases(t)
+}
+
+// A declared link matches the hosts of the declaration's named bases
+// beside link.host: an issue URL on either links, and its fixed form
+// keeps the host it arrived on, lowercased. base: is the API endpoint
+// and matches nothing. An alias re-emits the matched host, and pull
+// parts read on either host; PullURL builds from parts alone and stays
+// on the primary host.
+func testDeclaredLinkNamedBases(t *testing.T) {
+	t.Helper()
+	text := "name: acme\nbase: https://api.acme.test\n" +
+		"bases:\n  us: https://acme.test\n  eu: https://eu.acme.test\n" +
+		"calls:\n  ping: { kind: read, request: { method: GET, path: /me } }\n" +
+		"link:\n  host: acme.test\n  issue: '^/([^/]+)/([^/]+)/issues/([0-9]+)'\n" +
+		"  fixed: \"https://acme.test/{1}/{2}/issues/{3}\"\n  thread: \"{1}/{2}#{3}\"\n  fold: lower\n" +
+		"  pull:\n    issue: '^/([^/]+)/([^/]+)/pull/([0-9]+)'\n" +
+		"    fixed: \"https://acme.test/{1}/{2}/pull/{3}\"\n    thread: \"{1}/{2}#{3}\"\n" +
+		"  repos: '[^/]+/[^/]+'\n"
+	d, err := source.Parse("acme.yaml", []byte(text))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const (
+		issue   = "https://acme.test/acme/webapp/issues/7"
+		euissue = "https://eu.acme.test/acme/webapp/issues/7"
+		pull    = "https://acme.test/acme/webapp/pull/7"
+		eupull  = "https://eu.acme.test/acme/webapp/pull/7"
+	)
+	for _, c := range []struct{ raw, want string }{
+		{issue, issue},
+		{"https://acme.test/Acme/WebApp/issues/7", issue},
+		{euissue, euissue},
+		{"https://EU.acme.test/Acme/WebApp/issues/7/", euissue},
+		{pull, pull},
+		{eupull, eupull},
+		{"https://eu.acme.test/Acme/WebApp/pull/7/files", eupull},
+	} {
+		name, got, err := Issue(c.raw, d)
+		if err != nil || name != "acme" || got != c.want {
+			t.Errorf("Issue(%q) = %q, %q, %v; want acme, %q", c.raw, name, got, err, c.want)
+		}
+		if in, err := IssueIn("acme", c.raw, d); err != nil || in != c.want {
+			t.Errorf("IssueIn(%q) = %q, %v; want %q", c.raw, in, err, c.want)
+		}
+	}
+	// The API endpoint matches nothing, and a refusal names every host.
+	if got, err := IssueIn("acme", "https://api.acme.test/acme/webapp/issues/7", d); err == nil ||
+		!strings.Contains(err.Error(), "is on api.acme.test, not on acme.test and eu.acme.test: no acme issue") {
+		t.Errorf("the base matches: %q, %v", got, err)
+	}
+	if _, _, err := Issue("https://api.acme.test/acme/webapp/issues/7", d); err == nil ||
+		!strings.Contains(err.Error(), "where yardr knows no issues (it does on acme.test and eu.acme.test)") {
+		t.Errorf("unknown host: %v", err)
+	}
+	for _, raw := range []string{
+		"https://acme.test.evil.example/acme/webapp/issues/7",
+		"https://eu.acme.test.evil.example/acme/webapp/issues/7",
+		"https://evil.acme.test/acme/webapp/issues/7",
+		"https://evil.eu.acme.test/acme/webapp/issues/7",
+		"https://notacme.test/acme/webapp/issues/7",
+		"https://noteu.acme.test/acme/webapp/issues/7",
+	} {
+		if _, _, err := Issue(raw, d); err == nil || !strings.Contains(err.Error(), "where yardr knows no issues") {
+			t.Errorf("evil host %q: %v", raw, err)
+		}
+	}
+	// Aliases, pull parts and pull threads re-emit or read on the host
+	// the URL arrived on.
+	for _, c := range []struct{ raw, alias, repo, number string }{
+		{issue, pull, "", ""},
+		{euissue, eupull, "", ""},
+		{pull, issue, "acme/webapp", "7"},
+		{eupull, euissue, "acme/webapp", "7"},
+	} {
+		if got := ThreadAlias("acme", d, c.raw); got != c.alias {
+			t.Errorf("ThreadAlias(%q) = %q, want %q", c.raw, got, c.alias)
+		}
+		if repo, number := PullParts("acme", d, c.raw); repo != c.repo || number != c.number {
+			t.Errorf("PullParts(%q) = %q, %q", c.raw, repo, number)
+		}
+	}
+	p, ok := PullerFor("acme", d)
+	if !ok {
+		t.Fatal("declared acme has no Puller")
+	}
+	if got := p.PullOf(eupull); got != "acme/webapp#7" {
+		t.Errorf("PullOf(%q) = %q, want acme/webapp#7", eupull, got)
+	}
+	if got := p.PullOf(euissue); got != "" {
+		t.Errorf("PullOf(%q) = %q, want none", euissue, got)
+	}
+	// PullURL builds from the parts alone, with no URL to take the host
+	// from, so it stays on the primary host: a caller naming a pull
+	// request of the second host by repository and number does not
+	// resolve.
+	if got := p.PullURL("acme/webapp", "7"); got != pull {
+		t.Errorf("PullURL = %q, want %q", got, pull)
+	}
+	if thread, err := (Declared{D: d}).IssueThread(eupull); err != nil || thread != "acme/webapp#7" {
+		t.Errorf("IssueThread(%q) = %q, %v; want acme/webapp#7", eupull, thread, err)
+	}
 }
 
 // linearPackDecl is the Linear source as packs/linear declares it.
@@ -364,35 +466,46 @@ func posthogPackDecl(t *testing.T) *source.Declaration {
 	return d
 }
 
-// The pack's link fixes a PostHog issue URL: one fixed form however it
-// was copied, whatever follows the issue left out. The id keeps its
-// case, as the issue call takes it. A replay link is no issue, and a
-// URL on the EU cloud is none of this link's: the link is on the host
-// of the default base. The thread is the issue's UUID, read from the
-// path alone, so a stage map's move reads it on either cloud.
+// The pack's link fixes a PostHog issue URL on either cloud: one fixed
+// form per cloud however it was copied, whatever follows the issue left
+// out, the host it arrived on kept. The id keeps its case, as the issue
+// call takes it. A replay link is no issue. The thread is the issue's
+// UUID, read from the path alone, so a stage map's move reads it on
+// either cloud.
 func TestPostHogPackLinkFixedForm(t *testing.T) {
 	ph := posthogPackDecl(t)
 	const id = "019f7c39-8a4b-7c2d-b3e5-1f2a3b4c5d6e"
 	const fixed = "https://us.posthog.com/project/48291/error-tracking/" + id
-	for _, raw := range []string{
-		"https://us.posthog.com/project/48291/error-tracking/" + id,
-		"https://us.posthog.com/project/48291/error-tracking/" + id + "/",
-		"https://us.posthog.com/project/48291/error-tracking/" + id + "?filter=test",
-		"https://us.posthog.com/project/48291/error-tracking/" + id + "#volume",
-		"https://US.posthog.com/project/48291/error-tracking/" + id,
-		" https://us.posthog.com/project/48291/error-tracking/" + id + "\n",
+	const eufixed = "https://eu.posthog.com/project/48291/error-tracking/" + id
+	for _, c := range []struct{ raw, want string }{
+		{"https://us.posthog.com/project/48291/error-tracking/" + id, fixed},
+		{"https://us.posthog.com/project/48291/error-tracking/" + id + "/", fixed},
+		{"https://us.posthog.com/project/48291/error-tracking/" + id + "?filter=test", fixed},
+		{"https://us.posthog.com/project/48291/error-tracking/" + id + "#volume", fixed},
+		{"https://US.posthog.com/project/48291/error-tracking/" + id, fixed},
+		{" https://us.posthog.com/project/48291/error-tracking/" + id + "\n", fixed},
+		{"https://eu.posthog.com/project/48291/error-tracking/" + id, eufixed},
+		{"https://eu.posthog.com/project/48291/error-tracking/" + id + "/", eufixed},
+		{"https://eu.posthog.com/project/48291/error-tracking/" + id + "?filter=test", eufixed},
+		{"https://eu.posthog.com/project/48291/error-tracking/" + id + "#volume", eufixed},
+		{"https://EU.posthog.com/project/48291/error-tracking/" + id, eufixed},
+		{" https://eu.posthog.com/project/48291/error-tracking/" + id + "\n", eufixed},
 	} {
-		name, got, err := Issue(raw, ph)
-		if err != nil || name != "posthog" || got != fixed {
-			t.Errorf("Issue(%q) = %q, %q, %v; want posthog, %q", raw, name, got, err, fixed)
+		name, got, err := Issue(c.raw, ph)
+		if err != nil || name != "posthog" || got != c.want {
+			t.Errorf("Issue(%q) = %q, %q, %v; want posthog, %q", c.raw, name, got, err, c.want)
 		}
-		if in, err := IssueIn("posthog", raw, ph); err != nil || in != fixed {
-			t.Errorf("IssueIn(%q) = %q, %v; want %q", raw, in, err, fixed)
+		if in, err := IssueIn("posthog", c.raw, ph); err != nil || in != c.want {
+			t.Errorf("IssueIn(%q) = %q, %v; want %q", c.raw, in, err, c.want)
 		}
 	}
-	upper := "https://us.posthog.com/project/48291/error-tracking/019F7C39-8A4B-7C2D-B3E5-1F2A3B4C5D6E"
-	if _, got, err := Issue(upper, ph); err != nil || got != upper {
-		t.Errorf("Issue(%q) = %q, %v; want the URL as typed", upper, got, err)
+	for _, upper := range []string{
+		"https://us.posthog.com/project/48291/error-tracking/019F7C39-8A4B-7C2D-B3E5-1F2A3B4C5D6E",
+		"https://eu.posthog.com/project/48291/error-tracking/019F7C39-8A4B-7C2D-B3E5-1F2A3B4C5D6E",
+	} {
+		if _, got, err := Issue(upper, ph); err != nil || got != upper {
+			t.Errorf("Issue(%q) = %q, %v; want the URL as typed", upper, got, err)
+		}
 	}
 	for _, c := range []struct{ raw, why string }{
 		{"https://us.posthog.com/project/48291/error-tracking/", "is no posthog issue"},
@@ -400,15 +513,31 @@ func TestPostHogPackLinkFixedForm(t *testing.T) {
 		{"https://us.posthog.com/project/acme/error-tracking/" + id, "is no posthog issue"},
 		{"https://us.posthog.com/project/48291/replay/" + id, "is no posthog issue"},
 		{"https://us.posthog.com/project/48291/error-tracking", "is no posthog issue"},
-		{"https://eu.posthog.com/project/48291/error-tracking/" + id, "is on eu.posthog.com, not on us.posthog.com: no posthog issue"},
+		{"https://eu.posthog.com/project/48291/replay/" + id, "is no posthog issue"},
+		{"https://app.posthog.com/project/48291/error-tracking/" + id, "is on app.posthog.com, not on us.posthog.com and eu.posthog.com: no posthog issue"},
 	} {
 		if got, err := IssueIn("posthog", c.raw, ph); err == nil || !strings.Contains(err.Error(), c.why) {
 			t.Errorf("IssueIn(%q) = %q, %v; want an error with %q", c.raw, got, err, c.why)
 		}
 	}
-	if _, _, err := Issue("https://us.posthog.com.evil.example/project/48291/error-tracking/"+id, ph); err == nil ||
-		!strings.Contains(err.Error(), "where yardr knows no issues") {
-		t.Errorf("evil host: %v", err)
+	// An evil host of either cloud is refused: matching is exact per
+	// host, however the evil is spelled. A host no source has issues on
+	// names every host the yard knows.
+	for _, raw := range []string{
+		"https://us.posthog.com.evil.example/project/48291/error-tracking/" + id,
+		"https://eu.posthog.com.evil.example/project/48291/error-tracking/" + id,
+		"https://evil.us.posthog.com/project/48291/error-tracking/" + id,
+		"https://evil.eu.posthog.com/project/48291/error-tracking/" + id,
+		"https://notus.posthog.com/project/48291/error-tracking/" + id,
+		"https://noteu.posthog.com/project/48291/error-tracking/" + id,
+	} {
+		if _, _, err := Issue(raw, ph); err == nil || !strings.Contains(err.Error(), "where yardr knows no issues") {
+			t.Errorf("evil host %q: %v", raw, err)
+		}
+	}
+	if _, _, err := Issue("https://app.posthog.com/project/48291/error-tracking/"+id, ph); err == nil ||
+		!strings.Contains(err.Error(), "where yardr knows no issues (it does on us.posthog.com and eu.posthog.com)") {
+		t.Errorf("unknown host: %v", err)
 	}
 	// Without the pack's declaration, us.posthog.com is a host yardr
 	// knows no issues on.

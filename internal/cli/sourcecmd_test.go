@@ -1076,6 +1076,22 @@ func TestSourceShowPullAndRepos(t *testing.T) {
 			t.Fatalf("show printed no %q:\n%s", want, out)
 		}
 	}
+	// A source with named bases shows every host the link matches.
+	_, err = st.PutSource(context.Background(), "regions.yaml", "name: regions\nbase: https://api.forge.test\n"+
+		"bases:\n  us: https://forge.test\n  eu: https://eu.forge.test\n"+
+		"calls:\n  ping: { kind: read, request: { method: GET, path: /me } }\n"+
+		"link:\n  host: forge.test\n  issue: '^/([^/]+)/([^/]+)/issues/([0-9]+)'\n"+
+		"  fixed: \"https://forge.test/{1}/{2}/issues/{3}\"\n  thread: \"{1}/{2}#{3}\"\n", "jo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err = run(t, a.sourceCmd(), "show", "regions")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "link: issues of forge.test, eu.forge.test") {
+		t.Fatalf("show printed no second host:\n%s", out)
+	}
 }
 
 // Show prints the events key's run and head types and its look-back
