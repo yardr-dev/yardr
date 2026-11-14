@@ -213,7 +213,7 @@ func (s setupState) packNext(depot string) string {
 	if !s.embeddedDepotPack(name, depot) {
 		return "yardr depot init " + depot
 	}
-	return fmt.Sprintf("yardr bead ask --new %q --context %q --run %q",
+	return fmt.Sprintf("yardr bead ask --new - with Q: %s, C: %s and R: %s on stdin",
 		"Set up depot "+depot+" from "+name+"?", "the operator must approve the pack's import", "pack apply "+name+" --depot "+depot)
 }
 

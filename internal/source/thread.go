@@ -131,6 +131,16 @@ type PullShape struct {
 	Apart bool `json:"apart,omitempty"`
 }
 
+// ApartLine is the source-show line that says the source numbers its
+// issues and pull requests apart, whole with its newline, or "" when it
+// numbers them together and shows nothing.
+func (p *PullShape) ApartLine() string {
+	if p == nil || !p.Apart {
+		return ""
+	}
+	return "    apart: issue 7 and pull request 7 are two threads\n"
+}
+
 // Groups are what link.issue reads from path, the groups of the expression
 // without the whole match, or nil when the path is no issue's. The
 // expression is compiled anew: a link read back from the store has no

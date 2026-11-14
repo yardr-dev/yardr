@@ -317,7 +317,7 @@ func Apply(ctx context.Context, st store.API, p *Plan, o ApplyOptions) (res *Res
 			if p.Depot != "" {
 				run, ask = run+" --depot "+p.Depot, "Apply pack "+p.Pack+" to depot "+p.Depot+"?"
 			}
-			return res, fmt.Errorf("recording the import: %w (the import itself is done; only the operator records it, so applying again records nothing. Propose it as a run card for the operator to approve: yardr bead ask --new %q --context %q --run %q, with the mappings that answer its plan)", err, ask, "the operator must approve the pack's import", run)
+			return res, fmt.Errorf("recording the import: %w (the import itself is done; only the operator records it, so applying again records nothing. Propose it as a run card for the operator to approve: yardr bead ask --new - with Q: %s, C: %s and R: %s on stdin, with the mappings that answer its plan)", err, ask, "the operator must approve the pack's import", run)
 		}
 		return res, fmt.Errorf("recording the import: %w (the import itself is done; applying again records it)", err)
 	}

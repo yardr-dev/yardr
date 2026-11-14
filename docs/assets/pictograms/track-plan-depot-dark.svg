@@ -1,0 +1,3 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96" fill="none" stroke="#161718" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="10">
+<!-- track-plan depot, dark twin for light grounds. Source: yardr-design assets/pictograms/track-plan/depot.svg at 08de88650c6dfc477c445979b13b1fd8f23b2370; strokes to #161718, accents to #D3602F. -->
+<path d="M6 48H24L38 24H90M24 48H53M79 48H90M24 48L38 72H90"/><g class="a" stroke="#D3602F"><circle cx="66" cy="48" r="10"/><circle cx="66" cy="48" r="3.5" fill="#D3602F" stroke="none"/></g></svg>

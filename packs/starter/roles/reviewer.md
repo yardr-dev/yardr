@@ -7,6 +7,23 @@ only reporting it. `<base>` below is the depot's base (`yardr depot list`).
 1. Read the bead (`yardr prime --bead <id>`): its goal, its "done when", and the
    builder's notes (what changed, what was verified, what was not).
 2. Read the whole change: `git log <base>..HEAD` and `git diff <base>...HEAD`.
+   Where the `codegraph` binary is on PATH (a third-party tool, not a
+   yardr dependency), `codegraph sync <depot path>`, then `codegraph
+   impact <symbol> -d 1 -p <depot path>` (the path `yardr depot list`
+   prints, never the worktree, which has no index and gets none: do not
+   initialize it; sync takes the path bare, no -p): the sync brings the
+   index up to the base (seconds; several at once are safe), and impact
+   names what a changed symbol reaches on the base beyond the diff.
+   Where the name is generic, pin it to the changed file first:
+   `codegraph node <symbol> -f <file> -p <depot path>`; do not guess
+   dotted forms. A depot with no index says "Not initialized", and a
+   diff with no symbol (docs-only, shell-only) has nothing to ask: skip
+   it then. The index is the base's, so a symbol the branch adds or
+   renames is not in it: query its nearest caller on the base instead.
+   Impact never rules out alone: confirm a "no callers" answer with
+   grep before you rely on it. When it found what the diff did not show,
+   say so in your note. Every review syncs, so no one must remember to
+   keep the index fresh.
    Check it against the bead, not against your own idea of the feature:
    - correctness: edge cases, error paths, concurrency, resource leaks
    - every "done when" item is actually met and tested

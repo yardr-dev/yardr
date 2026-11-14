@@ -206,6 +206,11 @@ func TestTemplatesAreGeneric(t *testing.T) {
 			"`test: <command> @ <commit>: pass, <n> ok, 0 failed`",
 		},
 		"starter/roles/reviewer.md": {
+			"Where the `codegraph` binary is on PATH",
+			"a third-party tool, not a\n   yardr dependency",
+			"`codegraph sync <depot path>`, then `codegraph",
+			"several at once are safe",
+			"Every review syncs, so no one must remember to",
 			"When it names the commit you were handed and you\n   committed nothing, do not run the depot's test command again.",
 			"`test: <command> @ <commit>: pass, <n> ok, 0 failed`",
 			"cross-package behaviour or tests in packages it skips",

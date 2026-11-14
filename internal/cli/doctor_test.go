@@ -1338,7 +1338,7 @@ func TestSetupStepsDirDepot(t *testing.T) {
 	if !slices.Equal(keys, []string{stepDepot, stepDepotFiles, stepBuilders, stepReviewers, stepRoutes, stepLimits, stepFirstBead, stepMerged}) {
 		t.Fatalf("keys = %v", keys)
 	}
-	if n := nextStep(steps); n.Key != stepDepotFiles || n.Next != `yardr bead ask --new "Set up depot docs from dir?" --context "the operator must approve the pack's import" --run "pack apply dir --depot docs"` {
+	if n := nextStep(steps); n.Key != stepDepotFiles || n.Next != `yardr bead ask --new - with Q: Set up depot docs from dir?, C: the operator must approve the pack's import and R: pack apply dir --depot docs on stdin` {
 		t.Fatalf("next = %+v", n)
 	}
 	if err := st.SetSetting(ctx, defaultPackSetting, "research", "me"); err != nil {

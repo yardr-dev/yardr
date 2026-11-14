@@ -897,7 +897,7 @@ credential in it whether their file sets that. The value is never printed.
 					}
 					if d.Link.Pull != nil {
 						fmt.Fprintf(w, "    pull: %s (%s)\n", d.Link.Pull.Fixed, d.Link.Pull.Issue)
-						fmt.Fprintf(w, "    pull thread: %s\n", d.Link.Pull.Thread)
+						fmt.Fprintf(w, "    pull thread: %s\n%s", d.Link.Pull.Thread, d.Link.Pull.ApartLine())
 					}
 					if d.Link.Repos != "" {
 						fmt.Fprintf(w, "    repos: %s\n", d.Link.Repos)

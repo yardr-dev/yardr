@@ -499,7 +499,7 @@ func TestSetupCancelled(t *testing.T) {
 		{stepDepot, key("base"), "Cancelled at: a depot."},
 		// The import's own confirmation, which is the command's and has no key.
 		{stepDepotFiles, func(fld huh.Field) bool { _, ok := fld.(*huh.Confirm); return ok },
-			"Still to do: the depot's .yardr files on its base: depot web follows no flow of a pack, and has none under .yardr/flows/ on its base main.\n  yardr --home " + home + ` bead ask --new "Set up depot web from starter?" --context "the operator must approve the pack's import" --run "pack apply starter --depot web"`},
+			"Still to do: the depot's .yardr files on its base: depot web follows no flow of a pack, and has none under .yardr/flows/ on its base main.\n  yardr --home " + home + ` bead ask --new - with Q: Set up depot web from starter?, C: the operator must approve the pack's import and R: pack apply starter --depot web on stdin`},
 		{stepFirstBead, key("goal"), "Cancelled at: a first bead."},
 	} {
 		if got := todo(t, st); got != tc.step {
@@ -809,10 +809,10 @@ func TestStepsGoByRoutes(t *testing.T) {
 		return m
 	}
 	steps := byKey()
-	for key, next := range map[string]string{stepBuilders: `yardr bead ask --new "Set up depot docs from dir?" --context "the operator must approve the pack's import" --run "pack apply dir --depot docs"`,
-		stepReviewers: `yardr bead ask --new "Set up depot docs from dir?" --context "the operator must approve the pack's import" --run "pack apply dir --depot docs"`,
-		stepLanding:   `yardr bead ask --new "Set up depot web from starter?" --context "the operator must approve the pack's import" --run "pack apply starter --depot web"`,
-		stepRoutes:    `yardr bead ask --new "Set up depot docs from dir?" --context "the operator must approve the pack's import" --run "pack apply dir --depot docs"`} {
+	for key, next := range map[string]string{stepBuilders: `yardr bead ask --new - with Q: Set up depot docs from dir?, C: the operator must approve the pack's import and R: pack apply dir --depot docs on stdin`,
+		stepReviewers: `yardr bead ask --new - with Q: Set up depot docs from dir?, C: the operator must approve the pack's import and R: pack apply dir --depot docs on stdin`,
+		stepLanding:   `yardr bead ask --new - with Q: Set up depot web from starter?, C: the operator must approve the pack's import and R: pack apply starter --depot web on stdin`,
+		stepRoutes:    `yardr bead ask --new - with Q: Set up depot docs from dir?, C: the operator must approve the pack's import and R: pack apply dir --depot docs on stdin`} {
 		if step := steps[key]; step.Done || step.Next != next {
 			t.Errorf("%s = %+v, want todo with %q", key, step, next)
 		}
@@ -832,7 +832,7 @@ func TestStepsGoByRoutes(t *testing.T) {
 		t.Errorf("routes = %+v", step)
 	}
 	s.defaultPack = "website"
-	if got := s.packNext("web"); got != `yardr bead ask --new "Set up depot web from website?" --context "the operator must approve the pack's import" --run "pack apply website --depot web"` {
+	if got := s.packNext("web"); got != `yardr bead ask --new - with Q: Set up depot web from website?, C: the operator must approve the pack's import and R: pack apply website --depot web on stdin` {
 		t.Errorf("next with a configured embedded pack = %q", got)
 	}
 	s.packImports = []store.PackImport{{Pack: "website", Depot: "web", Source: "private directory"}}
@@ -852,7 +852,7 @@ func TestStepsGoByRoutes(t *testing.T) {
 	// Work with no depot starts the depot steps: the steps name the import
 	// for the depot to come.
 	started := setupState{beads: []store.Bead{{Type: "task"}}}.steps()
-	if len(started) != 9 || started[1].Next != `yardr bead ask --new "Set up depot <depot> from starter?" --context "the operator must approve the pack's import" --run "pack apply starter --depot <depot>"` || started[2].Next != started[1].Next {
+	if len(started) != 9 || started[1].Next != `yardr bead ask --new - with Q: Set up depot <depot> from starter?, C: the operator must approve the pack's import and R: pack apply starter --depot <depot> on stdin` || started[2].Next != started[1].Next {
 		t.Errorf("work with no depot: %+v", started)
 	}
 	if none := noSetup(); len(none) != 1 || none[0].Key != stepLimits || nextStep(none) != nil {

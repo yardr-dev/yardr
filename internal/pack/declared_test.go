@@ -592,7 +592,7 @@ func TestDeclaredSourceRefusedLeavesTheRestOfTheImport(t *testing.T) {
 	seedGroups(t, st, plan, a)
 	res, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Answers: a, SourceRefused: map[string]string{"pushover": "not the operator"}, Actor: "yardmaster"})
 	if err == nil || !strings.Contains(err.Error(), "may record the import of pack small") ||
-		!strings.Contains(err.Error(), "applying again records nothing") || !strings.Contains(err.Error(), `--run "pack apply small --depot web"`) {
+		!strings.Contains(err.Error(), "applying again records nothing") || !strings.Contains(err.Error(), "yardr bead ask --new - with Q: Apply pack small to depot web?, C: the operator must approve the pack's import and R: pack apply small --depot web on stdin") {
 		t.Fatalf("apply as yardmaster = %+v, %v; want the rest imported and the record refused with the run card", res, err)
 	}
 	if res == nil || res.Recorded {

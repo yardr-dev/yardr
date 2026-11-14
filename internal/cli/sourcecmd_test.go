@@ -1076,6 +1076,32 @@ func TestSourceShowPullAndRepos(t *testing.T) {
 			t.Fatalf("show printed no %q:\n%s", want, out)
 		}
 	}
+	if strings.Contains(out, "apart:") {
+		t.Fatalf("a source that numbers together shows an apart line:\n%s", out)
+	}
+	// A source that numbers its issues and pull requests apart says so
+	// after the pull thread.
+	_, err = st.PutSource(context.Background(), "apart.yaml", "name: apart\nbase: https://forge.test\n"+
+		"calls:\n  ping: { kind: read, request: { method: GET, path: /me } }\n"+
+		"link:\n  host: forge.test\n  issue: '^/([^/]+)/([^/]+)/issues/([0-9]+)'\n"+
+		"  fixed: \"https://forge.test/{1}/{2}/issues/{3}\"\n  thread: \"{1}/{2}#{3}\"\n"+
+		"  pull:\n    issue: '^/([^/]+)/([^/]+)/pull/([0-9]+)'\n"+
+		"    fixed: \"https://forge.test/{1}/{2}/pull/{3}\"\n    thread: \"{1}/{2}#{3}\"\n    apart: true\n", "jo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err = run(t, a.sourceCmd(), "show", "apart")
+	if err != nil {
+		t.Fatal(err)
+	}
+	threadAt, apartAt := strings.Index(out, "pull thread: "), strings.Index(out, "    apart: issue 7 and pull request 7 are two threads")
+	if threadAt < 0 || apartAt < 0 {
+		t.Fatalf("an apart source shows no apart line after the pull thread:\n%s", out)
+	}
+	threadEnd := strings.IndexByte(out[threadAt:], '\n')
+	if threadEnd < 0 || apartAt < threadAt+threadEnd+1 {
+		t.Fatalf("the apart line does not follow the pull-thread line:\n%s", out)
+	}
 	// A source with named bases shows every host the link matches.
 	_, err = st.PutSource(context.Background(), "regions.yaml", "name: regions\nbase: https://api.forge.test\n"+
 		"bases:\n  us: https://forge.test\n  eu: https://eu.forge.test\n"+

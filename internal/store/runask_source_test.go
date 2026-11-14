@@ -431,6 +431,29 @@ calls:
 			}
 		})
 	}
+	// A pull shape that numbers apart says so after the pull sentence; one
+	// that numbers together says nothing of it.
+	apartDecl := strings.Replace(everything, "  thread: \"{2}\"\n",
+		"  thread: \"{2}\"\n  pull:\n    issue: '^/([^/]+)/pull/([0-9]+)'\n"+
+			"    fixed: \"https://wired.example.com/{1}/pull/{2}\"\n    thread: \"{2}\"\n    apart: true\n", 1)
+	apart, err := source.Parse("test.yaml", []byte(apartDecl))
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(sourceDoes(apart, AskSource{Name: apart.Name, Text: apartDecl}), "\n")
+	const apartSays = "Its issues and pull requests number apart: issue 7 and pull request 7 are two threads."
+	const pullSays = "Its pull requests read ^/([^/]+)/pull/([0-9]+), with the fixed form https://wired.example.com/{1}/pull/{2} and the thread id {2}."
+	if !strings.Contains(joined, pullSays+" "+apartSays) {
+		t.Errorf("the apart card does not put %q after the pull sentence %q:\n%s", apartSays, pullSays, joined)
+	}
+	togetherDecl := strings.Replace(apartDecl, "    apart: true\n", "", 1)
+	together, err := source.Parse("test.yaml", []byte(togetherDecl))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if joined := strings.Join(sourceDoes(together, AskSource{Name: together.Name, Text: togetherDecl}), "\n"); strings.Contains(joined, "number apart") || !strings.Contains(joined, pullSays) {
+		t.Errorf("the together-numbered card changed its pull sentence or says apart:\n%s", joined)
+	}
 }
 
 func TestSourceAddCardLineBound(t *testing.T) {

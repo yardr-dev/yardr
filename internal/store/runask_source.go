@@ -697,6 +697,9 @@ func linkSays(d *source.Declaration) string {
 	s := fmt.Sprintf("its issues are a bead's link: %s %s, the expression %s reads an issue, the one fixed form %s and the thread id %s; %s.", word, strings.Join(hosts, " and "), displaySourceValue(l.Issue), displaySourceValue(l.Fixed), displaySourceValue(l.Thread), fold)
 	if l.Pull != nil {
 		s += fmt.Sprintf(" Its pull requests read %s, with the fixed form %s and the thread id %s.", displaySourceValue(l.Pull.Issue), displaySourceValue(l.Pull.Fixed), displaySourceValue(l.Pull.Thread))
+		if l.Pull.Apart {
+			s += " Its issues and pull requests number apart: issue 7 and pull request 7 are two threads."
+		}
 	} else {
 		s += " It names no pull-request shape."
 	}

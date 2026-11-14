@@ -426,7 +426,7 @@ func TestSourcePackApplyByACrewMemberAddsNoSource(t *testing.T) {
 	plan := build(t, st, load(t, writePack(t, sourcePackFiles())), pack.Options{Home: home})
 	res, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{SourceRefused: map[string]string{"acme": "adding is the operator's"}, Actor: "ann"})
 	if err == nil || !strings.Contains(err.Error(), "only the operator (me) may record the import of pack acme-pack; this is ann") ||
-		!strings.Contains(err.Error(), "applying again records nothing") || !strings.Contains(err.Error(), `--run "pack apply acme-pack"`) {
+		!strings.Contains(err.Error(), "applying again records nothing") || !strings.Contains(err.Error(), "yardr bead ask --new - with Q: Apply pack acme-pack?, C: the operator must approve the pack's import and R: pack apply acme-pack on stdin") {
 		t.Fatalf("apply as ann = %+v, %v; want nothing added and the record refused with the run card", res, err)
 	}
 	if res == nil || res.Recorded {

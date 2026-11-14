@@ -371,15 +371,18 @@ func quotedTextShapes(t *testing.T) []quotedTextShape {
 		// An ask's texts are the question after the bead (or --new, or a
 		// take-back's reason after the ask) and the flags that carry the rest,
 		// which a wrapped example shows on lines of their own. An inline code
-		// span can wrap the command before the quoted text too.
+		// span can wrap the command before the quoted text too. A form built
+		// with %q quotes at runtime what the literal-quote arms cannot see
+		// (yardr-936g), so the ask arms match %q as well as the quote.
 		{name: "an ask's texts",
-			pattern: `bead ask\s+(\S+\s+){1,3}\\?"|--take-back\s+(\S+\s+){2}\\?"|--(context|option|why|run|run-test)\s+\\?"`,
+			pattern: `bead ask\s+(\S+\s+){1,3}(\\?"|%q)|--take-back\s+(\S+\s+){2}\\?"|--(context|option|why|run|run-test)\s+(\\?"|%q)`,
 			quoted:  `yardr bead ask <id> "<question>" --to <person>`, dash: `yardr bead ask <id> - --to <person>`,
 			also: []string{`yardr bead ask --new "<question>"`, `yardr bead ask --take-back <id> <ask> "<reason>"`, `%s --take-back <id> <ask> "<reason>"`,
 				`yardr bead ask
 <id> "<question>"`, `yardr bead ask --new
 "<question>"`,
-				`    --context "<line>" \`, `    --option "<label>: <consequence>" \`, `    --why "<why>"`, `    --run "<command>"`, `    --run-test "<command>"`}},
+				`    --context "<line>" \`, `    --option "<label>: <consequence>" \`, `    --why "<why>"`, `    --run "<command>"`, `    --run-test "<command>"`,
+				`yardr bead ask --new %q`, `    --context %q`, `    --run %q`}},
 		// A pick's words follow its number, and --words and --decline take the
 		// others; a link's "yardr bead answer <bead> <ask> " + flag shows no
 		// text, and is no quote.

@@ -43,7 +43,7 @@ herdr's server, a server without a desktop, upgrading.
 
 ## Core concepts
 
-- **Bead**: one durable piece of work, with a type, a stage, notes and
+- <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/pictograms/track-plan-bead-light.svg"><img alt="Bead" src="docs/assets/pictograms/track-plan-bead-dark.svg" height="24"></picture> **Bead**: one durable piece of work, with a type, a stage, notes and
   dependencies. Not a branch or an agent's session: those come and go while
   the bead is worked.
 - **Stage and flow**: a stage is one step of a bead's life (`new`, `review`);
@@ -54,13 +54,13 @@ herdr's server, a server without a desktop, upgrading.
 - **Group and runner**: a group is who works a stage, and its runner is how
   the work starts: `herdr` (an agent), `exec` (a command), `manual` (people)
   or `peer` (another yard). Not a role: a role is a group plus a prompt file.
-- **Depot**: a git repository or a plain directory that beads are worked in.
+- <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/pictograms/track-plan-depot-light.svg"><img alt="Depot" src="docs/assets/pictograms/track-plan-depot-dark.svg" height="24"></picture> **Depot**: a git repository or a plain directory that beads are worked in.
   Not a project kept in the store: the code stays in the repository, and
   the store holds where it is and what tests it.
-- **Pack**: a way of working as one directory (flows, groups, roles, crew
+- <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/pictograms/track-plan-pack-light.svg"><img alt="Pack" src="docs/assets/pictograms/track-plan-pack-dark.svg" height="24"></picture> **Pack**: a way of working as one directory (flows, groups, roles, crew
   members) that a depot is set up from. Not a plugin: it is files a yard
   imports.
-- **Crew**: the always-on agents of the yard, tied to no bead; the yardmaster
+- <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/pictograms/track-plan-crew-light.svg"><img alt="Crew" src="docs/assets/pictograms/track-plan-crew-dark.svg" height="24"></picture> **Crew**: the always-on agents of the yard, tied to no bead; the yardmaster
   is the one that coordinates. Not the agents that work beads: those are
   sessions a group starts for one stage.
 - **User**: a person of the yard, a name and an inbox; the operator is the

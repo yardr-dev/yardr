@@ -274,8 +274,7 @@ func TestApplySubscribingTheInvokerItselfPassesUnrecorded(t *testing.T) {
 	res, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Answers: answered(t, plan, answers), Actor: "boss"})
 	if err == nil || !strings.Contains(err.Error(), "only the operator (me) may record the import of pack starter; this is boss") ||
 		!strings.Contains(err.Error(), "applying again records nothing") ||
-		!strings.Contains(err.Error(), `--context "the operator must approve the pack's import"`) ||
-		!strings.Contains(err.Error(), `--run "pack apply starter --depot web"`) {
+		!strings.Contains(err.Error(), "yardr bead ask --new - with Q: Apply pack starter to depot web?, C: the operator must approve the pack's import and R: pack apply starter --depot web on stdin") {
 		t.Fatalf("apply as boss = %+v, %v; want the import written and the record refused with the run card", res, err)
 	}
 	if res == nil || !res.Wrote() || res.Recorded {
