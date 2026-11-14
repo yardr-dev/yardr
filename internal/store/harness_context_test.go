@@ -23,11 +23,15 @@ func TestContextSourceUsageIn(t *testing.T) {
 		{"another nested kind", muse, `{"payload":{"event":{"kind":"goal_usage_attribution","usage":{"input_tokens":650000}}}}`, 0, false},
 		{"flat kind cannot match nested path", muse, `{"payload.event.kind":"model_completed","payload":{"event":{"usage":{"input_tokens":650000}}}}`, 0, false},
 		{"no input yet", muse, `{"payload":{"event":{"kind":"model_completed","usage":{"output_tokens":30}}}}`, 0, false},
-		{"zero input is a reading", muse, `{"payload":{"event":{"kind":"model_completed","usage":{"input_tokens":0}}}}`, 0, true},
+		{"zero input is no reading", muse, `{"payload":{"event":{"kind":"model_completed","usage":{"input_tokens":0}}}}`, 0, false},
+		{"no usage object", muse, `{"payload":{"event":{"kind":"model_completed"}}}`, 0, false},
 		{"Codex input includes cache, excludes running total", codex, `{"payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":89874,"cached_input_tokens":89472,"output_tokens":200},"total_token_usage":{"input_tokens":995515}}}}`, 89874, true},
 		{"Codex no per-call input", codex, `{"payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":995515}}}}`, 0, false},
 		{"Codex another event", codex, `{"payload":{"type":"token_usage_record","info":{"last_token_usage":{"input_tokens":89874}}}}`, 0, false},
 		{"default flat type and tokens", store.ContextSource{Type: "assistant", Usage: "message.usage"}, `{"type":"assistant","message":{"usage":{"input_tokens":10,"cache_read_input_tokens":100,"cache_creation_input_tokens":5,"output_tokens":7}}}`, 115, true},
+		{"all zero is no reading", store.ContextSource{Type: "assistant", Usage: "message.usage"}, `{"type":"assistant","message":{"usage":{"input_tokens":0,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":0}}}`, 0, false},
+		{"partial zero still sums", store.ContextSource{Type: "assistant", Usage: "message.usage"}, `{"type":"assistant","message":{"usage":{"input_tokens":0,"cache_read_input_tokens":100,"cache_creation_input_tokens":0}}}`, 100, true},
+		{"pi partial zero still sums", store.ContextSource{Type: "assistant", TypeField: "message.role", Usage: "message.usage", Tokens: []string{"input", "cacheRead", "cacheWrite"}}, `{"type":"message","message":{"role":"assistant","usage":{"input":0,"cacheRead":150,"cacheWrite":0},"stopReason":"toolUse"}}`, 150, true},
 		{"custom flat type", store.ContextSource{Type: "turn", TypeField: "kind", Usage: "use", Tokens: []string{"total_tokens"}}, `{"kind":"turn","use":{"total_tokens":9}}`, 9, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -36,6 +40,12 @@ func TestContextSourceUsageIn(t *testing.T) {
 				t.Fatalf("context = %d, %v; want %d, %v", used, ok, tc.used, tc.ok)
 			}
 		})
+	}
+	pi := store.ContextSource{Type: "assistant", TypeField: "message.role", Usage: "message.usage", Tokens: []string{"input", "cacheRead", "cacheWrite"}, Window: 200000}
+	line := []byte(`{"type":"message","message":{"role":"assistant","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"cacheWrite1h":0,"reasoning":0},"stopReason":"error"}}`)
+	used, window, ok, err := pi.ReadIn(line)
+	if used != 0 || window != 0 || ok || err != nil {
+		t.Fatalf("pi ReadIn = %d, %d, %v, %v; want 0, 0, false, nil", used, window, ok, err)
 	}
 	t.Run("reported window", func(t *testing.T) {
 		codex.WindowField = "payload.info.model_context_window"

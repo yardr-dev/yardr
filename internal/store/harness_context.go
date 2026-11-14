@@ -24,6 +24,8 @@ func (s ContextSource) UsageIn(line []byte) (used int, ok bool) {
 // ReadIn reads the context use and declared window from one session line.
 // A missing WindowField gives a zero window, so no percentage can be read yet.
 // A present invalid window is an error; without WindowField, zero uses the model.
+// A reading of 0 is no reading: a request never sends nothing, so all-zero
+// usage means the turn errored, not that the session emptied.
 func (s ContextSource) ReadIn(line []byte) (used, window int, ok bool, err error) {
 	var v map[string]any
 	if json.Unmarshal(line, &v) != nil {
@@ -47,7 +49,10 @@ func (s ContextSource) ReadIn(line []byte) (used, window int, ok bool, err error
 			used, ok = used+int(n), true
 		}
 	}
-	if !ok {
+	if !ok || used == 0 {
+		// No token field, or every one present reads 0: an errored turn
+		// carries no use, and the caller keeps its earlier reading. This
+		// sits before the window read, as a zero line carries no window.
 		return 0, 0, false, nil
 	}
 	window = s.Window

@@ -152,8 +152,8 @@ echo '%s'
 	})
 	write(filepath.Join(claude, "projects", "-tmp-w", "c1.jsonl"), `{"type":"user","message":{"role":"user","content":"Read the brief."}}
 {"type":"assistant","message":{"model":"claude-opus-5-5","usage":{"input_tokens":10,"cache_read_input_tokens":100,"cache_creation_input_tokens":5,"output_tokens":7}}}
-{"type":"assistant","message":{"model":"<synthetic>","content":[{"type":"text","text":"API Error"}]}}
 {"type":"assistant","message":{"model":"claude-opus-5-5","usage":{"input_tokens":2,"cache_read_input_tokens":200,"output_tokens":3}}}
+{"type":"assistant","message":{"model":"<synthetic>","content":[{"type":"text","text":"API Error"}],"usage":{"input_tokens":0,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":0}},"isApiErrorMessage":true}
 `)
 	write(filepath.Join(claude, "projects", "-tmp-w", "c2.jsonl"), `{"type":"user","message":{"role":"user","content":"Read the brief."}}
 `)
@@ -172,7 +172,7 @@ esac`)}
 		used int
 		ok   bool
 	}{
-		"used":     {202, true}, // the last line's input and cache, not what it said
+		"used":     {202, true}, // the last good line's input and cache; the errored line after it is no reading
 		"silent":   {},          // prompted, no reply yet
 		"nofile":   {},          // no session file yet
 		"glob":     {},          // an id that is no id finds nothing

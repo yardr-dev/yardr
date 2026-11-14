@@ -1071,9 +1071,9 @@ func TestContextSource(t *testing.T) {
 	lines := []string{
 		`{"type":"user","message":{"role":"user","content":"hi"}}`,
 		`{"type":"assistant","message":{"model":"claude-opus-5-5","usage":{"input_tokens":10,"cache_read_input_tokens":100,"cache_creation_input_tokens":5,"output_tokens":7}}}`,
-		`{"type":"assistant","message":{"model":"<synthetic>","content":[{"type":"text","text":"API Error"}]}}`,
 		`not json at all`,
 		`{"type":"assistant","message":{"model":"claude-opus-5-5","usage":{"input_tokens":2,"cache_read_input_tokens":200,"output_tokens":3}}}`,
+		`{"type":"assistant","message":{"model":"<synthetic>","content":[{"type":"text","text":"API Error"}],"usage":{"input_tokens":0,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":0}},"isApiErrorMessage":true}`,
 	}
 	var used int
 	var ok bool
@@ -1082,6 +1082,8 @@ func TestContextSource(t *testing.T) {
 			used, ok = n, true
 		}
 	}
+	// The errored turn's all-zero usage is no reading, so the good turn
+	// before it stands.
 	if !ok || used != 202 {
 		t.Fatalf("last use = %d, %v; want 202, true", used, ok)
 	}

@@ -45,7 +45,7 @@ model:
 # reasoning a part of output. pi's own footer adds that reply's output too
 # (totalTokens), where the yard counts what was sent, as for every kind, so its
 # figure is lower by that. A turn that ended in an error carries a usage of
-# zeros, which reads as a use of 0 until the next reply, as Claude Code's
+# zeros, which reads as no reading until the next reply, as Claude Code's
 # API-error line does. The file names no window, so the yard uses the asked
 # model name's window: 200k by default, or a bracketed size such as [1m].
 context:
