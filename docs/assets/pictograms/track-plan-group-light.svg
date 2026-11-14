@@ -1,0 +1,3 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96" fill="none" stroke="#E9E9EA" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="10">
+<!-- track-plan group, light twin for dark grounds. Source: yardr-design assets/pictograms/track-plan/group.svg at 8f8eca013bfa8e0e263cdc92063c0fad60808a20; strokes and fills to #E9E9EA, accents to #D3602F. -->
+<rect x="16" y="36" width="64" height="12" fill="#E9E9EA"/><path d="M6 66H22M46 66H50M74 66H90"/><g class="a" stroke="#D3602F"><circle cx="34" cy="66" r="7"/><circle cx="34" cy="66" r="2.5" fill="#D3602F" stroke="none"/></g><g class="a" stroke="#D3602F"><circle cx="62" cy="66" r="7"/><circle cx="62" cy="66" r="2.5" fill="#D3602F" stroke="none"/></g></svg>

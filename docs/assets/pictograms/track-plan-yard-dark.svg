@@ -1,0 +1,3 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96" fill="none" stroke="#161718" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="10">
+<!-- track-plan yard, dark twin for light grounds. Source: yardr-design assets/pictograms/track-plan/yard.svg at 8f8eca013bfa8e0e263cdc92063c0fad60808a20; strokes and fills to #161718. -->
+<path d="M8 22V8H88V88H8V74M8 40V56"/><path d="M0 31H22L29 22H56M22 31L29 40H56"/><path d="M0 65H22L29 56H56M22 65L29 74H56"/><rect x="66" y="22" width="14" height="14"/><rect x="66" y="58" width="14" height="14" fill="#161718"/></svg>

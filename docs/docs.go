@@ -61,7 +61,10 @@ func Lookup(name string) (page string, ok bool) {
 	return "", false
 }
 
-// Read returns the page's text. ok is false for an unknown name.
+// Read returns the page's text, without the image markup a terminal
+// cannot show: markdown image spans and picture blocks are dropped,
+// while a line in a code fence keeps what looks like markup, as
+// Section keeps a fenced heading. ok is false for an unknown name.
 func Read(name string) (text string, ok bool) {
 	page, ok := Lookup(name)
 	if !ok {
@@ -71,7 +74,7 @@ func Read(name string) (text string, ok bool) {
 	if err != nil {
 		return "", false
 	}
-	return string(b), true
+	return stripImages(string(b)), true
 }
 
 // Title returns the page's name and its first "# " heading, the line
@@ -153,6 +156,124 @@ func sectionOf(page, words string) (text string, ok bool) {
 // backticks, after the indentation a fence inside a list item has.
 func isFence(line string) bool {
 	return strings.HasPrefix(strings.TrimSpace(line), "```")
+}
+
+// stripImages drops the image markup of a page's text: markdown
+// image spans and picture blocks, outside the code fences. A fence's
+// lines keep them, whatever they hold: a JSON sample's "shed.png" is
+// a file name, not a picture. Anything else stays byte for byte,
+// even the gap a picture stood in.
+func stripImages(text string) string {
+	lines := strings.SplitAfter(text, "\n")
+	var fenced, pictured bool
+	for i, line := range lines {
+		body, nl := line, ""
+		if rest, ok := strings.CutSuffix(body, "\n"); ok {
+			body, nl = rest, "\n"
+		}
+		if isFence(body) {
+			fenced = !fenced
+			continue
+		}
+		if fenced {
+			continue
+		}
+		body, pictured = stripLineImages(body, pictured)
+		lines[i] = body + nl
+	}
+	return strings.Join(lines, "")
+}
+
+// stripLineImages drops one line's image markup: the picture blocks,
+// which may run past the line, and the markdown image spans in what
+// is left. pictured says an earlier line opened a picture block the
+// line continues.
+func stripLineImages(line string, pictured bool) (string, bool) {
+	var out strings.Builder
+	for {
+		if pictured {
+			i := strings.Index(line, "</picture>")
+			if i < 0 {
+				return out.String(), true
+			}
+			line = line[i+len("</picture>"):]
+			pictured = false
+			continue
+		}
+		i := pictureOpen(line)
+		if i < 0 {
+			out.WriteString(stripImageSpans(line))
+			return out.String(), false
+		}
+		out.WriteString(stripImageSpans(line[:i]))
+		line = line[i:]
+		j := strings.Index(line, ">")
+		if j < 0 {
+			// The tag never closes on this line: the rest
+			// of the line is inside the picture.
+			return out.String(), true
+		}
+		if line[j-1] == '/' {
+			// A self-closed tag drops alone.
+			line = line[j+1:]
+			continue
+		}
+		line = line[j+1:]
+		pictured = true
+	}
+}
+
+// pictureOpen is the index of the line's first picture block's open
+// tag, or -1: "<picture" with a boundary past it, so that a longer
+// tag name never matches. The pages write the tag lowercase, as here.
+func pictureOpen(line string) int {
+	for i := 0; ; {
+		j := strings.Index(line[i:], "<picture")
+		if j < 0 {
+			return -1
+		}
+		i += j
+		rest := line[i+len("<picture"):]
+		if rest == "" || strings.ContainsRune(" \t>/", rune(rest[0])) {
+			return i
+		}
+		i += len("<picture")
+	}
+}
+
+// stripImageSpans drops the markdown image spans of one line: from
+// "![" to the url's closing paren. A span the line does not close
+// stays, as does a link, which never starts with "!".
+func stripImageSpans(line string) string {
+	var out strings.Builder
+	for {
+		before, rest, found := strings.Cut(line, "![")
+		out.WriteString(before)
+		if !found {
+			return out.String()
+		}
+		after, closed := cutImageURL(rest)
+		if !closed {
+			out.WriteString("![")
+			line = rest
+			continue
+		}
+		line = after
+	}
+}
+
+// cutImageURL splits an image span's alt text from its url: the first
+// "](" ends the alt text, the first ")" after it the span.
+func cutImageURL(rest string) (after string, closed bool) {
+	i := strings.Index(rest, "](")
+	if i < 0 {
+		return "", false
+	}
+	j := strings.Index(rest[i+len("]("):], ")")
+	if j < 0 {
+		return "", false
+	}
+	return rest[i+len("](")+j+1:], true
 }
 
 // cutHeading splits a markdown heading line into its level and its

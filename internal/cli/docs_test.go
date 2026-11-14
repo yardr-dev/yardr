@@ -66,8 +66,36 @@ func TestDocsShowPrintsOnePage(t *testing.T) {
 	if out != want {
 		t.Fatalf("yardr docs flows prints %d bytes, the page holds %d", len(out), len(want))
 	}
+	if strings.Contains(out, "![") {
+		t.Fatalf("yardr docs flows prints an image span")
+	}
 	if out, code := executeOut(&app{}, "docs", "Readme"); code != 0 || !strings.HasPrefix(out, "# yardr documentation\n") {
 		t.Fatalf("yardr docs Readme: exit %d, %.40q", code, out)
+	}
+	// The glossary's term pictures stay on the page: the terminal
+	// prints words alone (yardr-wkn6).
+	out, code = executeOut(&app{}, "docs", "glossary")
+	if code != 0 {
+		t.Fatalf("yardr docs glossary: exit %d\n%s", code, out)
+	}
+	want, _ = docs.Read("glossary")
+	if out != want {
+		t.Fatalf("yardr docs glossary prints %d bytes, the page holds %d", len(out), len(want))
+	}
+	if i := strings.Index(out, "<picture"); i >= 0 {
+		t.Fatalf("yardr docs glossary prints a picture block: %.80q", out[i:])
+	}
+	if !strings.Contains(out, "| **bead**  | one durable piece of work (an issue, in a tracker) |") {
+		t.Fatalf("yardr docs glossary prints no words-alone bead row")
+	}
+	// api.md's fenced samples keep their .png file names: a fence is
+	// code, not markup.
+	out, code = executeOut(&app{}, "docs", "api")
+	if code != 0 {
+		t.Fatalf("yardr docs api: exit %d\n%s", code, out)
+	}
+	if !strings.Contains(out, `"name": "shed.png"`) {
+		t.Fatalf("yardr docs api lost its fenced shed.png sample")
 	}
 	var errs bytes.Buffer
 	out, code = executeOut(&app{stderr: &errs}, "docs", "flow")

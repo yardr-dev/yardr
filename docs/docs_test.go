@@ -1,7 +1,9 @@
 package docs
 
 import (
+	"encoding/xml"
 	"io/fs"
+	"os"
 	"strings"
 	"testing"
 )
@@ -129,6 +131,141 @@ func TestSection(t *testing.T) {
 	} {
 		if got, ok := sectionOf(c.page, c.words); !ok || got != c.want {
 			t.Errorf("%s: sectionOf(%q, %q) = %q, %v, want %q", c.name, c.page, c.words, got, ok, c.want)
+		}
+	}
+}
+
+// Read prints words alone where a page carries pictures: the glossary's
+// term cells hold picture blocks, and flows' drawing section markdown
+// image spans, and neither shows in a terminal. A line in a code fence
+// keeps what looks like markup, whatever it holds: api.md's JSON
+// samples name .png files. Anything else stays byte for byte, even the
+// gap a picture stood in.
+func TestStripImages(t *testing.T) {
+	pic := `<picture><source media="(prefers-color-scheme: dark)" srcset="assets/pictograms/track-plan-bead-light.svg"><img alt="bead" src="assets/pictograms/track-plan-bead-dark.svg" height="24"></picture>`
+	for _, c := range []struct{ name, in, want string }{
+		{"no markup stays byte for byte",
+			"# T\n\nplain text, no trailing newline",
+			"# T\n\nplain text, no trailing newline"},
+		{"a picture block drops, its gap stays",
+			"| **bead** " + pic + " | one durable piece of work |\n",
+			"| **bead**  | one durable piece of work |\n"},
+		{"a picture block at the end without a newline",
+			"a " + pic,
+			"a "},
+		{"a picture block with attributes",
+			`a <picture class="x">b</picture> c`,
+			"a  c"},
+		{"a picture block across lines",
+			"a <picture>\nb\nc</picture> d\n",
+			"a \n\n d\n"},
+		{"a picture block left open runs to the end",
+			"a <picture>b\nc\n",
+			"a \n\n"},
+		{"a self-closed picture tag drops alone",
+			"a <picture/> b",
+			"a  b"},
+		{"a longer tag name is no picture",
+			"a <picturesque>b</picturesque> c",
+			"a <picturesque>b</picturesque> c"},
+		{"an image span drops, its gap stays",
+			"see ![the flow](flows/starter.svg) here\n",
+			"see  here\n"},
+		{"an image span alone leaves an empty line",
+			"![The starter pack's flow](flows/starter.svg)\n",
+			"\n"},
+		{"an image span with a title",
+			`![alt](img.svg "title")`,
+			""},
+		{"two image spans on one line",
+			"![a](a.svg) and ![b](b.svg)",
+			" and "},
+		{"a span the line does not close stays",
+			"a ![b](c and ![d e\n",
+			"a ![b](c and ![d e\n"},
+		{"a link is no image span",
+			"[users.md](users.md#devices) and [pack](pack.md)\n",
+			"[users.md](users.md#devices) and [pack](pack.md)\n"},
+		{"a fence keeps image markup",
+			"# T\n\n```json\n{\"name\": \"shed.png\"}\n```\n\n![a](a.svg)\n",
+			"# T\n\n```json\n{\"name\": \"shed.png\"}\n```\n\n\n"},
+		{"a fence keeps a picture block",
+			"```\n" + pic + "\n```\n",
+			"```\n" + pic + "\n```\n"},
+		{"a fence left open runs to the end",
+			"```\n![a](a.svg)\n",
+			"```\n![a](a.svg)\n"},
+	} {
+		if got := stripImages(c.in); got != c.want {
+			t.Errorf("%s: stripImages(%q) = %q, want %q", c.name, c.in, got, c.want)
+		}
+	}
+}
+
+// Every glossary term with a track-plan icon stands with its twin
+// pair in its row, and every twin is well-formed SVG: a row that
+// loses its pictures, or a twin that stops parsing, fails here. The
+// twins' bytes are the other repository's to change, so presence and
+// shape are held, never the drawings.
+func TestGlossaryIconsHaveTwins(t *testing.T) {
+	bold := map[string]bool{
+		"yard": true, "depot": true, "bead": true, "train": true,
+		"wagon": true, "siding": true, "carrier": true, "fold": true,
+		"crew": true, "line": true, "ask": true,
+	}
+	terms := []string{
+		"yard", "depot", "bead", "train", "wagon", "siding",
+		"carrier", "fold", "crew", "line", "ask", "flow", "stage",
+		"route", "group", "hook", "source", "peer", "pack", "edge",
+	}
+	raw, err := FS.ReadFile("glossary.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(string(raw), "<picture"); n != len(terms) {
+		t.Fatalf("glossary.md carries %d pictures, want one per term in %d rows", n, len(terms))
+	}
+	for _, term := range terms {
+		cell := "| " + term + " <picture>"
+		if bold[term] {
+			cell = "| **" + term + "** <picture>"
+		}
+		var row string
+		for line := range strings.Lines(string(raw)) {
+			if strings.Contains(line, cell) {
+				row = line
+				break
+			}
+		}
+		if row == "" {
+			t.Errorf("no glossary row starts its term cell %q", cell)
+			continue
+		}
+		for _, twin := range []string{"dark", "light"} {
+			path := "assets/pictograms/track-plan-" + term + "-" + twin + ".svg"
+			if !strings.Contains(row, path) {
+				t.Errorf("%s's row names no %s", term, path)
+				continue
+			}
+			svg, err := os.ReadFile(path)
+			if err != nil {
+				t.Errorf("ReadFile(%s): %v", path, err)
+				continue
+			}
+			var v struct {
+				XMLName xml.Name
+			}
+			if err := xml.Unmarshal(svg, &v); err != nil {
+				t.Errorf("%s is no well-formed SVG: %v", path, err)
+			} else if v.XMLName.Local != "svg" {
+				t.Errorf("%s holds <%s>, want <svg>", path, v.XMLName.Local)
+			}
+		}
+		if !strings.Contains(row, `alt="`+term+`"`) {
+			t.Errorf("%s's row carries no alt text naming the term", term)
+		}
+		if !strings.Contains(row, `height="24"`) {
+			t.Errorf("%s's row carries no 24px height", term)
 		}
 	}
 }
