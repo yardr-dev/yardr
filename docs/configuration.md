@@ -225,9 +225,21 @@ git repository, register an existing clone, or let yardr clone it:
 ```sh
 yardr depot add webapp ~/projects/webapp                       # existing clone
 yardr depot add webapp --clone git@github.com:me/webapp.git    # → ~/.yardr/depots/webapp
-yardr depot add legacy ~/src/legacy --base origin/master       # base must resolve
+yardr depot add legacy ~/src/legacy --base origin/release      # base must resolve
 yardr depot rm legacy                                          # store only; the clone stays
 ```
+
+Without `--base`, a git depot's base is origin's default branch as the
+checkout has it: `refs/remotes/origin/HEAD`, which `git clone` sets from what
+the remote answers, so a repository whose default branch is `master` or
+`trunk` is registered as `origin/master` or `origin/trunk` with no one
+naming it. A checkout that names none (a clone made with `git init` and
+`git remote add`, or one whose `origin/HEAD` was deleted) gets `origin/main`,
+as every depot did before. The ref is read and nothing is fetched: where the
+remote changed its default branch since the clone, `git remote set-head
+origin --auto` brings the checkout up to it, and `--base` says another
+branch outright. A base that does not resolve is refused, naming the
+branches that would: a repository with no commit has none.
 
 Bead branches (`yard/<bead>`) start from the depot's base, brought up to its
 remote before each new worktree: a local base is fast-forwarded to its
@@ -248,6 +260,48 @@ A depot can say what tests it: `yardr depot add webapp ~/projects/webapp
 A depot can also be a plain directory, with no git (`--kind dir`): the next
 section says how the two kinds differ, and [dir-depots.md](dir-depots.md)
 has a worked example.
+
+### Many depots at once
+
+`depot add` registers one depot, and a loop over a list registers many.
+yardr knows nothing of where the list comes from: any program that prints a
+name and a clone URL on each line feeds it. Since each clone takes its
+repository's default branch as its base, the loop names no branch:
+
+```sh
+# every line: <name> <clone URL>
+while read -r name url; do
+  yardr depot add "$(printf %s "$name" | tr 'A-Z' 'a-z')" --clone "$url" </dev/null ||
+    echo "left out: $name" >&2
+done <repositories.txt
+```
+
+The `tr` is for a depot's name, which holds no capital letter. A line that
+is refused is named and the loop goes on: a repository with no commit, and
+one whose clone is there already (`already exists; drop --clone to register
+it as is`), so the same list run again later adds only what is new in it.
+
+The list is the hosting service's to give. For the repositories an owner has
+on GitHub, without the forks and the archived ones, the `gh` CLI prints it:
+
+```sh
+gh repo list <owner> --source --no-archived --limit 1000 \
+  --json name,sshUrl --jq '.[] | "\(.name) \(.sshUrl)"' >repositories.txt
+```
+
+Each depot is then set up from a pack (`yardr depot init`), which makes the
+depot its own groups: `<depot>-builders`, `<depot>-reviewers` and the rest,
+each with its own limit. Depots that share their agents are set up with the
+first depot's groups instead, so that ten depots are not ten times the
+sessions ([packs.md](packs.md), "A group the yard has may take the pack's"):
+
+```sh
+yardr depot init webapp --yes --bind builders=claude --bind reviewers=claude \
+  --members backlog= --members decisions=jo
+yardr depot init api --yes --group builders=webapp-builders \
+  --group reviewers=webapp-reviewers \
+  --group security-reviewers=webapp-security-reviewers --group assembly=webapp-assembly
+```
 
 ## Depot kinds: git and dir
 
