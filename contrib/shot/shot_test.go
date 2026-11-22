@@ -230,7 +230,10 @@ func (w *hostWatch) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	n, err := w.buf.Write(p)
-	if w.timer == nil && !w.stopped && chromeHostFailure(w.buf.String()) != "" {
+	// The whole log is not scanned again. Chrome can print the bus error for
+	// the whole deadline, and each write would otherwise copy the log so far
+	// (hostFailureWritten).
+	if w.timer == nil && !w.stopped && hostFailureWritten(w.buf.Bytes(), len(p)) {
 		w.timer = time.AfterFunc(shotLoadTimeout, w.stop)
 	}
 	return n, err
@@ -1242,12 +1245,51 @@ const (
 	shotFailed                 // the script is at fault
 )
 
-// chromeHostFailure is the first line that says this host cannot run Chrome
-// through to the end of a shot: the macOS display link that never finishes,
-// or a bus Chrome asked for and could not open. A Chrome that prints one and
-// then exits has finished; the line alone is not a failure.
+// hostFailureMarkers are the lines Chrome prints when this host cannot finish
+// a shot: the macOS display link that never finishes, or a bus Chrome asked
+// for and could not open. A Chrome that prints one and then exits has
+// finished; the line alone is not a failure.
+var hostFailureMarkers = []string{displayLinkFailure, "Failed to connect to the bus"}
+
+// hostFailureTail is how many bytes before a write still count: one less than
+// the longest marker, so a marker cut between two writes is still seen. The
+// rest of the log is left alone.
+var hostFailureTail = func() int {
+	n := 1
+	for _, m := range hostFailureMarkers {
+		if len(m) > n {
+			n = len(m)
+		}
+	}
+	return n - 1
+}()
+
+// hostFailureWritten reports whether a host-failure marker is in the bytes
+// just written, or split onto them from the write before. wrote is how many
+// of buf's trailing bytes are new.
+func hostFailureWritten(buf []byte, wrote int) bool {
+	if wrote > len(buf) {
+		wrote = len(buf)
+	}
+	start := len(buf) - wrote
+	if start > hostFailureTail {
+		start -= hostFailureTail
+	} else {
+		start = 0
+	}
+	window := buf[start:]
+	for _, m := range hostFailureMarkers {
+		if bytes.Contains(window, []byte(m)) {
+			return true
+		}
+	}
+	return false
+}
+
+// chromeHostFailure is the first line of text that holds a host-failure
+// marker (hostFailureMarkers), trimmed, or "".
 func chromeHostFailure(text string) string {
-	for _, sub := range []string{displayLinkFailure, "Failed to connect to the bus"} {
+	for _, sub := range hostFailureMarkers {
 		if line := lineWith(text, sub); line != "" {
 			return line
 		}
@@ -1428,6 +1470,32 @@ func TestShotWritesAWindowSizedPNG(t *testing.T) {
 		if r, g, b := shotPixel(t, out); !closeTo(r, g, b, c.r, c.g, c.b) {
 			t.Errorf("the shot with %q shows #%02x%02x%02x, want the #%02x%02x%02x of a page laid out %d wide", c.env, r, g, b, c.r, c.g, c.b, c.w)
 		}
+	}
+}
+
+// A host-failure line is looked for in the bytes just written, plus the tail
+// of the write before, so a line cut between two writes is still seen and a
+// line already passed is not copied again on every later write.
+func TestHostFailureWrittenSeesAMarkerSplitAcrossWrites(t *testing.T) {
+	marker := "Failed to connect to the bus"
+	cut := 10
+	buf := []byte("log " + marker[:cut])
+	if hostFailureWritten(buf, cut) {
+		t.Fatal("a prefix of the bus line counted as the line")
+	}
+	buf = append(buf, marker[cut:]...)
+	if !hostFailureWritten(buf, len(marker)-cut) {
+		t.Fatal("the bus line was split across writes and missed")
+	}
+	// Far enough back that the overlap no longer reaches it.
+	buf = append(buf, bytes.Repeat([]byte("x"), hostFailureTail+1)...)
+	buf = append(buf, 'y')
+	if hostFailureWritten(buf, 1) {
+		t.Fatal("a later write rescanned the bus line from earlier in the log")
+	}
+	buf = append(buf, displayLinkFailure...)
+	if !hostFailureWritten(buf, len(displayLinkFailure)) {
+		t.Fatal("the display-link line in the new bytes was missed")
 	}
 }
 
