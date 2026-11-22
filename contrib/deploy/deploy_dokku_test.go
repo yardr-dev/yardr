@@ -61,6 +61,19 @@ const loadFactorEnv = "DEPLOY_TEST_LOAD_FACTOR"
 // second exec per call), the home is one with no yard in it, every server they
 // start stops with this binary, and one yardr is built for all of them.
 func TestMain(m *testing.M) {
+	// go test -short omits this end-to-end suite: it builds the tree's
+	// binary and drives it. The landing, the quiet run and CI pass no
+	// -short, so they still run it (docs/testing.md, A short run). The
+	// return is before the build below, which is most of a short run's cost.
+	// A child started to read the load factor carries no -test.short, so it
+	// still reaches the branch that skips the build.
+	// testing.Short panics until the flags are parsed, and m.Run is what
+	// parses them, after that build. The parallel flag is set later, once
+	// the flags are parsed, which is what m.Run reads.
+	flag.Parse()
+	if testing.Short() {
+		os.Exit(0)
+	}
 	noSync := os.Getenv(store.NoSyncEnv)
 	testLoad := config.Getenv(testload.Env)
 	for _, kv := range os.Environ() {

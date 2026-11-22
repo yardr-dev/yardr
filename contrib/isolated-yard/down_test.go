@@ -15,6 +15,8 @@ package isolatedyard
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"net"
@@ -779,6 +781,9 @@ func TestDownLeavesProbesOutOfTheStandInCount(t *testing.T) {
 // yards start: D/e hands the name on (isolated-yard's build), so a run killed
 // before its cleanups leaves no server or daemon of a yard behind.
 func TestMain(m *testing.M) {
+	// The sleeper is this binary started again with no test flags, so the
+	// short-run return below must not come first: a sleeper would exit at
+	// once and the down test would see it already gone.
 	if os.Getenv("ISOLATED_TEST_SLEEPER") != "" {
 		// A sleeper stands for a process of another yard, which no down of
 		// this binary's yards stops. The binary that started it runs no
@@ -792,6 +797,15 @@ func TestMain(m *testing.M) {
 		}
 		time.Sleep(5 * time.Minute)
 		return
+	}
+	// go test -short omits this end-to-end suite: it builds the tree's
+	// binary and drives it. The landing, the quiet run and CI pass no
+	// -short, so they still run it (docs/testing.md, A short run).
+	// testing.Short panics until the flags are parsed, and m.Run is what
+	// parses them, after the work this return skips.
+	flag.Parse()
+	if testing.Short() {
+		os.Exit(0)
 	}
 	storetest.NameTestBinary()
 	code := m.Run()
@@ -890,7 +904,15 @@ func TestSleeperEndsWhenItsOwnerIsGone(t *testing.T) {
 // machine, the servers of the tests running beside it among them. A process
 // with its home in another yard, in a real one or in a directory that only
 // begins like this yard's outlives down.
+//
+// The wait for the foreign stand-in polls lsof. A machine without it makes
+// every look fail, and the wait cannot tell that from "not open yet", so the
+// fuse runs out before the failure. A loaded machine stretches the ten
+// seconds toward a minute. The test skips as soon as it sees lsof is missing.
 func TestDownLeavesTheProcessesOfOtherYards(t *testing.T) {
+	if _, err := exec.LookPath("lsof"); err != nil {
+		t.Skip("lsof is not installed, and the wait for the foreign stand-in polls it")
+	}
 	d := bare(t)
 	mine := []int{sleeper(t, d+"/y"), sleeper(t, d)}
 	others := []int{
@@ -917,13 +939,26 @@ func TestDownLeavesTheProcessesOfOtherYards(t *testing.T) {
 	}
 	t.Cleanup(func() { stdin.Close(); cmd.Process.Kill(); cmd.Wait() })
 	pid := cmd.Process.Pid
-	if !waitFor(10*time.Second, func() bool {
+	// A look that cannot start lsof is not "not open yet": waiting the fuse
+	// out would report the same failure as a stand-in that never held the
+	// file. Exit status 1 is that case, and keeps polling.
+	var blocked error
+	held := waitFor(10*time.Second, func() bool {
 		out, err := exec.Command("lsof", "-t", foreign).Output()
 		if err != nil {
+			var start *exec.Error
+			if errors.As(err, &start) {
+				blocked = err
+				return true
+			}
 			return false
 		}
 		return slices.Contains(strings.Fields(string(out)), strconv.Itoa(pid))
-	}) {
+	})
+	if blocked != nil {
+		t.Fatalf("lsof: %v", blocked)
+	}
+	if !held {
 		t.Fatalf("the foreign stand-in (pid %d) never held its launcher open", pid)
 	}
 	others = append(others, pid)
