@@ -109,8 +109,8 @@ const shotTimeout = time.Minute
 const shotLoadTimeout = 10 * time.Second
 
 // hostGiveUp is how long a host-failure line gets before the run is stopped.
-// It is the loaded deadline. A test of a script that has already exited
-// shortens it, so the stop lands while the output pipe is still open.
+// It is the loaded deadline. The test of a process that is still running
+// shortens it, so the stop is the thing the test waits for.
 var hostGiveUp = shotLoadTimeout
 
 // shotFuse is how long a test waits on the script before it gives up on it:
@@ -1398,44 +1398,52 @@ func closeTo(r, g, b, wantR, wantG, wantB uint8) bool {
 	return diff(r, wantR) <= 8 && diff(g, wantG) <= 8 && diff(b, wantB) <= 8
 }
 
-// A script that has already exited keeps its status when the host deadline
-// fires while something it started still holds the output pipe. The deadline
-// is shortened so it lands in that window. A script still running is the
-// timeout, and the verdict skips it.
+// A script that exited on its own keeps that status when the context is
+// already cancelled: the deadline can fire while its output is still
+// draining, and that must not become a timeout. The stand-in that is still
+// running is the other half, the process the deadline stops. Its wait is
+// the stop itself, so a slow schedule only lengthens it.
 func TestShotKeepsAnExitThatBeatTheHostDeadline(t *testing.T) {
-	if _, err := exec.LookPath("curl"); err != nil {
-		t.Skip("no curl: it checks the page before the shot")
-	}
-	prev := hostGiveUp
-	hostGiveUp = 200 * time.Millisecond
-	t.Cleanup(func() { hostGiveUp = prev })
-	s := page(t)
-	for _, c := range []struct {
-		name, body string
-		skip       bool
-	}{
-		{"exited 7", "echo '4718 bytes written to file shot.png'\nsleep 30 &\necho $! >\"$SHOT_PIDS\"\nexit 7\n", false},
-		{"still running", "echo '4718 bytes written to file shot.png'\nexec sleep 30\n", true},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			dir := t.TempDir()
-			pids := filepath.Join(dir, "pids")
-			bin := filepath.Join(dir, "chrome")
-			scripttest.Write(t, bin, "#!/bin/sh\n"+c.body)
-			t.Cleanup(func() { reap(pids) })
-			rc, text := runShot(shotCtx(t), t, []string{s.URL + "/page", filepath.Join(t.TempDir(), "shot.png")}, "SHOT_CHROME="+bin, "SHOT_PIDS="+pids)
-			v, why := windowVerdict(rc, text, false)
-			if c.skip {
-				if v != shotSkipped || !strings.Contains(text, "did not finish") {
-					t.Fatalf("a Chrome still running: verdict %d (%s), exit %d, output %q, want a timeout skip", v, why, rc, text)
-				}
-				return
-			}
-			if strings.Contains(text, "did not finish") || v != shotFailed || rc != 7 {
-				t.Fatalf("a script that exited 7: verdict %d (%s), exit %d, output %q, want a failure with exit 7", v, why, rc, text)
-			}
-		})
-	}
+	t.Run("exited 7", func(t *testing.T) {
+		exit7 := exec.Command("sh", "-c", "exit 7").Run()
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		out := []byte("4718 bytes written to file shot.png\n")
+		rc, text, err := shotResult(ctx, time.Now(), out, exit7)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(text, "did not finish") || rc != 7 {
+			t.Fatalf("exit %d, output %q, want exit 7 without a timeout", rc, text)
+		}
+		if v, why := windowVerdict(rc, text, false); v != shotFailed {
+			t.Fatalf("verdict %d (%s), want a failure", v, why)
+		}
+	})
+	t.Run("output held after exit 0", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		rc, text, err := shotResult(ctx, time.Now(), []byte("4718 bytes written to file shot.png\n"), exec.ErrWaitDelay)
+		if err != nil || rc != 0 || strings.Contains(text, "did not finish") {
+			t.Fatalf("exit %d, err %v, output %q, want a success", rc, err, text)
+		}
+	})
+	t.Run("still running", func(t *testing.T) {
+		if _, err := exec.LookPath("curl"); err != nil {
+			t.Skip("no curl: it checks the page before the shot")
+		}
+		prev := hostGiveUp
+		hostGiveUp = 200 * time.Millisecond
+		t.Cleanup(func() { hostGiveUp = prev })
+		s := page(t)
+		dir := t.TempDir()
+		bin := filepath.Join(dir, "chrome")
+		scripttest.Write(t, bin, "#!/bin/sh\necho '4718 bytes written to file shot.png'\nexec sleep 30\n")
+		rc, text := runShot(shotCtx(t), t, []string{s.URL + "/page", filepath.Join(t.TempDir(), "shot.png")}, "SHOT_CHROME="+bin)
+		if v, why := windowVerdict(rc, text, false); v != shotSkipped || !strings.Contains(text, "did not finish") {
+			t.Fatalf("a Chrome still running: verdict %d (%s), exit %d, output %q, want a timeout skip", v, why, rc, text)
+		}
+	})
 }
 
 // The shot itself, with real Chrome against the local page: a window-sized
