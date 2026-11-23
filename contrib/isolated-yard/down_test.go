@@ -941,13 +941,15 @@ func TestDownLeavesTheProcessesOfOtherYards(t *testing.T) {
 	pid := cmd.Process.Pid
 	// A look that cannot start lsof is not "not open yet": waiting the fuse
 	// out would report the same failure as a stand-in that never held the
-	// file. Exit status 1 is that case, and keeps polling.
+	// file. Exit status 1 means lsof ran and nothing has the file open, and
+	// keeps polling. Any other error is a start failure (it is missing, or
+	// it cannot be started) and ends the wait.
 	var blocked error
 	held := waitFor(10*time.Second, func() bool {
 		out, err := exec.Command("lsof", "-t", foreign).Output()
 		if err != nil {
-			var start *exec.Error
-			if errors.As(err, &start) {
+			var exit *exec.ExitError
+			if !errors.As(err, &exit) {
 				blocked = err
 				return true
 			}

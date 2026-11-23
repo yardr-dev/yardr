@@ -108,6 +108,11 @@ const shotTimeout = time.Minute
 // under -race on a loaded machine, 6 s quiet).
 const shotLoadTimeout = 10 * time.Second
 
+// hostGiveUp is how long a host-failure line gets before the run is stopped.
+// It is the loaded deadline. A test of a script that has already exited
+// shortens it, so the stop lands while the output pipe is still open.
+var hostGiveUp = shotLoadTimeout
+
 // shotFuse is how long a test waits on the script before it gives up on it:
 // a fuse against a script that hangs, not a measure of it. It is written for
 // an idle box and sized to the machine (testload.Scale), so a script that was
@@ -192,27 +197,34 @@ func runStarted(ctx context.Context, stop context.CancelFunc, cmd *exec.Cmd, env
 	err := cmd.Run()
 	w.halt()
 	out := []byte(w.String())
-	if err != nil && ctx.Err() != nil {
+	return shotResult(ctx, start, out, err)
+}
+
+// shotResult is what runStarted makes of cmd.Run. A script that exited on its
+// own keeps that status, even when the host deadline also fired while its
+// output was still draining: a non-zero exit beside a host-failure line is
+// the script's own refusal, and windowVerdict fails it. A deadline that
+// stopped a process still running is the timeout. ErrWaitDelay is a script
+// that exited 0 while something it started still held its output, a success
+// (yardr-8ybv). A signalled exit (ExitCode -1) is the deadline's kill, not
+// an exit the script chose.
+func shotResult(ctx context.Context, start time.Time, out []byte, err error) (int, string, error) {
+	if err == nil {
+		return 0, string(out), nil
+	}
+	var exit *exec.ExitError
+	switch {
+	case errors.As(err, &exit) && exit.ExitCode() >= 0:
+		return exit.ExitCode(), string(out), nil
+	case errors.Is(err, exec.ErrWaitDelay):
+		return 0, string(out), nil
+	case ctx.Err() != nil:
 		return 1, string(out) + "shot: chrome did not finish within " + timeoutSecs(ctx, start) + "\n", nil
+	case errors.As(err, &exit):
+		return exit.ExitCode(), string(out), nil
+	default:
+		return 0, "", err
 	}
-	rc := 0
-	if err != nil {
-		var exit *exec.ExitError
-		switch {
-		case errors.As(err, &exit):
-			rc = exit.ExitCode()
-		case errors.Is(err, exec.ErrWaitDelay):
-			// The script exited 0, the only exit Go reports this for, and a
-			// process it started still held its output a second later. With
-			// real Chrome that can be one of its helpers outliving the browser's
-			// own process, which the script does not wait for and the shot does
-			// not depend on, so the run is the script's exit and what it
-			// printed (yardr-8ybv).
-		default:
-			return 0, "", err
-		}
-	}
-	return rc, string(out), nil
 }
 
 // hostWatch is the script's combined output. On the first line that says this
@@ -232,11 +244,11 @@ func (w *hostWatch) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	n, err := w.buf.Write(p)
-	// The whole log is not scanned again. Chrome can print the bus error for
-	// the whole deadline, and each write would otherwise copy the log so far
-	// (hostFailureWritten).
+	// The whole log is not scanned again. A host-failure line can be printed
+	// for the whole deadline, and each write would otherwise copy the log so
+	// far (hostFailureWritten).
 	if w.timer == nil && !w.stopped && hostFailureWritten(w.buf.Bytes(), len(p)) {
-		w.timer = time.AfterFunc(shotLoadTimeout, w.stop)
+		w.timer = time.AfterFunc(hostGiveUp, w.stop)
 	}
 	return n, err
 }
@@ -1384,6 +1396,46 @@ func closeTo(r, g, b, wantR, wantG, wantB uint8) bool {
 		return c - a
 	}
 	return diff(r, wantR) <= 8 && diff(g, wantG) <= 8 && diff(b, wantB) <= 8
+}
+
+// A script that has already exited keeps its status when the host deadline
+// fires while something it started still holds the output pipe. The deadline
+// is shortened so it lands in that window. A script still running is the
+// timeout, and the verdict skips it.
+func TestShotKeepsAnExitThatBeatTheHostDeadline(t *testing.T) {
+	if _, err := exec.LookPath("curl"); err != nil {
+		t.Skip("no curl: it checks the page before the shot")
+	}
+	prev := hostGiveUp
+	hostGiveUp = 200 * time.Millisecond
+	t.Cleanup(func() { hostGiveUp = prev })
+	s := page(t)
+	for _, c := range []struct {
+		name, body string
+		skip       bool
+	}{
+		{"exited 7", "echo '4718 bytes written to file shot.png'\nsleep 30 &\necho $! >\"$SHOT_PIDS\"\nexit 7\n", false},
+		{"still running", "echo '4718 bytes written to file shot.png'\nexec sleep 30\n", true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			pids := filepath.Join(dir, "pids")
+			bin := filepath.Join(dir, "chrome")
+			scripttest.Write(t, bin, "#!/bin/sh\n"+c.body)
+			t.Cleanup(func() { reap(pids) })
+			rc, text := runShot(shotCtx(t), t, []string{s.URL + "/page", filepath.Join(t.TempDir(), "shot.png")}, "SHOT_CHROME="+bin, "SHOT_PIDS="+pids)
+			v, why := windowVerdict(rc, text, false)
+			if c.skip {
+				if v != shotSkipped || !strings.Contains(text, "did not finish") {
+					t.Fatalf("a Chrome still running: verdict %d (%s), exit %d, output %q, want a timeout skip", v, why, rc, text)
+				}
+				return
+			}
+			if strings.Contains(text, "did not finish") || v != shotFailed || rc != 7 {
+				t.Fatalf("a script that exited 7: verdict %d (%s), exit %d, output %q, want a failure with exit 7", v, why, rc, text)
+			}
+		})
+	}
 }
 
 // The shot itself, with real Chrome against the local page: a window-sized
