@@ -6,7 +6,7 @@ package shot
 // proxy runs the same suite; the tests that need a proxy set their own.
 // The shot itself needs headless Chrome, which the machine running the
 // tests may not have, may give no display to draw on (macOS Chrome then
-// hangs), may log that it cannot open a bus and then never exit, or may be
+// hangs), may write the shot and then never exit, or may be
 // too loaded for it to finish; then that test skips. A stand-in Chrome
 // proves the script passes the page through with the right flags. The refusals need no Chrome: the script checks the file and the
 // page first. Nothing waits on Chrome without a deadline: the script stops
@@ -174,11 +174,13 @@ func runShotTermIgnored(ctx context.Context, args []string, env ...string) (int,
 }
 
 // runStarted runs cmd, which starts the script, as runShotCmd describes.
-// stop ends cmd's context. A Chrome that logs a host failure (chromeHostFailure)
-// and is still running shotLoadTimeout later is stopped then. The same line
-// is printed by a Chrome that goes on to finish, so the wait is the loaded
-// deadline, inside which a prompt shot exits. Past it the run is a skip
-// (windowVerdict). Waiting out the quiet minute only reached that same skip.
+// stop ends cmd's context. A Chrome that logs a host failure
+// (hostFailureMarkers) and is still running shotLoadTimeout later is stopped
+// then. Those lines mean this host's Chrome will not finish a shot the
+// script can use. A bus warning is not one of them: Chrome prints "Failed
+// to connect to the bus" and still finishes, so a timeout beside that line
+// can be a real hang and is left to the quiet minute, where it fails
+// (windowVerdict).
 func runStarted(ctx context.Context, stop context.CancelFunc, cmd *exec.Cmd, env []string) (int, string, error) {
 	start := time.Now()
 	cmd.Env = scriptEnv(env...)
@@ -1245,11 +1247,14 @@ const (
 	shotFailed                 // the script is at fault
 )
 
-// hostFailureMarkers are the lines Chrome prints when this host cannot finish
-// a shot: the macOS display link that never finishes, or a bus Chrome asked
-// for and could not open. A Chrome that prints one and then exits has
-// finished; the line alone is not a failure.
-var hostFailureMarkers = []string{displayLinkFailure, "Failed to connect to the bus"}
+// hostFailureMarkers are lines that mean this host's Chrome will not finish
+// a shot the script can use. The display link is the macOS hang that never
+// ends (yardr-zkfj). "bytes written to file" is Chrome's own line that the
+// screenshot is done: past the loaded deadline the process has finished the
+// shot and will not exit. A bus warning is not a marker. Chrome prints
+// "Failed to connect to the bus" and still finishes, so a timeout beside
+// that line can be a real hang and must fail.
+var hostFailureMarkers = []string{displayLinkFailure, "bytes written to file"}
 
 // hostFailureTail is how many bytes before a write still count: one less than
 // the longest marker, so a marker cut between two writes is still seen. The
@@ -1310,7 +1315,7 @@ func windowVerdict(rc int, text string, loaded bool) (verdict, string) {
 		return shotSkipped, "no headless Chrome: " + strings.TrimSpace(text)
 	case strings.Contains(text, "chrome did not finish within"):
 		if line := chromeHostFailure(text); line != "" {
-			why := "chrome cannot finish a shot on this host, and did not finish: "
+			why := "chrome wrote the shot and did not exit: "
 			if strings.Contains(line, displayLinkFailure) {
 				why = "chrome cannot make a display link on this host, and did not finish: "
 			}
@@ -1389,9 +1394,11 @@ func closeTo(r, g, b, wantR, wantG, wantB uint8) bool {
 // narrow is Chrome's to give and not only the script's to ask for, so the
 // stand-in's check of the flag is not enough. A machine with no Chrome skips
 // it; the stand-in test above proves the flags there. So does a Chrome that
-// cannot make a display link or cannot open a bus and then does not exit
-// (runStarted stops that at the loaded deadline), and under load the
-// deadline is short and a Chrome that misses it skips too, with the reason
+// cannot make a display link, or writes the shot and then does not exit
+// (runStarted stops that at the loaded deadline). A bus warning is neither:
+// Chrome prints it and still finishes, so a quiet timeout beside it fails.
+// Under load the deadline is short and a Chrome that misses it skips too,
+// with the reason
 // (windowVerdict): a slow machine or a host whose Chrome cannot finish is
 // not a failure of the shot code, and the skip must not cost the full
 // minute. A skip ends the test, so the second shot is taken only where the
@@ -1477,15 +1484,19 @@ func TestShotWritesAWindowSizedPNG(t *testing.T) {
 // of the write before, so a line cut between two writes is still seen and a
 // line already passed is not copied again on every later write.
 func TestHostFailureWrittenSeesAMarkerSplitAcrossWrites(t *testing.T) {
-	marker := "Failed to connect to the bus"
+	marker := "bytes written to file"
 	cut := 10
 	buf := []byte("log " + marker[:cut])
 	if hostFailureWritten(buf, cut) {
-		t.Fatal("a prefix of the bus line counted as the line")
+		t.Fatal("a prefix of the written-shot line counted as the line")
 	}
 	buf = append(buf, marker[cut:]...)
 	if !hostFailureWritten(buf, len(marker)-cut) {
-		t.Fatal("the bus line was split across writes and missed")
+		t.Fatal("the written-shot line was split across writes and missed")
+	}
+	bus := []byte("Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\n")
+	if hostFailureWritten(bus, len(bus)) {
+		t.Fatal("a bus warning counted as a host failure")
 	}
 	// Far enough back that the overlap no longer reaches it.
 	buf = append(buf, bytes.Repeat([]byte("x"), hostFailureTail+1)...)
@@ -1525,9 +1536,10 @@ func TestWindowVerdict(t *testing.T) {
 		{"silent hang, loaded", 1, timedOut, true, shotSkipped, "under load"},
 		{"Chrome failed, loaded", 7, "shot: http://127.0.0.1/page: Chrome failed with exit 7\n", true, shotFailed, "exit 7"},
 		{"display link failure without a timeout", 7, display + "shot: http://127.0.0.1/page: Chrome failed with exit 7\n", false, shotFailed, "exit 7"},
-		{"bus failure, quiet", 1, "Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\n" + timedOut, false, shotSkipped, "cannot finish"},
-		{"bus failure, loaded", 1, "Failed to connect to the bus: Connection refused\n" + timedOut, true, shotSkipped, "cannot finish"},
-		{"bus failure without a timeout", 7, "Failed to connect to the bus: Connection refused\nshot: http://127.0.0.1/page: Chrome failed with exit 7\n", false, shotFailed, "exit 7"},
+		{"bus warning and a timeout, quiet", 1, "Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\n" + timedOut, false, shotFailed, "did not finish"},
+		{"bus warning and a timeout, loaded", 1, "Failed to connect to the bus: Connection refused\n" + timedOut, true, shotSkipped, "under load"},
+		{"bus warning without a timeout", 7, "Failed to connect to the bus: Connection refused\nshot: http://127.0.0.1/page: Chrome failed with exit 7\n", false, shotFailed, "exit 7"},
+		{"shot written and then a timeout, quiet", 1, "4718 bytes written to file /tmp/shot.png\n" + timedOut, false, shotSkipped, "wrote the shot"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			v, why := windowVerdict(c.rc, c.text, c.loaded)
