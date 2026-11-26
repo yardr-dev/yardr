@@ -2994,6 +2994,95 @@ func TestYardTestRerunsFailedPackagesOnce(t *testing.T) {
 	}
 }
 
+// splitflag is the gate's refusal of a go test step whose flag takes its value
+// in the next word (yardr-zn74). again runs a failed package again from the
+// step's dash words alone, so `-run ^TestX$` would rerun as `-run <pkg>`, which
+// matches no test and passes: a test that fails every time would pass on its
+// rerun, and be logged and filed as a flake. The probe cuts the function out of
+// .yardr/test and runs it on the words of a step: it prints the first word
+// again names in its refusal, and nothing for a step it lets through (a value
+// joined to its flag, a boolean flag, a step that is no go test). A row of
+// TestYardTestRerunsFailedPackagesOnce is a whole run of the script, 2 to 3 s,
+// and a shell reaches this rule alone. The other half is the gate's own run,
+// which refuses none of the steps it has. One case runs again itself, cut out
+// the same way, on a refused step: where the call is, and what the refusal says.
+func TestYardTestRefusesASplitFlag(t *testing.T) {
+	t.Parallel()
+	b := gateScript(t)
+	// The functions as the script has them, from their first line to the next
+	// closing brace at the margin: a script the cuts no longer follow fails the
+	// test, telling its editor to move the probe with it.
+	cut := func(name string) string {
+		t.Helper()
+		head := "\n" + name + "() {"
+		_, fn, ok := strings.Cut(string(b), head)
+		if ok {
+			fn, _, ok = strings.Cut(head+fn, "\n}\n")
+		}
+		if !ok {
+			t.Fatalf("cannot cut %s out of %s: move the probe with the script", name, yardTest)
+		}
+		return fn + "\n}\n"
+	}
+	// The script runs under set -e, where again reads splitflag in a command
+	// substitution: a status of its own would end the run without the line that
+	// says why, so the probe runs under it too, and a row fails on a non-zero one.
+	dir := t.TempDir()
+	writeFile(t, dir, "splitflag.sh", "set -e\n"+cut("splitflag")+"\"$@\"\n")
+	// again's other functions are not in this probe: a refused step stops at its
+	// first lines, and a step it let through would fail on the first of them.
+	// The || is the caller's, as the script's own are: only an exit ends the
+	// probe there, and a return would go on to print. Its mktemp writes down
+	// that it was called and makes no file: a file left in TMPDIR would show
+	// the call only where mktemp takes TMPDIR, and macOS's, given no template,
+	// does not.
+	writeFile(t, dir, "again.sh", "set -e\nmktemp() { echo called >>\"$MKTEMP_CALLS\"; echo \"$MKTEMP_CALLS.file\"; }\n"+
+		cut("splitflag")+cut("again")+"again \"$@\" || echo \"again returned $?\"\n")
+	for _, c := range []struct {
+		name string
+		step string // the words of the step, split on spaces
+		want string // the word printed; none for a step that is fine
+	}{
+		{"a race leg with its joined -p", "go test -race -p=4 ./...", ""},
+		{"a socket leg, whose env words come before test", "env YARDR_TEST_RPC=1 go test ./internal/store/", ""},
+		{"the ceilings step as it landed", "env YARDR_CEILINGS_PAGE=page go test -run=^TestCorePackagesKeepUnderTheirCeilings$ .", ""},
+		{"a joined -run", "go test -run=^TestX$ .", ""},
+		{"a joined -timeout beside a boolean", "go test -timeout=5m -race ./x", ""},
+		{"every boolean flag", "go test -race -v -short -failfast -json -cover ./x", ""},
+		{"a dash word before test is no go test flag", "env -u GOFLAGS go test ./x", ""},
+		{"a step that is no go test", "go vet ./...", ""},
+		{"a split -run", "go test -run ^TestX$ .", "-run"},
+		{"a split -count after a boolean", "go test -v -count 2 ./x", "-count"},
+		{"the first split flag is the one named", "go test -count 2 -run X ./x", "-count"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			out, code := runCmd(t, exec.Command("sh", append([]string{filepath.Join(dir, "splitflag.sh"), "splitflag"}, strings.Fields(c.step)...)...))
+			if code != 0 {
+				t.Fatalf("splitflag %s ended with status %d:\n%s", c.step, code, out)
+			}
+			if got := strings.TrimSuffix(out, "\n"); got != c.want {
+				t.Errorf("splitflag %s printed %q, want %q", c.step, got, c.want)
+			}
+		})
+	}
+	// A refused step stops the run before its first run, by an exit, with the
+	// one line that says how to write the flag, and before again has made a
+	// file, which would be one more for the step's own cleanup to miss.
+	t.Run("again refuses a step before it runs", func(t *testing.T) {
+		calls := filepath.Join(t.TempDir(), "mktemp")
+		cmd := exec.Command("sh", filepath.Join(dir, "again.sh"), "go", "test", "-run", "^TestX$", ".")
+		cmd.Env = append(os.Environ(), "MKTEMP_CALLS="+calls)
+		out, code := runCmd(t, cmd)
+		const want = "test: again: -run takes its value in the next word, which a rerun would drop; write it as -run=<value>\n"
+		if out != want || code != 1 {
+			t.Errorf("again ended with status %d and printed %q, want status 1 and %q", code, out, want)
+		}
+		if _, err := os.Stat(calls); err == nil {
+			t.Errorf("again called mktemp before it refused the step")
+		}
+	})
+}
+
 // utf8Locale names a locale of this machine that reads UTF-8, "" where it has
 // none under the usual names. A tool takes a multibyte character for one only
 // in such a locale: macOS's tr stops at an invalid sequence in one and passes

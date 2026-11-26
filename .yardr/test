@@ -767,7 +767,47 @@ exit(WEXITSTATUS($st));'
     perl -e "$race_perl" "$lock" "$0" "$status" "$@"
   fi
 }
+# splitflag prints the first word of a go test step ($@) that is a flag with
+# its value in the next word: a dash word after test with no = that is none
+# of go test's boolean flags below. again reruns a failed package from the
+# step's dash words alone, so such a value would be lost and the rerun be
+# another command (yardr-zn74): -run ^TestX$ would rerun as -run <pkg>, which
+# matches no test and passes. Nothing printed: the step is fine. It returns 0
+# either way, as again reads it in a command substitution under set -e, where
+# a status would end the run without the line that says why.
+splitflag() {
+  seen_test=0
+  for a in "$@"; do
+    if [ "$seen_test" = 0 ]; then
+      if [ "$a" = test ]; then
+        seen_test=1
+      fi
+    else
+      case "$a" in
+        -*=* | -race | -v | -short | -failfast | -json | -cover) ;;
+        -*)
+          printf '%s\n' "$a"
+          return 0
+          ;;
+      esac
+    fi
+  done
+  return 0
+}
 again() {
+  # A split flag is a fault in this script, not in the code under test, so the
+  # whole run stops: exit, not return, which a caller's || rc=$? would take for
+  # a failed step. It stops before the first run and before the mktemp lines
+  # below, so that no file is left behind.
+  case " $* " in
+    *" go test "*)
+      bad=$(splitflag "$@")
+      if [ -n "$bad" ]; then
+        echo "test: again: $bad takes its value in the next word, which a rerun would drop; write it as $bad=<value>" >&2
+        exit 1
+      fi
+      ;;
+  esac
   t0=$(date +%s)
   log=$(mktemp)
   acc=$(mktemp)
@@ -969,7 +1009,7 @@ again() {
             # The same flags, the failed packages only: the prefix up to and
             # including "test" (env ... go test), then the flags (what after
             # test starts with -), then the failed packages. Packages and
-            # flags have no spaces.
+            # flags have no spaces, and a flag holds its value (splitflag).
             prefix=""
             flags=""
             seen_test=0
@@ -1792,7 +1832,7 @@ gatepar() {
 # lock holder runs and again re-runs from; a wait of a minute or two leaves the
 # one-minute average much as it was. -p=N is one word, so the dash-words again
 # and packagebudget carry to a re-run keep it whole; a bare -p would reach it as
-# -p -count=1.
+# -p -count=1, so again refuses it (splitflag).
 legflag() {
   legpar=
   legload=$(loadedmachine) || return 0
@@ -1878,7 +1918,8 @@ packagebudget() {
   [ -s "$over" ] || { rm -f "$over"; return 0; }
   # The same flags as the leg, the failed packages' pattern: the prefix up
   # to and including "test" (go test), then the flags (what after test
-  # starts with -). Packages and flags have no spaces.
+  # starts with -). Packages and flags have no spaces, and a flag holds its
+  # value (splitflag: again refuses the step before the leg runs).
   prefix=""
   flags=""
   seen_test=0
@@ -2177,8 +2218,9 @@ filesizebudget() {
 # point (as in a landing or reviewer's base), when the page did not change, or
 # when the base has no page. Keep the regexp on -run in one word: again keeps
 # only flag words on a failed-package rerun, and would otherwise drop the
-# regexp and pass without running the test. The page is the run's own file and
-# is removed when the step ends.
+# regexp and pass without running the test, so it refuses a step that splits
+# the flag (splitflag). The page is the run's own file and is removed when the
+# step ends.
 mainceilings() {
   [ -n "$from" ] || return 0
   [ "$(git rev-parse "$base")" != "$from" ] || return 0
