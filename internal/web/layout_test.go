@@ -87,6 +87,51 @@ func TestPagesFillTheWindow(t *testing.T) {
 	}
 }
 
+// The sidebar is the window's height and no taller, and its rows scroll
+// inside it: a yard with many depots has more rows than a window holds, and
+// a sidebar with only a minimum height would grow with them and stick at the
+// top, its lower rows and Settings out of reach until the page itself ends. The
+// cap is a height, not a minimum, with the vh line before the dvh one as the
+// fallback of a browser that has no dvh; the overflow is its own and
+// vertical; the bar is thin and in the hairlines' colours. Settings keeps the
+// foot of the capped column where the rows are few (TestPhoneBarMore holds
+// .side-foot's auto margin), and the open page's row is brought to the middle
+// of the sidebar on load. A flow page marks its depot row too, but the flow
+// is the target so its row stays in view even when the depot has many flows.
+// What the pixels do is the bead's screenshots.
+func TestSidebarScrollsOnItsOwn(t *testing.T) {
+	t.Parallel()
+	// A declaration stands at the start of its rule or after a space or a
+	// semicolon, so that height does not match min-height.
+	declares := func(rule, decl string) bool {
+		return regexp.MustCompile(`(?:^|[\s;])` + regexp.QuoteMeta(decl)).MatchString(rule)
+	}
+	sidebar := cssRule(t, ".sidebar")
+	for _, want := range []string{
+		// It stays in view while the page scrolls under it, as a column
+		// that Settings' auto margin can take the room of.
+		"position: sticky;", "top: 0;", "display: flex;", "flex-direction: column;",
+		"height: 100vh; height: 100dvh;",
+		"overflow-y: auto;",
+		"scrollbar-width: thin;",
+		"scrollbar-color: var(--hairline-strong) var(--hairline);",
+	} {
+		if !declares(sidebar, want) {
+			t.Errorf(".sidebar lacks %s: %s", want, sidebar)
+		}
+	}
+	// The open row stands in the middle of the sidebar on load, as far as
+	// the sidebar's ends allow. The centre alignment is what keeps Arrivals,
+	// Decide and Crew in view for a depot near the top: the start, which an
+	// initial target takes where nothing names another, scrolls them away.
+	open := cssRule(t, `.sidebar .side-flow[aria-current="page"], .sidebar:not(:has(.side-flow[aria-current="page"])) .side-row[aria-current="page"]`)
+	for _, want := range []string{"scroll-initial-target: nearest;", "scroll-snap-align: center;"} {
+		if !declares(open, want) {
+			t.Errorf("the sidebar's open row lacks %s: %s", want, open)
+		}
+	}
+}
+
 // Home's weight: the answer is the only large line, human words (the
 // answer, reasons, titles) render in the proportional face and machine
 // words (ids, counts, times, stages) stay monospace, and every row runs

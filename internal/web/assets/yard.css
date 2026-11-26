@@ -94,7 +94,8 @@ body {
   background: var(--ground);
   color: var(--ink);
   font: var(--text)/1.5 var(--mono);
-  /* The page scrolls as a document: no column has a scrollbar of its own. */
+  /* The page scrolls as a document: no column has a scrollbar of its own,
+     but the sidebar's, where its rows outrun the window (.sidebar). */
 }
 
 a { color: inherit; text-decoration: none; }
@@ -143,8 +144,15 @@ ul, ol { list-style: none; }
 
 /* The sidebar: the window's left edge, 248 pixels: the yard's chip and
    name, Arrivals, Decide and Crew, the depots with their flows, and
-   Settings at the foot. It stays in view while the page scrolls under it. */
-.sidebar { position: sticky; top: 0; align-self: start; display: flex; flex-direction: column; gap: 2px; min-height: 100vh; min-height: 100dvh; padding: 12px 10px; border-right: 1px solid var(--hairline); font-family: var(--sans); font-size: 13px; }
+   Settings at the foot. It stays in view while the page scrolls under it,
+   and it is the window's height and no taller: a yard with many depots has
+   more rows than a window holds, and a sidebar that grew with them would
+   stick at the top with its lower rows and Settings out of reach until the
+   page ended. So the rows scroll inside it, thin and in the hairlines'
+   colours, while the page stays where it is; where the rows are few,
+   Settings stands at the window's foot. The vh line is the fallback of a
+   browser that has no dvh. */
+.sidebar { position: sticky; top: 0; align-self: start; display: flex; flex-direction: column; gap: 2px; height: 100vh; height: 100dvh; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--hairline-strong) var(--hairline); padding: 12px 10px; border-right: 1px solid var(--hairline); font-family: var(--sans); font-size: 13px; }
 .yard-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px 10px; font-weight: 600; }
 .yard-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .side-places { display: flex; flex-direction: column; gap: 2px; }
@@ -152,6 +160,16 @@ ul, ol { list-style: none; }
 .side-row:hover { color: var(--accent-hover); }
 /* The depot the page stands on: its row stands filled. */
 .side-row[aria-current="page"], .side-flow[aria-current="page"] { background: var(--panel); }
+/* On load the sidebar scrolls to the open page's row and centres it as far
+   as its two ends let it, so a depot or flow below the fold is in view and
+   one in the top half moves nothing. scroll-initial-target does the
+   scrolling and aligns the row by scroll-snap-align, the start where it
+   names none, which would push Arrivals, Decide and Crew out of view for
+   every depot but the first; the sidebar is no snap container, so the
+   alignment snaps nothing else. A flow page marks both its depot and its
+   flow, so only the flow is targeted. A browser without
+   scroll-initial-target opens the sidebar at its top. */
+.sidebar .side-flow[aria-current="page"], .sidebar:not(:has(.side-flow[aria-current="page"])) .side-row[aria-current="page"] { scroll-initial-target: nearest; scroll-snap-align: center; }
 .side-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .side-icon { flex: none; color: var(--dim); }
 .side-icon .teeth { stroke-dasharray: 3.2 2.6; }

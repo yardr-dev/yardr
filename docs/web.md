@@ -2520,8 +2520,16 @@ time at the right edge; running text (a bead's body, a note: `.text`,
 pairs (`.figures`, `.rows`, `.facts`) use the width.
 
 The page scrolls as a document: no column has a scrollbar of its own, at
-any width. The sidebar stays in view while the page scrolls
-under it; the aside scrolls with the page. Wide text that must not
+any width, but the sidebar's. The sidebar stays in view while the page
+scrolls under it and is as tall as the window, no taller. Where its rows
+outrun the window (a yard with many depots and their flows) they scroll
+inside it, with a thin scrollbar in the hairlines' colours and Settings
+after the last row, and the page stays where it is; where the rows are
+few, Settings stands at the window's foot. On load the sidebar scrolls the
+open page's row to its middle, as far as its ends allow, in a browser that
+has `scroll-initial-target`; a flow page targets its flow row, and a depot
+page targets its depot row. In a browser that has not, the sidebar opens at
+its top. The aside scrolls with the page. Wide text that must not
 wrap (a stage file, `.text.file`) still scrolls sideways inside its
 block. An error page renders the sidebar bare: the yard and the fixed
 rows, no counts, no depots.
