@@ -652,9 +652,7 @@ func TestBeadListHidesKnowledgeBeads(t *testing.T) {
 }
 
 // An event already in the log keeps the kind an earlier release gave it,
-// and is read as one of the kind new events carry. A peer still on v0.6.0
-// refuses mail to nobody in the word it had then, which is read like the
-// one this build sends.
+// and is read as one of the kind new events carry.
 func TestAnOldEventKindNamesTheNew(t *testing.T) {
 	t.Parallel()
 	for old, want := range map[string]string{"resident_gave_up": "crew_gave_up", "resident_status": "crew_status",
@@ -665,10 +663,13 @@ func TestAnOldEventKindNamesTheNew(t *testing.T) {
 			t.Errorf("EventKind(%s) = %s, want %s", old, got, want)
 		}
 	}
-	for _, reason := range []string{"no_such_resident", "no_such_crew"} {
-		if got := store.PeerRefusal("north", store.PeerMail, reason); got != "it has no such crew member" {
-			t.Errorf("PeerRefusal(%s) = %q", reason, got)
-		}
+	if got := store.PeerRefusal("north", store.PeerMail, "no_such_crew"); got != "it has no such crew member" {
+		t.Errorf("PeerRefusal(no_such_crew) = %q", got)
+	}
+	// A build reads only the form it writes: the word an earlier release sent
+	// for this refusal is told as any word this build does not know.
+	if got, unknown := store.PeerRefusal("north", store.PeerMail, "no_such_resident"), store.PeerRefusal("north", store.PeerMail, "no_such_word"); got != unknown {
+		t.Errorf("PeerRefusal(no_such_resident) = %q, want the words of an unknown reason: %q", got, unknown)
 	}
 	if store.RefusedNoCrew != "no_such_crew" {
 		t.Errorf("the refusal on the link is %q, want no_such_crew", store.RefusedNoCrew)
