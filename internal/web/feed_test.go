@@ -313,7 +313,7 @@ func TestFeedHTML(t *testing.T) {
 	text := squash(f.get("/").body)
 	for _, want := range []string{
 		shellOpen(h.Head, "home"),
-		leafOf("/", "none"),
+		leafOf("/", "none ignoreTitle:true"),
 		`<ol class="wv-feed" id="feed" sse-swap="message" hx-target="this" hx-swap="afterbegin">`,
 		`<h2 class="wv-sh"><span>What happened</span><a class="wv-sh__count" href="/?all=1">All activity</a></h2>`,
 		`Nothing for you.`,
@@ -334,7 +334,7 @@ func TestFeedHTML(t *testing.T) {
 	all := squash(f.get("/?all=1").body)
 	for _, want := range []string{
 		shellOpen(h.Head, ""),
-		leafOf("/?all=1", "none"),
+		leafOf("/?all=1", "none ignoreTitle:true"),
 		fmt.Sprintf(`<li class="wv-entry" id="e%d">`, h.Head),
 		fmt.Sprintf(`<li class="wv-older" hx-get="/?all=1&amp;before=%d" hx-trigger="intersect once" hx-select="#feed > *" hx-target="this" hx-swap="outerHTML" hx-push-url="false" hx-select-oob="unset"><a href="/?all=1&amp;before=%[1]d">Older</a></li>`, h.Older),
 	} {

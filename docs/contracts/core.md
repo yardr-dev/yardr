@@ -280,11 +280,16 @@ package. Its lines are every non-test `.go` file in its directory, not its
 subdirectories, with each line counted as `wc -l` counts it. The table has a
 row for each package under `internal/` where What is core puts some lines on
 the core side. Its measured cell says how many lines the package held, and
-at which commit, when the ceiling was set.
+at which commit, when the ceiling was set. A raise's cell names the main
+commit the raising bead's branch rests on, with the package's lines there,
+and then the lines the bead added and its id, as
+`<lines> lines at <base commit>, +<added> by <bead id>`: the assembly
+squashes the branch, so none of its commits is on main after the landing. A
+lowering's cell keeps its form, `<lines> lines at <main commit>`.
 
 | package | ceiling | measured |
 |---|---:|---|
-| `internal/store` | 101,675 | 101,675 lines at 1f66d0b13 |
+| `internal/store` | 101,675 | 101,634 lines at 77b50cdcd, +41 by yardr-mn4f |
 | `internal/dispatch` | 20,181 | 18,381 lines at 606fd3bf5 |
 | `internal/rpc` | 7,545 | 7,045 lines at 606fd3bf5 |
 | `internal/server` | 5,910 | 5,410 lines at 606fd3bf5 |

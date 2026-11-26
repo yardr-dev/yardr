@@ -407,8 +407,8 @@ func TestOneLiveLeaf(t *testing.T) {
 	f, asked := windowYard(t)
 	leaf := regexp.MustCompile(`<i class="wv-live" hidden [^>]*></i>`)
 	live := []struct{ path, swap string }{
-		{"/", "none"},
-		{"/?all=1", "none"},
+		{"/", "none ignoreTitle:true"},
+		{"/?all=1", "none ignoreTitle:true"},
 		{"/line", "innerHTML ignoreTitle:true"},
 		{"/beads/" + asked.ID, "innerHTML ignoreTitle:true"},
 		{"/beads", "innerHTML ignoreTitle:true"},

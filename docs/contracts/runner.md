@@ -74,8 +74,9 @@ Each runner builds its handle in `Start`:
   `shell_start` and `herdr_session` (`internal/runner/herdr.go:Herdr.shellOn`).
   For a bead of a dir depot it writes `agent`, `dir`, `depot`, `bead`,
   `workspace`, `tab` and `pane` (`internal/runner/herdr_dir.go:Herdr.startDir`),
-  and for a crew member `agent`, `workspace`, `tab`, `pane`, `dir` and `for`
-  (`internal/runner/herdr_crew.go:Herdr.StartCrew`), and also
+  and for a crew member `agent`, `workspace`, `tab`, `pane` and `dir`, and
+  `for`, the user, only when the session is a conversation session for that
+  user (`internal/runner/herdr_crew.go:Herdr.StartCrew`), and also
   `launch_reference` when its harness finds the transcript by a live index
   (`internal/runner/herdr_crew.go:launchReference`),
   `pane_home` when the pane's environment sets HOME

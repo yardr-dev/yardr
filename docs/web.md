@@ -1197,11 +1197,13 @@ from the same overview on both (`templates/overview.html`).
   older.`). An older page is the feed alone, without the answer and the card.
 
 `/` is a snapshot except for its feed and its list: its feed takes each kept event's entry
-on its top (`sse-swap`, `afterbegin`), and its leaf says `hx-swap="none"`, which refreshes
-the rail and the list alone ([Live pages](#live-pages)). `/line` reads its own address
-again at every event and puts the stage in place, the card's words kept (`hx-preserve` on
-its words field, [The ask card](#the-ask-card)); its list adds `Late`, which home's leaves
-out, and both lists' Running rows say how late a running bead is.
+on its top (`sse-swap`, `afterbegin`), and its leaf says `hx-swap="none ignoreTitle:true"`,
+which refreshes the rail and the list alone and takes no title from the response, so a late
+read does not set the title of the page the person moved to ([Live pages](#live-pages)).
+`/line` reads its own address again at every event and puts the stage in place, the card's
+words kept (`hx-preserve` on its words field, [The ask card](#the-ask-card)); its list adds
+`Late`, which home's leaves out, and both lists' Running rows say how late a running
+bead is.
 
 ### The ask card
 
@@ -2643,7 +2645,7 @@ Nothing needs script to be read or used: every tile, row and link is a plain lin
      hx-swap="innerHTML ignoreTitle:true" hx-select-oob="#rail:outerHTML,#list-head:innerHTML,#list-rows:innerHTML"></i>
   ```
 
-  A snapshot page has none: a depot, a flow's list, a pack file, `/config`, `/delegations/<id>`, `/telemetry`, an older page of the feed or the talk page. Two pages follow the yard in fragments instead. `/` takes each kept event's entry on top of its feed, and its overview stays a snapshot, so its leaf says `hx-swap="none"` and refreshes the rail and the list alone. `/flows` moves a card out of the stage it left and into the one it entered (`format=card`) and has no leaf.
+  A snapshot page has none: a depot, a flow's list, a pack file, `/config`, `/delegations/<id>`, `/telemetry`, an older page of the feed or the talk page. Two pages follow the yard in fragments instead. `/` takes each kept event's entry on top of its feed, and its overview stays a snapshot, so its leaf says `hx-swap="none ignoreTitle:true"` and refreshes the rail and the list alone. It takes no title from the response, so that a late read does not set the title of the page the person moved to. `/flows` moves a card out of the stage it left and into the one it entered (`format=card`) and has no leaf.
 - A form on the page it posts for posts to its own action with `hx-post` and `hx-push-url="false"` and puts the page's answer in the stage. The composer's form has an id that names the conversation and the newest letter the user wrote, and `hx-preserve="true"`, so a read of the page again leaves what is typed, while the form a send brings and another conversation's are new and start empty. A card's words field (`words-<bead>-<ask>`) is kept the same way, and not the form around it: its revision is the bead's as of the read, and a form kept past the next event would post a stale one, refused again at every retry. The overview's card posts without `hx-post`: boosted by the shell, it loads the bead it lands on and pushes that address, where on the bead's own page it answers in place.
 - The two infinite-scroll links, older mail and an older page of the feed, push no address and swap no rail (`hx-push-url="false"`, `hx-select-oob="unset"`).
 - A click that the server answers with an error page is loaded as a link without script is, by `yard.js`: htmx swaps no 4xx or 5xx, so the click would do nothing.

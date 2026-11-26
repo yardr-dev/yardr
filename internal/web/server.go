@@ -523,10 +523,12 @@ func (p Page) Overview() *Home { return p.ov }
 // The swaps of a live page's leaf: the stage's own, which a read of the page
 // puts in place keeping the list and an open drawer, or none, for a page
 // whose stage stays as it was read and whose rail and list alone follow the
-// yard.
+// yard. Both ignore the response's title, which htmx sets on the tab even for
+// a none swap: a read that lands after the person has moved to another page
+// must not rename it.
 const (
 	liveStage = "innerHTML ignoreTitle:true"
-	liveNone  = "none"
+	liveNone  = "none ignoreTitle:true"
 )
 
 // errorData is the Data of every error page, so an error reads the same in
