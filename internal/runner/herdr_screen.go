@@ -440,17 +440,11 @@ func (h *Herdr) InputDialog(ctx context.Context, handle map[string]any) (dialog,
 		return "", "", err
 	}
 	dialog, line = inputDialog(styled, kind)
-	// Two offers are dismissed with Esc as soon as they appear: Claude
-	// Code's auto mode setup, which only asks whether it may change the
-	// operator's settings, and Codex's offer to switch models at its rate
-	// limit, whose picker has no cancel action, so Esc dismisses it
-	// without choosing and the session keeps its model
-	// (harnesses/codex.yaml). Esc changes nothing for either, and leaving
-	// one open can make an otherwise idle session look stuck. Remember
-	// the answer until a read sees the dialog go away, since the pane may
+	// A dialog the runner cancels gets its Esc once per appearance: remember
+	// the cancel until a read sees the dialog go away, since the pane may
 	// take a pass to redraw after the key.
 	h.dialogMu.Lock()
-	if dialog == "auto_mode_setup" || dialog == "rate_limit_switch" {
+	if CancelsDialog(dialog) {
 		if h.dismissedDialogs == nil {
 			h.dismissedDialogs = map[string]string{}
 		}
@@ -470,6 +464,21 @@ func (h *Herdr) InputDialog(ctx context.Context, handle map[string]any) (dialog,
 	delete(h.dismissedDialogs, pane)
 	h.dialogMu.Unlock()
 	return dialog, line, nil
+}
+
+// CancelsDialog reports whether the dialog a harness file's `dialogs` calls
+// word is one the runner dismisses with Esc as soon as InputDialog reads it.
+// Every dialog a file names is told of (dispatch.DialogReader); two are
+// cancelled as well, and the runner answers no other. `yardr harness show`
+// reads the list from here, so that what it prints is what the runner does.
+// The two are Claude Code's auto mode setup, which only asks whether it may
+// change the operator's settings, and Codex's offer to switch models at its
+// rate limit, whose picker has no cancel action, so Esc dismisses it without
+// choosing and the session keeps its model (harnesses/codex.yaml). Esc
+// changes nothing for either, and leaving one open can make an otherwise
+// idle session look stuck.
+func CancelsDialog(word string) bool {
+	return word == "auto_mode_setup" || word == "rate_limit_switch"
 }
 
 var _ dispatch.LoginReader = (*Herdr)(nil)

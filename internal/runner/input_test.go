@@ -435,6 +435,16 @@ esac`)}
 // the model. Claude Code's offer only asks whether it may change settings.
 func TestInputDialogDismissesOffersWithEsc(t *testing.T) {
 	t.Parallel()
+	// CancelsDialog is where `yardr harness show` reads each dialog's answer
+	// from: the two offers below and no other word. Kimi's cache menu is left
+	// for a person, and a pane that shows no dialog has nothing to cancel.
+	for word, want := range map[string]bool{
+		"auto_mode_setup": true, "rate_limit_switch": true, "cache_menu": false, "": false,
+	} {
+		if got := CancelsDialog(word); got != want {
+			t.Errorf("CancelsDialog(%q) = %v; want %v", word, got, want)
+		}
+	}
 	for name, tc := range map[string]struct {
 		kind, offer, empty, dialog, line string
 	}{

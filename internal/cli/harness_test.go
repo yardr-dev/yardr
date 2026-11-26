@@ -57,9 +57,9 @@ func TestHarnessListAndShow(t *testing.T) {
 			"  ~/.codex (or $CODEX_HOME)/sessions/*/*/*/rollout-*-{session}.jsonl: input_tokens at payload.info.last_token_usage of the last line whose payload.type is token_count that has any of them\n"+
 			"  window: from payload.info.model_context_window of the same line; no reading until it is present\n",
 		"at_capacity    ^(Selected model is at capacity|Flex capacity unavailable)",
-		"Dialogs it draws in place of its input: told of at once (nudge_held), never answered",
-		"rate_limit_switch  ^Approaching rate limits",
-		`rate_limit_switch  ^Switch to gpt-6-luna for lower credit usage\?`,
+		"Dialogs it draws in place of its input: told of at once (nudge_held); answered only where the row says",
+		"rate_limit_switch  ^Approaching rate limits                        Esc (cancelled)",
+		`rate_limit_switch  ^Switch to gpt-6-luna for lower credit usage\?  Esc (cancelled)`,
 		"Models it offers", "gpt-6-luna (GPT-6 Luna), recommended for a yardmaster", "gpt-6-astra (GPT-6 Astra)",
 		"Tokens a session used, counted once it has stopped\n  ~/.codex (or $CODEX_HOME)/sessions/*/*/*/rollout-*-{session}.jsonl\n",
 		"  1. the last line whose payload.type is token_count that has numbers at payload.info.total_token_usage\n",
@@ -72,8 +72,9 @@ func TestHarnessListAndShow(t *testing.T) {
 		"trust environment (automatic only): KIMI_CODE_TRUST_WORKSPACE",
 		"after the box's edge: │", "a message it took:    ✨",
 		"no source known: nothing is recorded and nothing compared",
-		"Dialogs it draws in place of its input: told of at once (nudge_held), never answered",
-		"cache_menu  ^This session has been idle for",
+		"Dialogs it draws in place of its input: told of at once (nudge_held); answered only where the row says",
+		"cache_menu  ^This session has been idle for  never",
+		"cache_menu  ^Cache expired                   never",
 		"What it adds to a hint of yardr's",
 		"reset (a prompt at a usage limit's reset that it has not taken): Kimi asks what to do with a session that sat idle,")
 	if out := ask(0, "harness", "show", "codex"); strings.Contains(out, "adds to a hint") ||
@@ -95,8 +96,8 @@ func TestHarnessListAndShow(t *testing.T) {
 		"  ^Select login method:", "  ^Paste code here if prompted",
 		"Background work of its agent, drawn around its input: not idle to the idle limit while it shows",
 		`   · \d+ shells? still running$`,
-		"Dialogs it draws in place of its input: told of at once (nudge_held), never answered",
-		`auto_mode_setup  ^Teach auto mode about your environment\?`)
+		"Dialogs it draws in place of its input: told of at once (nudge_held); answered only where the row says",
+		`auto_mode_setup  ^Teach auto mode about your environment\?  Esc (cancelled)`)
 	// Claude's file names a context, two entries of usage and three
 	// first-start screens: each is printed in the order the file has it, with
 	// what yardr does with it.

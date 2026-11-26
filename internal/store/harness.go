@@ -68,7 +68,8 @@ type Harness struct {
 	Forget *ForgetSource `yaml:"forget" json:"forget,omitempty"`
 	Errors []ErrorLine   `yaml:"errors" json:"errors,omitempty"`
 	// Dialogs are the questions the harness is known to draw in place of
-	// its input, which yardr tells of and never answers.
+	// its input. yardr tells of each one and answers none, except those the
+	// herdr runner cancels with Esc (runner.CancelsDialog).
 	Dialogs []Dialog `yaml:"dialogs" json:"dialogs,omitempty"`
 	// Login are the lines of the harness's login screen, drawn in place
 	// of its input when it has no login, which yardr types nothing into

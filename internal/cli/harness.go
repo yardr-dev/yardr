@@ -9,6 +9,7 @@ import (
 
 	"io"
 	"yardr.dev/yardr/internal/agents"
+	"yardr.dev/yardr/internal/runner"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -364,12 +365,16 @@ func printHarness(w io.Writer, h store.Harness, has bool) {
 		table(w, "  REASON\tPATTERN", rows)
 	}
 	if len(h.Dialogs) > 0 {
-		fmt.Fprintln(w, "\nDialogs it draws in place of its input: told of at once (nudge_held), never answered")
+		fmt.Fprintln(w, "\nDialogs it draws in place of its input: told of at once (nudge_held); answered only where the row says")
 		rows = nil
 		for _, d := range h.Dialogs {
-			rows = append(rows, []string{"  " + d.Dialog, d.Pattern})
+			answer := "never"
+			if runner.CancelsDialog(d.Dialog) {
+				answer = "Esc (cancelled)"
+			}
+			rows = append(rows, []string{"  " + d.Dialog, d.Pattern, answer})
 		}
-		table(w, "  DIALOG\tPATTERN", rows)
+		table(w, "  DIALOG\tPATTERN\tANSWER", rows)
 	}
 	if len(h.Login) > 0 {
 		fmt.Fprintln(w, "\nLogin screen, drawn in place of its input: told of at once (nudge_held), never typed into")
