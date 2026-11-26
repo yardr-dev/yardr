@@ -308,7 +308,11 @@ fails when a row names a directory where no package stands, and when this
 page names a package as core and the table has no row for it. The page names
 a package as core by a file's path in the list of what is core, and by the
 owning package of a type in Core types. A package under its ceiling by any
-amount passes, and the test never raises, lowers or rewrites a ceiling.
+amount passes, and the test never raises, lowers or rewrites a ceiling. The
+gate's plain run also holds a branch to the ceilings of its landing base's
+page when main changed that page after the branch point: it runs this test
+once more with main's copy in `YARDR_CEILINGS_PAGE`, and the test refuses a
+package over a ceiling of that copy and judges nothing else of it.
 
 ## Names the core may not name
 

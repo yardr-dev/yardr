@@ -48,6 +48,14 @@
 # the named base is ahead of HEAD, a plain run compares from the branch
 # point instead, and says so loudly; a landing is the whole suite.
 #
+# The base also says what the core's Line ceilings are now
+# (docs/contracts/core.md): a branch carries the page it branched with, and a
+# ceiling main lowered since is one the landing's rebase meets first. When main
+# changed that page after the branch point, the run says so and holds the tree
+# to main's copy of it too (mainceilings), by one more run of the test that
+# holds the ceilings. A landing is rebased onto its base and a reviewer's base
+# is on the branch, so there the page is the branch's own and the step is silent.
+#
 # Two budgets (docs/testing.md R1 and R2): a package's tests finish in 60 s
 # under -race, and a test sleeps no more than 500 ms at a site. Each has its
 # allow-list below, naming why each entry is over and which bead brings it
@@ -131,8 +139,10 @@ filesizewarnings_done=
 unset YARDR_HOOK_ADDR YARDR_EVENT_RETENTION YARDR_HOOK_PAYLOAD_RETENTION YARDR_PPROF YARDR_DAEMON_PPROF
 # The load factor is the race leg's to give (sizewaits). One the run was started
 # with, by a hand or by the race leg of a test that runs this script, would size
-# the plain run and the re-run of a package alone as well.
-unset YARDR_TEST_LOAD
+# the plain run and the re-run of a package alone as well. The page of the
+# core's line ceilings is the step's to give too (mainceilings): one the run was
+# started with would hold every test of it to a page that is not its base's.
+unset YARDR_TEST_LOAD YARDR_CEILINGS_PAGE
 # Every go command of the run, and the go the tests start (the black-box
 # suites build the binary), builds with -trimpath. Without it a package's
 # directory goes into the ID of each action that builds it, and so into the ID
@@ -2156,6 +2166,36 @@ filesizebudget() {
   if [ -n "$out" ]; then printf '%s\n' "$out"; fi
   [ "$st" = 0 ] || exit 1
 }
+# mainceilings holds the tree to the Line ceilings its base has now. A branch
+# carries the copy of docs/contracts/core.md it branched with, and
+# TestCorePackagesKeepUnderTheirCeilings judges the tree by that copy alone: a
+# ceiling the base lowered after the branch point is not in it, so a landing's
+# rebase can be the first run to meet it. When the base changed the page, run
+# that test once more with the base's copy of the page in YARDR_CEILINGS_PAGE;
+# the test checks only whether packages in this tree exceed its ceilings. The
+# step is silent when there is no branch point, when the base is the branch
+# point (as in a landing or reviewer's base), when the page did not change, or
+# when the base has no page. Keep the regexp on -run in one word: again keeps
+# only flag words on a failed-package rerun, and would otherwise drop the
+# regexp and pass without running the test. The page is the run's own file and
+# is removed when the step ends.
+mainceilings() {
+  [ -n "$from" ] || return 0
+  [ "$(git rev-parse "$base")" != "$from" ] || return 0
+  if git diff --quiet "$from" "$base" -- docs/contracts/core.md; then
+    return 0
+  fi
+  ceilings=$(mktemp)
+  if ! git show "$base:docs/contracts/core.md" >"$ceilings" 2>/dev/null; then
+    rm -f "$ceilings"
+    return 0
+  fi
+  echo "test: $base ($said) changed docs/contracts/core.md since the branch point $fromshort: holding the branch to its Line ceilings"
+  st=0
+  again env YARDR_CEILINGS_PAGE="$ceilings" go test -run='^TestCorePackagesKeepUnderTheirCeilings$' . || st=$?
+  rm -f "$ceilings"
+  return "$st"
+}
 # Every production write of a peer, group, crew member or user record (a put
 # or a bucket delete on bPeers, bGroups, bCrew or bUsers in a non-test,
 # non-migration file of internal/store), and what the staleness tells have
@@ -2707,6 +2747,7 @@ whole() {
   again env GOOS=linux go vet ./...
   sleepbudget
   filesizebudget
+  mainceilings
   tellsitebudget
   nomarkers
   nohostnames
@@ -3071,6 +3112,7 @@ built() {
   again go build ./...
   sleepbudget
   filesizebudget
+  mainceilings
   tellsitebudget
   nomarkers
   nohostnames

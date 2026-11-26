@@ -27,6 +27,13 @@ import (
 // that moves code out, and this test never raises or rewrites one. The page
 // names this test as the check of its fifth rule. It reads files and starts
 // no process.
+//
+// A branch's page is the one it branched with, and main may have lowered a
+// ceiling since, which the landing's rebase would then meet and the branch's
+// own gate run would not. When main changed the page after the branch point
+// the gate runs this test again with YARDR_CEILINGS_PAGE naming a copy of
+// main's, and the packages are held to its ceilings as well, and to nothing
+// else of it (overMainCeilings): the branch's own page judges the rest.
 func TestCorePackagesKeepUnderTheirCeilings(t *testing.T) {
 	t.Parallel()
 	// The test runs in the repository root, the root package's directory.
@@ -43,6 +50,15 @@ func TestCorePackagesKeepUnderTheirCeilings(t *testing.T) {
 	}
 	for _, problem := range ceilingProblems(string(page), lines) {
 		t.Errorf("docs/contracts/core.md: %s", problem)
+	}
+	if file := os.Getenv("YARDR_CEILINGS_PAGE"); file != "" {
+		basePage, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, problem := range overMainCeilings(string(basePage), lines) {
+			t.Errorf("the landing base's docs/contracts/core.md: %s", problem)
+		}
 	}
 }
 
@@ -94,21 +110,21 @@ var (
 	namedPath = regexp.MustCompile("`(internal/[^`\\s]+)`")
 )
 
-// ceilingProblems reads a page's Line ceilings table and says what is wrong
-// with it, one sentence for each fault, the sentence naming the package it
-// is about: a row that cannot be read, a package over its ceiling (with its
-// count and its ceiling), a row for a package that is not there, a package
-// twice, and a package the page names as core that has no row. lines is the
-// count of a package's lines, and whether a package stands in that
-// directory; it is a parameter so that the refusals can be tried against
-// made-up pages and counts.
-func ceilingProblems(page string, lines func(pkg string) (n int, found bool)) []string {
+// ceilingRows reads the rows of a page's Line ceilings table: ceilings is the
+// ceiling each row gives its package, and problems one sentence for each fault
+// of a row itself, the sentence naming the package it is about: a row that
+// cannot be read, a package twice, a measured cell left blank, a ceiling that
+// is no whole number. A row with a ceiling that cannot be read still stands
+// for its package, at 0, which no ceiling is (ceilingNumber refuses it), so
+// that the one fault is not told again as a missing row; a caller that counts
+// lines against a ceiling skips it. A page whose table cannot be found has no
+// ceilings, a nil map, and the one problem that says why.
+func ceilingRows(page string) (ceilings map[string]int, problems []string) {
 	rows, problem := sectionTable(page, "Line ceilings", ceilingCols)
 	if problem != "" {
-		return []string{problem}
+		return nil, []string{problem}
 	}
-	var problems []string
-	hasRow := map[string]bool{}
+	ceilings = map[string]int{}
 	for i, cells := range rows {
 		row := "row " + strconv.Itoa(i+1) + ": "
 		if len(cells) != len(ceilingCols) {
@@ -121,13 +137,13 @@ func ceilingProblems(page string, lines func(pkg string) (n int, found bool)) []
 			continue
 		}
 		pkg := m[1]
-		if hasRow[pkg] {
+		if _, ok := ceilings[pkg]; ok {
 			problems = append(problems, pkg+" has two rows in Line ceilings, want one")
 			continue
 		}
-		// A row with a ceiling that cannot be read still stands for its
-		// package, so that the one fault is not told again as a missing row.
-		hasRow[pkg] = true
+		// The row stands for its package from here on, whether or not its
+		// ceiling reads.
+		ceilings[pkg] = 0
 		if cells[2] == "" {
 			problems = append(problems, pkg+": the measured cell is blank: write the lines the package held and the commit"+
 				" the ceiling was set from")
@@ -141,22 +157,74 @@ func ceilingProblems(page string, lines func(pkg string) (n int, found bool)) []
 			problems = append(problems, pkg+": the ceiling cell "+strconv.Quote(cells[1])+" is not a whole number of lines: "+err.Error())
 			continue
 		}
+		ceilings[pkg] = ceiling
+	}
+	return ceilings, problems
+}
+
+// overCeiling is the sentence for a package that holds more lines than its
+// ceiling: the package, its count and its ceiling.
+func overCeiling(pkg string, n, ceiling int) string {
+	return pkg + " holds " + strconv.Itoa(n) + " non-test Go lines, " + strconv.Itoa(n-ceiling) +
+		" over its ceiling of " + strconv.Itoa(ceiling) + ": move how-and-what out of the package before adding core code" +
+		" (docs/contracts/core.md, Line ceilings)"
+}
+
+// ceilingProblems reads a page's Line ceilings table and says what is wrong
+// with it, one sentence for each fault, the sentence naming the package it
+// is about: a row that cannot be read, a package over its ceiling (with its
+// count and its ceiling), a row for a package that is not there, a package
+// twice, and a package the page names as core that has no row. lines is the
+// count of a package's lines, and whether a package stands in that
+// directory; it is a parameter so that the refusals can be tried against
+// made-up pages and counts.
+func ceilingProblems(page string, lines func(pkg string) (n int, found bool)) []string {
+	ceilings, problems := ceilingRows(page)
+	if ceilings == nil {
+		return problems
+	}
+	for _, pkg := range slices.Sorted(maps.Keys(ceilings)) {
+		ceiling := ceilings[pkg]
+		if ceiling == 0 {
+			continue
+		}
 		n, found := lines(pkg)
 		switch {
 		case !found:
 			problems = append(problems, pkg+" has a row in Line ceilings and no package stands there (renamed or removed?): change the row with it")
 		case n > ceiling:
-			problems = append(problems, pkg+" holds "+strconv.Itoa(n)+" non-test Go lines, "+strconv.Itoa(n-ceiling)+
-				" over its ceiling of "+strconv.Itoa(ceiling)+": move how-and-what out of the package before adding core code"+
-				" (docs/contracts/core.md, Line ceilings)")
+			problems = append(problems, overCeiling(pkg, n, ceiling))
 		}
 	}
 	named, more := corePackagesNamed(page)
 	problems = append(problems, more...)
 	for _, pkg := range slices.Sorted(maps.Keys(named)) {
-		if !hasRow[pkg] {
+		if _, ok := ceilings[pkg]; !ok {
 			problems = append(problems, pkg+" is named as core by "+named[pkg]+" and has no row in Line ceilings: add one,"+
 				" set at the package's lines plus the room that section gives")
+		}
+	}
+	return problems
+}
+
+// overMainCeilings says which packages hold more lines than the ceilings of
+// another copy of the page, the one a branch's landing base has now, in the
+// sentence ceilingProblems gives for a package over its own. It judges nothing
+// else of that copy. A row for a package that is not in the tree is skipped,
+// as the base may have added the package, and so is a package of the tree with
+// no row, as the branch may have added it, and so are a copy's faults of its
+// own, a row that cannot be read among them: the branch's own page judges
+// those, as it always did. lines is as ceilingProblems has it.
+func overMainCeilings(page string, lines func(pkg string) (n int, found bool)) []string {
+	ceilings, _ := ceilingRows(page)
+	var problems []string
+	for _, pkg := range slices.Sorted(maps.Keys(ceilings)) {
+		ceiling := ceilings[pkg]
+		if ceiling == 0 {
+			continue
+		}
+		if n, found := lines(pkg); found && n > ceiling {
+			problems = append(problems, overCeiling(pkg, n, ceiling))
 		}
 	}
 	return problems
@@ -205,6 +273,29 @@ func corePackagesNamed(page string) (named map[string]string, problems []string)
 	return named, problems
 }
 
+const (
+	// corePageList names internal/a as core by a file of it.
+	corePageList = "- beads (`internal/a/beads.go`)\n"
+	// corePageTypes names internal/b as the owning package of a core type, and
+	// internal/impl only where a type is implemented, which names no core.
+	corePageTypes = "| bead | `internal/a` | a piece of work |\n" +
+		"| runner | `internal/b` | how work starts, implemented in `internal/impl` |\n"
+)
+
+// corePage is a made-up core.md: the list of what is core, a how-and-what
+// list that names internal/e (a package the page does not name as core,
+// so needs no row), the Core types table and the Line ceilings rows given,
+// followed by a section whose table is no ceiling, which no one reads. The
+// refusals of the ceilings are tried on pages it makes, since the real page
+// has no fault to show.
+func corePage(core, types string, rows ...string) string {
+	return "# The core\n\n## What is core\n\nBy this rule these are core:\n\n" + core +
+		"\nThese are how-and-what:\n\n- a view (`internal/e/view.go`)\n\n" +
+		"## Core types\n\n| type | owning package | what it is |\n|---|---|---|\n" + types +
+		"\n## Line ceilings\n\nText.\n\n| package | ceiling | measured |\n|---|---:|---|\n" +
+		strings.Join(rows, "\n") + "\n\nText.\n\n## After\n\n| 1 | not a ceiling | |\n"
+}
+
 // The refusals fire. Each page below is right or wrong in one way, and the
 // problem ceilingProblems gives for it must name the package and the fault,
 // and be the only one. The pages and the counts are made up here because the
@@ -215,76 +306,59 @@ func TestCoreCeilingsRefuse(t *testing.T) {
 	// counts are the lines of the packages that stand in the made-up tree.
 	counts := map[string]int{"internal/a": 10, "internal/b": 5, "internal/c": 7}
 	const (
-		// coreList names internal/a as core by a file of it.
-		coreList = "- beads (`internal/a/beads.go`)\n"
-		// coreTypes names internal/b as the owning package of a core type, and
-		// internal/impl only where a type is implemented, which names no core.
-		coreTypes = "| bead | `internal/a` | a piece of work |\n" +
-			"| runner | `internal/b` | how work starts, implemented in `internal/impl` |\n"
 		rowA = "| `internal/a` | 10 | 10 lines at abc1234 |"
 		rowB = "| `internal/b` | 1,000 | 5 lines at abc1234 |"
 	)
-	// build is a made-up core.md: the list of what is core, a how-and-what
-	// list that names internal/e (a package the page does not name as core,
-	// so needs no row), the Core types table and the Line ceilings rows given,
-	// followed by a section whose table is no ceiling, which no one reads.
-	build := func(core, types string, rows ...string) string {
-		return "# The core\n\n## What is core\n\nBy this rule these are core:\n\n" + core +
-			"\nThese are how-and-what:\n\n- a view (`internal/e/view.go`)\n\n" +
-			"## Core types\n\n| type | owning package | what it is |\n|---|---|---|\n" + types +
-			"\n## Line ceilings\n\nText.\n\n| package | ceiling | measured |\n|---|---:|---|\n" +
-			strings.Join(rows, "\n") + "\n\nText.\n\n## After\n\n| 1 | not a ceiling | |\n"
-	}
 	for _, tc := range []struct {
 		name   string
 		page   string
 		counts map[string]int // lines that replace the made-up counts
 		want   []string       // parts of the one problem; none means the page is right
 	}{
-		{"at its ceiling and under it", build(coreList, coreTypes, rowA, rowB), nil, nil},
-		{"a ceiling written without commas", build(coreList, coreTypes, rowA, rowB, "| `internal/c` | 700 | 7 lines at abc1234 |"), nil, nil},
-		{"a package no one names as core", build(coreList, coreTypes, rowA, rowB, "| `internal/c` | 7 | 7 lines at abc1234 |"), nil, nil},
-		{"over its ceiling", build(coreList, coreTypes, rowA, rowB), map[string]int{"internal/a": 11},
+		{"at its ceiling and under it", corePage(corePageList, corePageTypes, rowA, rowB), nil, nil},
+		{"a ceiling written without commas", corePage(corePageList, corePageTypes, rowA, rowB, "| `internal/c` | 700 | 7 lines at abc1234 |"), nil, nil},
+		{"a package no one names as core", corePage(corePageList, corePageTypes, rowA, rowB, "| `internal/c` | 7 | 7 lines at abc1234 |"), nil, nil},
+		{"over its ceiling", corePage(corePageList, corePageTypes, rowA, rowB), map[string]int{"internal/a": 11},
 			[]string{"internal/a", "holds 11 non-test Go lines", "1 over its ceiling of 10"}},
-		{"far over a ceiling with commas", build(coreList, coreTypes, rowA, rowB), map[string]int{"internal/b": 1500},
+		{"far over a ceiling with commas", corePage(corePageList, corePageTypes, rowA, rowB), map[string]int{"internal/b": 1500},
 			[]string{"internal/b", "holds 1500 non-test Go lines", "500 over its ceiling of 1000"}},
-		{"a package that is not there", build(coreList, coreTypes, rowA, rowB, "| `internal/gone` | 500 | 0 lines at abc1234 |"), nil,
+		{"a package that is not there", corePage(corePageList, corePageTypes, rowA, rowB, "| `internal/gone` | 500 | 0 lines at abc1234 |"), nil,
 			[]string{"internal/gone", "no package stands there"}},
-		{"a core package of the list with no row", build(coreList, coreTypes, rowB), nil,
+		{"a core package of the list with no row", corePage(corePageList, corePageTypes, rowB), nil,
 			[]string{"internal/a", "named as core by the list of what is core", "no row"}},
-		{"the package of a core type with no row", build(coreList, coreTypes, rowA), nil,
+		{"the package of a core type with no row", corePage(corePageList, corePageTypes, rowA), nil,
 			[]string{"internal/b", "named as core by the Core types table", "no row"}},
-		{"a core directory with no row", build("- the pass (`internal/c`)\n"+coreList, coreTypes, rowA, rowB), nil,
+		{"a core directory with no row", corePage("- the pass (`internal/c`)\n"+corePageList, corePageTypes, rowA, rowB), nil,
 			[]string{"internal/c", "named as core by the list of what is core", "no row"}},
-		{"two rows for one package", build(coreList, coreTypes, rowA, rowB, rowA), nil, []string{"internal/a", "two rows"}},
-		{"a ceiling that is no number", build(coreList, coreTypes, rowA, rowB, "| `internal/c` | lots | 7 lines at abc1234 |"), nil,
+		{"two rows for one package", corePage(corePageList, corePageTypes, rowA, rowB, rowA), nil, []string{"internal/a", "two rows"}},
+		{"a ceiling that is no number", corePage(corePageList, corePageTypes, rowA, rowB, "| `internal/c` | lots | 7 lines at abc1234 |"), nil,
 			[]string{"internal/c", "ceiling cell", `"lots"`}},
-		{"a ceiling of nothing", build(coreList, coreTypes, rowA, rowB, "| `internal/c` | 0 | 7 lines at abc1234 |"), nil,
+		{"a ceiling of nothing", corePage(corePageList, corePageTypes, rowA, rowB, "| `internal/c` | 0 | 7 lines at abc1234 |"), nil,
 			[]string{"internal/c", "ceiling cell", `"0"`}},
-		{"a ceiling with its commas misplaced", build(coreList, coreTypes, rowA, rowB, "| `internal/c` | 1,00 | 7 lines at abc1234 |"), nil,
+		{"a ceiling with its commas misplaced", corePage(corePageList, corePageTypes, rowA, rowB, "| `internal/c` | 1,00 | 7 lines at abc1234 |"), nil,
 			[]string{"internal/c", "ceiling cell", `"1,00"`}},
-		{"a ceiling with words", build(coreList, coreTypes, rowA, rowB, "| `internal/c` | 700 lines | 7 lines at abc1234 |"), nil,
+		{"a ceiling with words", corePage(corePageList, corePageTypes, rowA, rowB, "| `internal/c` | 700 lines | 7 lines at abc1234 |"), nil,
 			[]string{"internal/c", "ceiling cell", `"700 lines"`}},
-		{"a ceiling too large to count", build(coreList, coreTypes, rowA, rowB, "| `internal/c` | 99999999999999999999 | 7 lines at abc1234 |"), nil,
+		{"a ceiling too large to count", corePage(corePageList, corePageTypes, rowA, rowB, "| `internal/c` | 99999999999999999999 | 7 lines at abc1234 |"), nil,
 			[]string{"internal/c", "ceiling cell", "out of range"}},
-		{"a package outside internal", build(coreList, coreTypes, rowA, rowB, "| `packs` | 700 | 7 lines at abc1234 |"), nil,
+		{"a package outside internal", corePage(corePageList, corePageTypes, rowA, rowB, "| `packs` | 700 | 7 lines at abc1234 |"), nil,
 			[]string{"row 3: ", "package cell", "`packs`"}},
-		{"a package without backticks", build(coreList, coreTypes, rowA, rowB, "| internal/c | 700 | 7 lines at abc1234 |"), nil,
+		{"a package without backticks", corePage(corePageList, corePageTypes, rowA, rowB, "| internal/c | 700 | 7 lines at abc1234 |"), nil,
 			[]string{"row 3: ", "package cell", "internal/c"}},
-		{"a package path that climbs", build(coreList, coreTypes, rowA, rowB, "| `internal/../a` | 700 | 7 lines at abc1234 |"), nil,
+		{"a package path that climbs", corePage(corePageList, corePageTypes, rowA, rowB, "| `internal/../a` | 700 | 7 lines at abc1234 |"), nil,
 			[]string{"row 3: ", "package cell"}},
-		{"a row of two cells", build(coreList, coreTypes, rowA, rowB, "| `internal/c` | 700 |"), nil, []string{"row 3: ", "2 cells"}},
-		{"a blank measured cell", build(coreList, coreTypes, rowA, rowB, "| `internal/c` | 700 |  |"), nil,
+		{"a row of two cells", corePage(corePageList, corePageTypes, rowA, rowB, "| `internal/c` | 700 |"), nil, []string{"row 3: ", "2 cells"}},
+		{"a blank measured cell", corePage(corePageList, corePageTypes, rowA, rowB, "| `internal/c` | 700 |  |"), nil,
 			[]string{"internal/c", "measured cell is blank"}},
 		{"no Line ceilings section", "# The core\n\n## Layers\n\ntext\n", nil, []string{"no ## Line ceilings section"}},
 		{"no table row", "# The core\n\n## Line ceilings\n\ntext\n", nil, []string{"no table row"}},
 		{"another header", "# The core\n\n## Line ceilings\n\n| package | limit |\n|---|---|\n| `internal/a` | 10 |\n", nil,
 			[]string{"header", "| package | ceiling | measured |"}},
-		{"no list of what is core", strings.Replace(build(coreList, coreTypes, rowA, rowB), "By this rule these are core:", "Core:", 1), nil,
+		{"no list of what is core", strings.Replace(corePage(corePageList, corePageTypes, rowA, rowB), "By this rule these are core:", "Core:", 1), nil,
 			[]string{"no list of what is core", "By this rule these are core:"}},
-		{"no Core types section", strings.Replace(build(coreList, coreTypes, rowA, rowB), "## Core types", "## Types", 1), nil,
+		{"no Core types section", strings.Replace(corePage(corePageList, corePageTypes, rowA, rowB), "## Core types", "## Types", 1), nil,
 			[]string{"no ## Core types section"}},
-		{"a Core types row of two cells", build(coreList, coreTypes+"| flow | `internal/a` |\n", rowA, rowB), nil,
+		{"a Core types row of two cells", corePage(corePageList, corePageTypes+"| flow | `internal/a` |\n", rowA, rowB), nil,
 			[]string{"Core types row 3", "2 cells"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -355,5 +429,71 @@ func TestCoreCeilingsRefuse(t *testing.T) {
 	// that is not there: it is an error the test stops on.
 	if _, _, err := packageLines(filepath.Join(root, "p", "a.go")); err == nil {
 		t.Error("packageLines of a file is no error, so a row naming one would read as a missing package")
+	}
+}
+
+// A branch is held to the ceilings of the page its landing base has now, and to
+// nothing else of that page (overMainCeilings). A tree under the ceiling of the
+// page it branched with and over the one main has lowered it to is refused, and
+// the problem names the package, its count and main's ceiling. Three things are
+// no fault of the branch's: a row of the base's page for a package that is not
+// in the tree (the base may have added the package), a package of the tree that
+// the base's page has no row for (the branch may have added it), and what is
+// wrong with the base's page itself. The branch's own page judges those, as it
+// always did, and the base's page does once it has landed. The pages and the
+// counts are made up, as TestCoreCeilingsRefuse has them.
+func TestMainCeilingsRefuse(t *testing.T) {
+	t.Parallel()
+	// internal/a holds 950 lines, which the page it branched with allows and
+	// the ones below lower the ceiling under.
+	counts := map[string]int{"internal/a": 950, "internal/b": 5, "internal/c": 7}
+	lines := func(pkg string) (int, bool) {
+		n, ok := counts[pkg]
+		return n, ok
+	}
+	rowA := func(ceiling string) string { return "| `internal/a` | " + ceiling + " | 950 lines at abc1234 |" }
+	const (
+		rowB = "| `internal/b` | 1,000 | 5 lines at abc1234 |"
+		rowC = "| `internal/c` | 700 | 7 lines at abc1234 |"
+	)
+	page := func(rows ...string) string { return corePage(corePageList, corePageTypes, rows...) }
+	// The branch's page is right for the tree, and has a row for internal/c,
+	// which some of the base's pages below lack.
+	if problems := ceilingProblems(page(rowA("1,000"), rowB, rowC), lines); len(problems) != 0 {
+		t.Fatalf("the branch's own page is refused: %q", problems)
+	}
+	for _, tc := range []struct {
+		name string
+		main string     // the base's page
+		want [][]string // parts of each problem, in order; none means the page holds the tree
+	}{
+		{"over a ceiling main lowered", page(rowA("900"), rowB, rowC),
+			[][]string{{"internal/a", "holds 950 non-test Go lines", "50 over its ceiling of 900"}}},
+		{"over the ceilings of two packages", page(rowA("900"), "| `internal/b` | 4 | 5 lines at abc1234 |", rowC),
+			[][]string{{"internal/a", "50 over its ceiling of 900"}, {"internal/b", "holds 5 non-test Go lines", "1 over its ceiling of 4"}}},
+		{"under main's ceiling", page(rowA("1,000"), rowB, rowC), nil},
+		{"at main's ceiling", page(rowA("950"), rowB, rowC), nil},
+		{"a row of main's page for a package that is not in the tree", page(rowA("1,000"), rowB, rowC, "| `internal/new` | 10 | 0 lines at abc1234 |"), nil},
+		{"a package of the tree that main's page has no row for", page(rowA("1,000"), rowB), nil},
+		// What is wrong with the base's page is for the branch's own page to
+		// say, once the base's has landed: a ceiling that cannot be read is
+		// no ceiling of nothing for the tree to stand over, and a table that
+		// cannot be found holds no tree to any.
+		{"a ceiling of main's page that cannot be read", page(rowA("lots"), rowB, rowC), nil},
+		{"a main page with no Line ceilings", "# The core\n\n## Layers\n\ntext\n", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := overMainCeilings(tc.main, lines)
+			if len(got) != len(tc.want) {
+				t.Fatalf("%d problems, want %d: %q", len(got), len(tc.want), got)
+			}
+			for i, parts := range tc.want {
+				for _, part := range parts {
+					if !strings.Contains(got[i], part) {
+						t.Errorf("the problem %q does not say %q", got[i], part)
+					}
+				}
+			}
+		})
 	}
 }

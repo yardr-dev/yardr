@@ -881,6 +881,179 @@ func TestYardTestSaysItsBase(t *testing.T) {
 	})
 }
 
+// A branch carries the page of the core's Line ceilings it branched with, and
+// main may have lowered a ceiling in it since: the landing's rebase onto main
+// meets that, and a run that judged the tree by the branch's page alone passed
+// first. When its base changed the page after the branch point, a
+// run says so, and runs TestCorePackagesKeepUnderTheirCeilings once more with
+// the base's copy of the page, in the file YARDR_CEILINGS_PAGE names, which the
+// run removes. It does neither when main moved without the page, when a landing
+// has been rebased onto its base (the page is then its own, as a reviewer's
+// base on the branch has it), or when the base has no page. A landing that was
+// not rebased is held to main's page as a plain run is: both lists of steps
+// have it. A caller's YARDR_CEILINGS_PAGE reaches no call but that one, which
+// has the run's own, and a failure of the test fails the run, the rerun of its
+// package holding to the one test.
+func TestYardTestHoldsABranchToItsBasesCeilings(t *testing.T) {
+	t.Parallel()
+	realGo := needTool(t, "go")
+	script, rows := yardTestRows(t)
+	_, staticCall := ciStaticcheck(t)
+	const (
+		pagePath = "docs/contracts/core.md"
+		// The page as the branch point has it, and as main has it after it
+		// lowered a ceiling; the fake go reads neither, and writes down the file
+		// it is handed.
+		pageThen = "## Line ceilings\n\n| package | ceiling | measured |\n|---|---:|---|\n| `internal/store` | 107,416 | 107,416 lines at 0d0777d08 |\n"
+		pageNow  = "## Line ceilings\n\n| package | ceiling | measured |\n|---|---:|---|\n| `internal/store` | 101,634 | 101,634 lines at 0d0777d08 |\n"
+		// The test the step runs, as the fake go sees it: in one word, -run=..., for
+		// the rerun to keep.
+		ceilingsCall = "test -run=^TestCorePackagesKeepUnderTheirCeilings$ ."
+		failing      = "--- FAIL: TestCorePackagesKeepUnderTheirCeilings (0.00s)\n" +
+			"    ceilings_test.go:50: the landing base's docs/contracts/core.md: internal/store holds 101675 non-test Go lines, 41 over its ceiling of 101634: move it out\n" +
+			"FAIL\nFAIL\tm.test/m\t0.012s"
+		// The caller's value, which the script drops.
+		callers = "YARDR_CEILINGS_PAGE=/the/page/of/the/caller"
+	)
+	// fixture is a repository whose branch point has the page, whose branch (the
+	// checked-out one) has a commit that changes go.mod past it, so that the run
+	// is the plain one of a change that asks go for no list of packages, and whose
+	// main has a commit of its own that changes and removes what it is given.
+	// short is the branch point's.
+	type repo struct{ dir, short string }
+	// A landing reads the table's packages before it runs anything, as a plain run
+	// of a selection does, and a row whose package is gone stops it there: the
+	// module has each of them, and go has some to list.
+	files := map[string]string{"go.mod": "module m.test/m\n\ngo 1.21\n", pagePath: pageThen, "docs/other.md": "one\n"}
+	for _, row := range rows {
+		for _, pkg := range row.pkgs {
+			files[pkg+"/p.go"] = "package p\n"
+		}
+	}
+	fixture := func(edits map[string]string, removes ...string) repo {
+		dir, point := gateRepo(t, files)
+		gitT(t, dir, "checkout", "-q", "-b", "feature")
+		writeFile(t, dir, "go.mod", "module m.test/m\n\ngo 1.21\n\n// the branch's work\n")
+		gitT(t, dir, "add", "-A")
+		gitT(t, dir, "commit", "-q", "-m", "the branch's work")
+		gitT(t, dir, "checkout", "-q", "main")
+		writeFiles(t, dir, edits)
+		for _, name := range removes {
+			if err := os.Remove(filepath.Join(dir, name)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		gitT(t, dir, "add", "-A")
+		gitT(t, dir, "commit", "-q", "-m", "main moves")
+		gitT(t, dir, "checkout", "-q", "feature")
+		return repo{dir, gitT(t, dir, "rev-parse", "--short", point)}
+	}
+	lowered := fixture(map[string]string{pagePath: pageNow})
+	moved := fixture(map[string]string{"docs/other.md": "two\n"})
+	removed := fixture(nil, pagePath)
+	// The fake go writes down its calls and, for each, the page it was given; the
+	// test it is asked to run with a page has a copy of the file in the fake's
+	// directory, since the run removes it. It fails that test, as the line
+	// FAKE_CEILINGS says, when the case wants it to. go list is the real go's.
+	const fakeCeilingsGo = `#!/bin/sh
+if [ "$1" = list ]; then exec "$REAL_GO" "$@"; fi
+echo "${YARDR_TEST_RPC:+rpc }${GOOS:+$GOOS }$*" >>"$FAKE/calls"
+echo "$* page=${YARDR_CEILINGS_PAGE-unset}" >>"$FAKE/pages"
+case "$*" in *TestCorePackagesKeepUnderTheirCeilings*)
+  [ -z "$YARDR_CEILINGS_PAGE" ] || cp "$YARDR_CEILINGS_PAGE" "$FAKE/page"
+  if [ -n "$FAKE_CEILINGS" ]; then
+    printf '%s\n' "$FAKE_CEILINGS" >&2
+    exit 1
+  fi
+  ;;
+esac
+`
+	plain := []string{"vet ./...", "build ./...", hostScanCall, staticCall, "test ./..."}
+	plainHeld := []string{"vet ./...", "build ./...", ceilingsCall, hostScanCall, staticCall, "test ./..."}
+	// A landing of go.mod is the whole suite, and the socket suites beside it.
+	const socket = "rpc test ./internal/store/ ./internal/dispatch/ ./internal/bdp/ ./internal/web/"
+	landing := []string{"vet ./...", "linux vet ./...", hostScanCall, staticCall, "test -race ./...", socket}
+	landingHeld := []string{"vet ./...", "linux vet ./...", ceilingsCall, hostScanCall, staticCall, "test -race ./...", socket}
+	line := func(short string) string {
+		return "test: main (YARDR_BASE) changed docs/contracts/core.md since the branch point " + short + ": holding the branch to its Line ceilings\n"
+	}
+	for _, c := range []struct {
+		name    string
+		repo    repo
+		rebase  bool     // the branch is rebased onto main first, as the assembly does
+		env     []string // beyond the base
+		calls   []string // what go was run as
+		told    bool     // the output has the step's line
+		page    string   // what the call that has a page was given, none for no such call
+		failure string   // what the test prints when it is to fail, which fails the run
+	}{
+		{name: "a plain run whose base lowered the page after the branch point",
+			repo: lowered, calls: plainHeld, told: true, page: pageNow},
+		{name: "a plain run whose base moved and left the page",
+			repo: moved, calls: plain},
+		{name: "a plain run whose base has no page",
+			repo: removed, calls: plain},
+		{name: "a landing rebased onto the base",
+			repo: lowered, rebase: true, env: []string{"YARDR_LANDING=1"}, calls: landing},
+		{name: "a landing that was not rebased",
+			repo: lowered, env: []string{"YARDR_LANDING=1"}, calls: landingHeld, told: true, page: pageNow},
+		{name: "a test that fails fails the run, and its rerun holds to it",
+			repo: lowered, told: true, page: pageNow, failure: failing,
+			calls: []string{"vet ./...", "build ./...", ceilingsCall, "test -run=^TestCorePackagesKeepUnderTheirCeilings$ m.test/m"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			dir := copyFixture(t, c.repo.dir)
+			if c.rebase {
+				gitT(t, dir, "rebase", "-q", "main")
+			}
+			fake, tmp := fakeBins(t, map[string]string{"go": fakeCeilingsGo})
+			cmd := gateCmd(t, script)
+			cmd.Dir = dir
+			cmd.Env = boxEnv(fake, tmp, append([]string{"YARDR_BASE=main", "YARDR_RACE_HELD=1", "REAL_GO=" + realGo, callers, "FAKE_CEILINGS=" + c.failure}, c.env...)...)
+			out, code := runCmd(t, cmd)
+			if (code != 0) != (c.failure != "") {
+				t.Errorf("exit %d, want it to fail: %v, output:\n%s", code, c.failure != "", out)
+			}
+			wantGoCalls(t, fake, c.calls)
+			if got := strings.Contains(out, line(c.repo.short)); got != c.told {
+				t.Errorf("the output has the step's line %q: %v, want %v, output:\n%s", line(c.repo.short), got, c.told, out)
+			}
+			if strings.Contains(out, "holding the branch to its Line ceilings") != c.told {
+				t.Errorf("the output speaks of the Line ceilings: %v, want %v, output:\n%s", !c.told, c.told, out)
+			}
+			// Every call has none of the caller's page, and the one that runs the
+			// test has the run's own, a file that held main's page when the test
+			// was run and is gone now.
+			pages := splitLines(fakeLog(fake, "pages"))
+			if len(pages) == 0 {
+				t.Fatalf("go was called with no page recorded, output:\n%s", out)
+			}
+			for _, call := range pages {
+				if !strings.Contains(call, "TestCorePackagesKeepUnderTheirCeilings") {
+					if !strings.HasSuffix(call, " page=unset") {
+						t.Errorf("go was run as %q, want it with no page", call)
+					}
+					continue
+				}
+				_, file, _ := strings.Cut(call, " page=")
+				if file == "" || file == "unset" || "YARDR_CEILINGS_PAGE="+file == callers {
+					t.Errorf("the ceilings test was run as %q, want it with the run's own page", call)
+				} else if _, err := os.Stat(file); !errors.Is(err, os.ErrNotExist) {
+					t.Errorf("the run's page %s is left behind: %v", file, err)
+				}
+			}
+			if got := fakeLog(fake, "page"); got != strings.TrimSpace(c.page) {
+				t.Errorf("the page the test was given:\n%q\nwant:\n%q", got, strings.TrimSpace(c.page))
+			}
+			wantEmpty(t, tmp)
+			if c.failure != "" && !strings.Contains(out, "test: FAILED: env YARDR_CEILINGS_PAGE=") {
+				t.Errorf("the output has no summary of the failed step, output:\n%s", out)
+			}
+		})
+	}
+}
+
 // What a plain run selects, in a module that has the table's packages and
 // nothing in them, after a line saying what it is compared with: a file a
 // test reads by path runs that test's package, a file nobody is known to
