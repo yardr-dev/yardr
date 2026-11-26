@@ -108,7 +108,7 @@ func (s *Server) handlePreviews(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	s.respond(w, r, Page{Template: "previews", Title: "Previews", Menu: "previews", Data: d, head: head, stream: "seq"})
+	s.respond(w, r, Page{Template: "previews", Title: "Previews", Data: d, head: head, stream: "seq", live: liveStage})
 }
 
 func (s *Server) previewsPage(ctx context.Context, head uint64) (Previews, error) {
@@ -207,5 +207,5 @@ func (s *Server) previewsAgain(w http.ResponseWriter, r *http.Request, why strin
 		return
 	}
 	d.Error = why
-	s.respond(w, r, Page{Template: "previews", Title: "Previews", Menu: "previews", Data: d, head: head, stream: "seq"})
+	s.respond(w, r, Page{Template: "previews", Title: "Previews", Data: d, head: head, stream: "seq", live: liveStage})
 }

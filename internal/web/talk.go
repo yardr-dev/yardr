@@ -60,6 +60,22 @@ type Talk struct {
 	Draft string `json:"draft,omitempty"`
 }
 
+// Composer is the id of the composer's form: the conversation, and the
+// newest letter of the user's own on the page. A read of the conversation
+// again carries the same id, so the browser leaves the form, and the words
+// typed in it, where they are; the form after a send has a newer letter,
+// and another conversation's has another party, so each is a new form and
+// starts empty.
+func (t Talk) Composer() string {
+	var own uint64
+	for _, l := range t.Letters {
+		if l.Own {
+			own = max(own, l.Seq)
+		}
+	}
+	return fmt.Sprintf("send-%s-%d", t.With, own)
+}
+
 // TalkPeer is one party to talk to: a crew member or a user.
 type TalkPeer struct {
 	Name string `json:"name"`
@@ -106,7 +122,7 @@ func (s *Server) handleTalk(w http.ResponseWriter, r *http.Request) {
 	if as == "" {
 		// The view does not act, or not for this browser: no user to show a
 		// conversation of.
-		s.respond(w, r, Page{Template: "talk", Title: "Talk", Menu: "talk", Data: Talk{NeedsToken: s.token != nil}})
+		s.respond(w, r, Page{Template: "talk", Title: "Talk", Data: Talk{NeedsToken: s.token != nil}})
 		return
 	}
 	head, err := s.st.Head(ctx)
@@ -150,7 +166,7 @@ func (s *Server) handleTalk(w http.ResponseWriter, r *http.Request) {
 		Before: before, Head: head, MaxMail: store.MaxMailParts * store.MaxMailBytes}
 	if with == "" {
 		// The yard has no crew: the page says whose command that is.
-		s.respond(w, r, Page{Template: "talk", Title: "Talk", Menu: "talk", Data: out, head: head})
+		s.respond(w, r, Page{Template: "talk", Title: "Talk", Data: out, head: head})
 		return
 	}
 	// Whose unread mail the user has, for the peers' marks: the letters
@@ -175,7 +191,17 @@ func (s *Server) handleTalk(w http.ResponseWriter, r *http.Request) {
 	}
 	out.Letters = shown
 	title := "Talk with " + with
-	s.respond(w, r, Page{Template: "talk", Title: title, Menu: "talk", Data: out, head: head, inbox: box})
+	s.respond(w, r, Page{Template: "talk", Title: title, Data: out, head: head, inbox: box, live: talkLive(before)})
+}
+
+// talkLive is how the talk page reads itself again: the newest page of the
+// letters does, on every event of the stream, and an older page is a
+// snapshot, read undisturbed.
+func talkLive(before uint64) string {
+	if before != 0 {
+		return ""
+	}
+	return liveStage
 }
 
 // talkLetters is the conversation's letters as the talk page shows them:
@@ -466,7 +492,7 @@ func (s *Server) talkAgain(w http.ResponseWriter, r *http.Request, with, text, w
 		return
 	}
 	out.Letters = shown
-	s.respond(w, r, Page{Template: "talk", Title: "Talk with " + with, Menu: "talk", Data: out, head: head, inbox: box})
+	s.respond(w, r, Page{Template: "talk", Title: "Talk with " + with, Data: out, head: head, inbox: box, live: liveStage})
 }
 
 // ownOrigin reports whether origin is this request's own: an http or

@@ -382,7 +382,7 @@ func TestLimitsPage(t *testing.T) {
 		`waits for</dt><dd>the 5h window, which resets`,
 		`Not asked: codex`,
 		`in use here, and listed by no source`,
-		`<a href="/limits" aria-current="page">Limits</a>`,
+		`<a class="wv-row" href="/limits" aria-current="page">`,
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("/limits lacks %s", want)

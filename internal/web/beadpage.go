@@ -161,7 +161,7 @@ func (s *Server) handleBead(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	s.respond(w, r, Page{Template: "bead", Title: d.Bead.ID, Menu: "beads", Data: d, head: d.Head, stream: "seq"})
+	s.respond(w, r, Page{Template: "bead", Title: d.Bead.ID, Data: d, head: d.Head, stream: "seq", live: liveStage})
 }
 
 // beadPage reads the bead's page: what `yardr prime --bead <id>` knows,

@@ -213,8 +213,8 @@ func count(counts []StageCount, stage string) bool {
 
 // flowIndex is the index of the flow that governs beads of typ in the
 // depot: its type's flow when there is one, else the depot's own, -1 when
-// no flow governs them. The overview and the sidebar assign beads to flows
-// by this one rule.
+// no flow governs them. The overview and the lists beside the stage assign
+// beads to flows by this one rule.
 func (d *HomeDepot) flowIndex(typ string) int {
 	own := -1
 	for j := range d.Flows {
@@ -251,7 +251,7 @@ func (h *Home) firstStage(depot, typ, stage string) bool {
 // attention is what waits for a person: everything something stops, and
 // the parked beads past their flow's first whose turn is not already
 // answered, in the line's order, faults first. Home lists it in its
-// centre; every other page counts it in its header.
+// centre, Decide's list holds it, and the rail's badge counts it.
 func attention(ov *Home, l *Line) []Waiting {
 	byID := map[string]*store.Bead{}
 	for i := range ov.yard.beads {
@@ -428,9 +428,6 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	// Home's aside is the line panel alone: the waits stand at the top of
-	// its centre already.
-	l.Home = true
 	ov.Attention = append(ov.Attention, attention(ov, l)...)
 	// What runs now: the live sessions but the manual groups' claims.
 	rd := s.newReader(nil)
@@ -446,11 +443,17 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ov.Closed = closedToday(all, time.Now())
-	stream := ""
-	if !ov.All && before == 0 {
-		stream = "home"
+	// The first page of the feed follows the yard: each kept event's entry
+	// goes on its top, and the overview stays as it was read, so the leaf
+	// refreshes the rail and the list alone. An older page is a snapshot.
+	stream, live := "", ""
+	if before == 0 {
+		live = liveNone
+		if !ov.All {
+			stream = "home"
+		}
 	}
-	s.respond(w, r, Page{Template: "home", Title: "Home", Menu: "home", Data: ov, line: l, ov: ov, head: feed.Head, stream: stream})
+	s.respond(w, r, Page{Template: "home", Title: "Home", Data: ov, line: l, ov: ov, head: feed.Head, stream: stream, live: live})
 }
 
 // Unbuilt is the Data of a bar page no child of the train has built yet.
@@ -467,7 +470,7 @@ func (s *Server) handleUnbuilt(name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 501, not 200: a client reading JSON must not take the stub for
 		// an empty list.
-		s.respond(w, r, Page{Status: http.StatusNotImplemented, Template: "unbuilt", Title: title, Menu: name,
+		s.respond(w, r, Page{Status: http.StatusNotImplemented, Template: "unbuilt", Title: title,
 			Data: Unbuilt{Page: name}})
 	}
 }

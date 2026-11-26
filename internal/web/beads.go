@@ -355,14 +355,10 @@ func (s *Server) handleFlows(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	p := Page{Template: "flows", Title: "Flows", Menu: "flows", Data: d, head: d.Head, stream: "card"}
-	if panel(r) {
-		// The yard panel: the same flows as a list, which reads itself
-		// again on every event of the stream. The JSON is the page's
-		// either way: the parameter shapes the HTML alone.
-		p.Template, p.Title, p.Menu, p.stream, p.Wide = "panel", "Yard", "yard", "seq", true
-	}
-	s.respond(w, r, p)
+	// The cards move as the stream says: the page has no leaf. The old yard
+	// panel, ?panel=1, is the list beside the stage now, so it answers as the
+	// page without it.
+	s.respond(w, r, Page{Template: "flows", Title: "Flows", Data: d, head: d.Head, stream: "card"})
 }
 
 // placement is where the stream puts a bead's card on /flows: the card as

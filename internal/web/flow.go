@@ -289,6 +289,6 @@ func (s *Server) handleFlow(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	s.respond(w, r, Page{Template: "flow", Title: flow, Menu: "depot",
+	s.respond(w, r, Page{Template: "flow", Title: flow,
 		Data: flowPage(d, j, ov.yard.beads, all, time.Now()), ov: ov, head: head, depot: name, flow: flow})
 }

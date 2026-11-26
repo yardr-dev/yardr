@@ -202,7 +202,7 @@ func TestConfigPages(t *testing.T) {
 		`<div><dt>test</dt><dd>make test</dd></div>`,
 		`<h2>docs</h2>`,
 		`<div><dt>kind</dt><dd>dir</dd></div>`,
-		`<a href="/depots" aria-current="page">Depots</a>`,
+		`<a class="wv-row" href="/depots" aria-current="page">`,
 	} {
 		if !strings.Contains(depots, want) {
 			t.Errorf("/depots lacks %s", want)
@@ -225,7 +225,7 @@ func TestConfigPages(t *testing.T) {
 		`<div><dt>model</dt><dd>opus</dd></div>`,
 		`<h2>decisions</h2>`,
 		`<div><dt>members</dt><dd>jo, mo</dd></div>`,
-		`<a href="/groups" aria-current="page">Groups</a>`,
+		`<a class="wv-row" href="/groups" aria-current="page">`,
 	} {
 		if !strings.Contains(groups, want) {
 			t.Errorf("/groups lacks %s", want)
@@ -256,7 +256,7 @@ func TestConfigPages(t *testing.T) {
 		`<details class="route-id"><summary>id</summary>` + narrow.ID + `</details>`,
 		`<h2>new → builders</h2>`,
 		`<details class="route-id"><summary>id</summary>` + plain.ID + `</details>`,
-		`<a href="/routes" aria-current="page">Routes</a>`,
+		`<a class="wv-row" href="/routes" aria-current="page">`,
 	} {
 		if !strings.Contains(routes, want) {
 			t.Errorf("/routes lacks %s", want)
@@ -322,7 +322,7 @@ func TestConfigPagesPeersDeps(t *testing.T) {
 		`<div><dt>waiting</dt><dd>0</dd></div>`,
 		`<h2>laptop</h2>`,
 		`<div><dt>url</dt><dd>none — it calls this yard</dd></div>`,
-		`<a href="/peers" aria-current="page">Peers</a>`,
+		`<a class="wv-row" href="/peers" aria-current="page">`,
 	} {
 		if !strings.Contains(peers, want) {
 			t.Errorf("/peers lacks %s", want)
@@ -348,7 +348,7 @@ func TestConfigPagesPeersDeps(t *testing.T) {
 		`<a class="bead" href="/beads/` + one + `">` + one + `</a><span class="faint">blocks</span><span class="faint">at review</span><span class="edge-title">one</span><span class="label">backlog</span></li>`,
 		`<a class="bead" href="/beads/` + five + `">` + five + `</a><span class="label">line · triage · bug</span>`,
 		`<a class="bead" href="/beads/` + three + `">` + three + `</a><span class="faint">discovered-from</span><span class="edge-title">three</span><span class="label">new</span></li>`,
-		`<a href="/deps" aria-current="page">Deps</a>`,
+		`<a class="wv-row" href="/deps" aria-current="page">`,
 	} {
 		if !strings.Contains(deps, want) {
 			t.Errorf("/deps lacks %s", want)
@@ -445,7 +445,7 @@ func TestDepsOpenEnds(t *testing.T) {
 		`<a class="bead" href="/beads/` + one + `">` + one + `</a><span class="faint">blocks</span><span class="edge-title">one</span><span class="label">backlog</span></li>`,
 		`<p class="card-title">five</p>`,
 		`<a class="bead" href="/beads/` + three + `">` + three + `</a><span class="faint">discovered-from</span><span class="edge-title">three</span><span class="label">new</span></li>`,
-		`<div id="deps" hx-get="/deps" hx-trigger="sse:message" hx-select="#deps > *" hx-swap="innerHTML ignoreTitle:true">`,
+		`<i class="wv-live" hidden hx-get="/deps" hx-trigger="sse:message" hx-push-url="false" hx-swap="innerHTML ignoreTitle:true" hx-select-oob="#rail:outerHTML,#list-head:innerHTML,#list-rows:innerHTML"></i>`,
 		`<a href="/deps?all=1">all</a>`,
 	} {
 		if !strings.Contains(deps, want) {
@@ -488,7 +488,7 @@ func TestDepsOpenEnds(t *testing.T) {
 	every := squash(f.get("/deps?all=1").body)
 	for _, want := range []string{
 		`<a class="bead" href="/beads/` + four + `">` + four + `</a><span class="faint">blocks</span><span class="edge-title">four</span><span class="label">new · closed</span></li>`,
-		`<div id="deps" hx-get="/deps?all=1" hx-trigger="sse:message" hx-select="#deps > *" hx-swap="innerHTML ignoreTitle:true">`,
+		`<i class="wv-live" hidden hx-get="/deps?all=1" hx-trigger="sse:message" hx-push-url="false" hx-swap="innerHTML ignoreTitle:true" hx-select-oob="#rail:outerHTML,#list-head:innerHTML,#list-rows:innerHTML"></i>`,
 		`<a href="/deps">open</a>`,
 		`<a href="/deps?all=1" aria-current="true">all</a>`,
 	} {
@@ -592,7 +592,7 @@ func TestConfigHub(t *testing.T) {
 		`the yards this one is linked with`,
 		`what the subscriptions the yard burns still carry`,
 		`opt-in telemetry switch`,
-		`<a href="/config" aria-current="page">Config</a>`,
+		`<a class="wv-row" href="/config" aria-current="page">`,
 	} {
 		if !strings.Contains(hub, want) {
 			t.Errorf("/config lacks %s", want)
@@ -608,76 +608,24 @@ func TestConfigHub(t *testing.T) {
 		got.Links[6].Path != "/telemetry" || got.Head == 0 {
 		t.Errorf("the hub as JSON: %+v", got)
 	}
-	for path, label := range map[string]string{
-		"/depots": "Depots", "/groups": "Groups", "/routes": "Routes",
-		"/peers": "Peers", "/deps": "Deps", "/limits": "Limits",
+	// A list page stands under Settings with its own row open (Depots and
+	// Deps are Lines' rows), and has no link back to the hub: Config is the
+	// first row of Settings' list.
+	for path, tile := range map[string]string{
+		"/depots": "/flows", "/groups": "/config", "/routes": "/config",
+		"/peers": "/config", "/deps": "/flows", "/limits": "/config",
 	} {
-		body := squash(f.get(path).body)
-		for _, want := range []string{
-			`<a href="` + path + `" aria-current="page">` + label + `</a>`,
-			`<a href="/config">‹ Config</a>`,
-		} {
-			if !strings.Contains(body, want) {
-				t.Errorf("%s lacks %s", path, want)
-			}
+		body := f.get(path).body
+		if want := `<a class="wv-row" href="` + path + `" aria-current="page">`; !strings.Contains(body, want) {
+			t.Errorf("%s lacks %s", path, want)
+		}
+		if got := marked(railOf(t, body), "aria-current", "true"); len(got) != 1 || got[0] != tile {
+			t.Errorf("%s opens the tiles %v, want %s", path, got, tile)
+		}
+		if strings.Contains(body, "‹ Config") {
+			t.Errorf("%s links back to the hub", path)
 		}
 	}
-	t.Run("column visibility follows its filters", func(t *testing.T) {
-		ctx := context.Background()
-		member, _ := talkFixture(t, "sam")
-		must(t, func() error { _, err := member.st.AddUser(ctx, "jo", "jo"); return err }())
-		must(t, member.st.SetSetting(ctx, store.OperatorSetting, "jo", "jo"))
-		must(t, func() error { _, err := member.st.AddUser(ctx, "sam", "jo"); return err }())
-		body := member.get("/config").body
-		for _, want := range []string{
-			`<li><a href="/config" aria-current="page">Config</a></li>`,
-			`<li><a href="/depots">Depots</a></li>`,
-			`<li><a href="/groups">Groups</a></li>`,
-			`<li><a href="/routes">Routes</a></li>`,
-			`<li><a href="/deps">Deps</a></li>`,
-			`<li><a href="/limits">Limits</a></li>`,
-		} {
-			if !strings.Contains(body, want) {
-				t.Errorf("a member's column lacks %s: %s", want, body)
-			}
-		}
-		// Peers is the operator's to read: neither the hub nor the
-		// column links it for a member.
-		for _, foreign := range []string{`>Telemetry<`, `>Pair device<`, `<a href="/peers">Peers</a>`,
-			`<li><a href="/peers">Peers</a></li>`} {
-			if strings.Contains(body, foreign) {
-				t.Errorf("a member's column holds %s: %s", foreign, body)
-			}
-		}
-		// The operator sees Peers and Telemetry, and an unsigned view
-		// still does not see Pair device.
-		op, _ := talkFixture(t, "jo")
-		must(t, func() error { _, err := op.st.AddUser(ctx, "jo", "jo"); return err }())
-		must(t, op.st.SetSetting(ctx, store.OperatorSetting, "jo", "jo"))
-		body = op.get("/config").body
-		for _, want := range []string{
-			`<a href="/peers">Peers</a>`,
-			`<li><a href="/peers">Peers</a></li>`,
-			`<li><a href="/telemetry">Telemetry</a></li>`,
-		} {
-			if !strings.Contains(body, want) {
-				t.Errorf("the operator's column holds no %s: %s", want, body)
-			}
-		}
-		if strings.Contains(body, `>Pair device<`) {
-			t.Errorf("an unsigned view's column holds Pair device: %s", body)
-		}
-		// A JWT view sees Pair device.
-		keys := mustJWTTestKeys(t)
-		jwks := newJWKStub(t, jwksDoc(t, rsaJWK("a", &keys.a.PublicKey)))
-		signed := jwtFixture(t, jwks, "", map[string]string{"jo@example.net": "jo"})
-		must(t, func() error { _, err := signed.st.AddUser(ctx, "jo", "jo"); return err }())
-		token := signRSA(t, keys.a, "a", jwtClaims("jo@example.net"))
-		body = signed.get("/config", web.DefaultJWTHeader, token).body
-		if !strings.Contains(body, `<li><a href="/pairing">Pair device</a></li>`) {
-			t.Errorf("a JWT view's column holds no Pair device: %s", body)
-		}
-	})
 }
 
 // /beads has every field `yardr bead list --json` prints of a bead, and

@@ -155,7 +155,7 @@ func (s *Server) handlePackFile(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	s.respond(w, r, Page{Template: "packfile", Title: fmt.Sprintf("%s · file %d of %d", d.Bead, d.N, d.Of), Menu: "beads", Data: d})
+	s.respond(w, r, Page{Template: "packfile", Title: fmt.Sprintf("%s · file %d of %d", d.Bead, d.N, d.Of), Data: d})
 }
 
 // packFilePage reads one file of the full text behind a summary card. The

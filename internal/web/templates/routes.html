@@ -1,10 +1,8 @@
 {{define "content"}}
-<nav class="item filters" aria-label="Config">
-  <p><a href="/config">‹ Config</a></p>
-</nav>
-{{- /* The list reads itself again whenever something happens in the yard:
-       the shell's stream carries each event's seq and nothing else. */}}
-<div id="routes" hx-get="/routes" hx-trigger="sse:message" hx-select="#routes > *" hx-swap="innerHTML ignoreTitle:true">
+{{- /* The page's leaf in the shell reads it again whenever something
+       happens in the yard: the stream carries each event's seq and nothing
+       else. */}}
+<div id="routes">
   {{- if .Data.Routes}}
   {{- /* One row per route on a wide window, as `yardr route list` prints
          them, the id quiet at the end; below 700 px the stacked cards

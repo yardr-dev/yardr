@@ -190,5 +190,5 @@ func (s *Server) handleDelegation(w http.ResponseWriter, r *http.Request) {
 		}
 		rec.DelegatedBody = *body
 	}
-	s.respond(w, r, Page{Template: "delegation", Title: fmt.Sprintf("Delegated record %d", id), Menu: "config", Data: DelegationPage{Record: store.ViewDelegation(rec)}})
+	s.respond(w, r, Page{Template: "delegation", Title: fmt.Sprintf("Delegated record %d", id), Data: DelegationPage{Record: store.ViewDelegation(rec)}, with: rec.Yardmaster})
 }

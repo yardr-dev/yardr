@@ -1,10 +1,10 @@
 {{define "content"}}
 {{- with .Data}}
-{{- /* The page reads itself again at every event of the yard: the shell's
-       stream carries their seqs and nothing else. The bead's body, its
-       notes and its stage file are text someone wrote: they are only ever
-       written as text. */}}
-<div id="bead" hx-get="{{.Self}}" hx-trigger="sse:message" hx-select="#bead > *" hx-swap="innerHTML ignoreTitle:true">
+{{- /* The page's leaf in the shell reads it again at every event of the
+       yard: the stream carries their seqs and nothing else. The bead's
+       body, its notes and its stage file are text someone wrote: they are
+       only ever written as text. */}}
+<div id="bead">
   {{- with .Bead}}
   <article class="item">
     <header class="item-head">
@@ -86,9 +86,10 @@
   {{- if .Moves}}
   <section class="item">
     <h3 class="label">send on as {{.As}}</h3>
-    {{- /* The form posts and puts the page's answer in place of the bead;
-           without scripts it posts and loads the bead it lands on. */}}
-    <form class="move-form" method="post" action="{{.Self}}" hx-post="{{.Self}}" hx-target="#bead" hx-select="#bead > *" hx-swap="innerHTML ignoreTitle:true"><input type="hidden" name="rev" value="{{.Bead.Revision}}">{{template "csrf"}}<input type="text" name="note" placeholder="Note with the move" aria-label="Note">{{if .FoldMoves}}<select name="to" aria-label="Stage">{{range .Moves}}<option value="{{.To}}">{{.Label}}</option>{{end}}</select><button type="submit">Move to ...</button>{{else}}{{range .Moves}}{{if .Outcome}}<button type="submit" name="outcome" value="{{.Outcome}}">{{.Label}}</button>{{else}}<button type="submit" name="to" value="{{.To}}">{{.Label}}</button>{{end}}{{end}}{{end}}</form>
+    {{- /* The form posts and puts the page's answer in the stage, keeping
+           the address; without scripts it posts and loads the bead it
+           lands on. */}}
+    <form class="move-form" method="post" action="{{.Self}}" hx-post="{{.Self}}" hx-push-url="false"><input type="hidden" name="rev" value="{{.Bead.Revision}}">{{template "csrf"}}<input type="text" name="note" placeholder="Note with the move" aria-label="Note">{{if .FoldMoves}}<select name="to" aria-label="Stage">{{range .Moves}}<option value="{{.To}}">{{.Label}}</option>{{end}}</select><button type="submit">Move to ...</button>{{else}}{{range .Moves}}{{if .Outcome}}<button type="submit" name="outcome" value="{{.Outcome}}">{{.Label}}</button>{{else}}<button type="submit" name="to" value="{{.To}}">{{.Label}}</button>{{end}}{{end}}{{end}}</form>
   </section>
   {{- else if .Outcomes}}
   <section class="item">
@@ -125,7 +126,7 @@
       {{- if index $.Data.Missing .File.Hash}}
       <p class="faint">page {{slice .File.Hash 0 8}}: the yard no longer has it</p>
       {{- else}}
-      <p><a href="{{blobNoteURL .Note.Seq .N}}">page {{slice .File.Hash 0 8}}</a></p>
+      <p><a href="{{blobNoteURL .Note.Seq .N}}" hx-boost="false">page {{slice .File.Hash 0 8}}</a></p>
       {{- end}}
       <pre class="text">{{.Note.Text}}</pre>
     </article>
@@ -150,13 +151,13 @@
       {{- if index $.Data.Missing $f.Hash}}
       <p class="faint">{{$kind}} {{slice $f.Hash 0 8}}: the yard no longer has it</p>
       {{- else if eq $kind "page"}}
-      <a href="{{blobNoteURL $seq (inc $i)}}">page {{slice $f.Hash 0 8}}</a> <a href="{{$.Data.RunBase}}{{blobNoteURL $seq (inc $i)}}">run</a>
+      <a href="{{blobNoteURL $seq (inc $i)}}" hx-boost="false">page {{slice $f.Hash 0 8}}</a> <a href="{{$.Data.RunBase}}{{blobNoteURL $seq (inc $i)}}" hx-boost="false">run</a>
       {{- else if eq $kind "image"}}
       <img src="{{blobURL $f.Hash $f.Name}}" alt="{{$words}}">
       {{- else if $f.Name}}
-      <a href="{{blobURL $f.Hash $f.Name}}">file {{$f.Name}}</a>
+      <a href="{{blobURL $f.Hash $f.Name}}" hx-boost="false">file {{$f.Name}}</a>
       {{- else}}
-      <a href="{{blobURL $f.Hash $f.Name}}">file {{slice $f.Hash 0 8}}</a>
+      <a href="{{blobURL $f.Hash $f.Name}}" hx-boost="false">file {{slice $f.Hash 0 8}}</a>
       {{- end}}
       {{- end}}
     </article>

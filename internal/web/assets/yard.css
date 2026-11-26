@@ -22,12 +22,31 @@
   /* a tile's pill fill: rust 600, which carries white text at 5.2:1
      where the accent fill cannot (the design readme) */
   --pill: #b54e22; /* --yard-600 */
-  /* the sidebar's transit counts, in link blue */
+  /* links and the depot's transit counts, in link blue */
   --link: #7aa2f7; /* --text-link */
   /* A landed bead is done, so it shares the quiet done text tier. */
   --landed: var(--faint); /* --text-disabled */
-  /* The phone's More sheet dims the page with a translucent dusk ground. */
+  /* The phone's drawer dims the page with a translucent dusk ground. */
   --shade: rgba(16, 17, 18, 0.45); /* --dusk-950 */
+
+  /* the window's own surfaces, in the design system's names: the rail and
+     the fields, the pointer's row, the open row and tile, a control's
+     hover, and the ground of a file block */
+  --surface-sunken: #101112; /* --dusk-950 */
+  --surface-hover: #232426; /* --dusk-800 */
+  --surface-pressed: #2a2b2e; /* --dusk-750 */
+  --border-hover: #46484c; /* --dusk-600 */
+  --code-ground: rgba(255, 255, 255, 0.08);
+  /* rust as text, where the accent fills (--accent) and the pill's rust
+     (--pill) carry a mark or white letters */
+  --text-accent: #e2794a; /* --yard-400 */
+  /* the yard's chip: rust with the ground's ink on it, and in the light
+     look rust 600 with white */
+  --chip: #e2794a; /* --yard-400 */
+  --chip-ink: #161718; /* --dusk-900 */
+  /* the badge's letters, which stand on the accent fill in both looks */
+  --badge-ink: #161718; /* --dusk-900 */
+  --on-accent: #ffffff; /* --text-on-accent */
 
   /* status */
   --working: var(--accent); /* --yard-500 */
@@ -50,15 +69,26 @@
   --gap: 16px;
   --label-spacing: 0.14em;
 
-  /* the columns: the sidebar and the right column keep their width,
-     and the centre takes the rest; --centre-width caps it only where the
-     window has no room for the right column */
-  --sidebar-width: 248px;
-  --centre-width: 600px;
-  --right-width: 300px;
+  /* the window: the rail, the list and the stage's measure, the phone's
+     bar, and the stage's gutter */
+  --wv-rail: 64px;
+  --wv-list: 340px;
+  --wv-measure: 760px;
+  --wv-bar: 64px;
+  --wv-gutter: 24px;
+  --wv-title: 600 26px/32px var(--sans);
 
-  /* the talk page's mail: footplate's reading width, which the centre
-     takes instead of --centre-width on that page, and the gutter its
+  /* corners and motion, the design system's */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-full: 999px;
+  --dur-fast: 120ms;
+  --dur-med: 180ms;
+  --ease-out: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --shadow-popover: 0 6px 20px rgba(4, 5, 7, 0.4), 0 0 0 1px var(--hairline-strong);
+
+  /* the talk page's mail: footplate's reading width, and the gutter its
      clock sets at the left of a letter */
   --reading-width: 880px;
   --letter-gutter: 3.5rem;
@@ -83,19 +113,35 @@
     --held: #B3382C; /* --status-error */
 
     --link: #1A56C8; /* --text-link */
+
+    --surface-sunken: #EDEDEB;
+    --surface-hover: #EDEDEB;
+    --surface-pressed: #E2E2DF;
+    --border-hover: #B3B3AE;
+    --code-ground: rgba(0, 0, 0, 0.06);
+    --text-accent: #8F3C19; /* --yard-700 */
+    --chip: #B54E22; /* --yard-600 */
+    --chip-ink: #FFFFFF;
+    --shade: rgba(16, 17, 18, 0.32);
+    --shadow-popover: 0 6px 20px rgba(20, 20, 20, 0.12), 0 0 0 1px var(--hairline-strong);
   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-fast: 0ms; --dur-med: 0ms; }
 }
 
 * { box-sizing: border-box; border-radius: 0; }
 
-body { margin: 0; }
+html, body { margin: 0; height: 100%; }
 
 body {
   background: var(--ground);
   color: var(--ink);
   font: var(--text)/1.5 var(--mono);
-  /* The page scrolls as a document: no column has a scrollbar of its own,
-     but the sidebar's, where its rows outrun the window (.sidebar). */
+  /* The document does not scroll: the list and the stage each scroll inside
+     themselves (.wv-list__rows, .wv-stage). */
+  overflow: hidden;
 }
 
 a { color: inherit; text-decoration: none; }
@@ -106,122 +152,142 @@ a:focus-visible { color: var(--accent); }
 h1, h2, h3, h4, p, ul, ol, dl, dd, pre { margin: 0; padding: 0; font: inherit; }
 ul, ol { list-style: none; }
 
-/* --- the shell ---------------------------------------------------------- */
+/* --- the window --------------------------------------------------------- */
 
-/* On a desktop the centre takes all the width the sidebar and the aside
-   leave, so every page fills the window and each stands in the same place
-   on every page that has it. */
-.shell {
+/* Three columns: the rail of the four modes, the list of what stands in the
+   open mode, and the stage that holds the page (docs/web.md, The window). The
+   document does not scroll: the list and the stage each scroll inside
+   themselves. The kit's measures: the rail 64, the list 340, the stage's
+   content one column of 760 at most. */
+.wv-shell {
   display: grid;
-  grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--right-width);
-  min-height: 100vh;
-  min-height: 100dvh;
+  grid-template-columns: var(--wv-rail) var(--wv-list) minmax(0, 1fr);
+  height: 100vh;
+  height: 100dvh;
 }
 
-/* The rail is the phone's bottom bar; on a wider window it leaves the
-   shell to the sidebar. Its tiles keep footplate's rounded corners; the
-   reset above squares everything else. */
-.rail { display: none; }
-.chip { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; color: #161718; font-family: var(--sans); font-size: 11px; font-weight: 600; flex: none; }
-.chip-0 { background: #eba17e; } /* --yard-300 */
-.chip-1 { background: #e2794a; } /* --yard-400 */
-.chip-2 { background: #d3602f; } /* --yard-500 */
-.tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; width: 52px; padding: 4px 0; border-radius: 8px; color: var(--dim); }
-.tile:hover { color: var(--ink); }
-.tile .glyph { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 2; }
-.glyph .heavy { stroke-width: 3; }
-.glyph .solid { fill: currentColor; stroke: none; }
-.glyph .teeth { stroke-dasharray: 3.2 2.6; }
-.tile-label { font-size: 10px; line-height: 1.2; }
-/* A tile whose mode waits on the person carries its numeral at its top
-   right, in the accent; the tile's title and aria-label carry the count
-   in words. */
-.pill { position: absolute; top: 0; right: 0; display: flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--pill); color: #fff; font-size: var(--small); font-weight: 600; }
-.section-head { font-family: var(--sans); font-size: 13px; font-weight: 600; }
-/* The phone's More entry shows below 700 px only, where the bottom bar
-   has no room for the open mode's rows or for Settings. */
-.rail .more { display: none; }
+/* A leaf reads a page again and is seen by no one. The drawer's marker is
+   state, not a box: it takes no cell of the grid. The phone's top bar and
+   scrim stand under 900 px only. */
+.wv-live, .wv-flag, .wv-top, .wv-scrim { display: none; }
+.wv-wait { color: var(--text-accent); }
+.wv-fault { color: var(--held); }
+.wv-faint { color: var(--faint); }
+.wv-glyph { fill: none; stroke: currentColor; stroke-width: 2; }
+.wv-glyph .solid { fill: currentColor; stroke: none; }
 
-/* The sidebar: the window's left edge, 248 pixels: the yard's chip and
-   name, Arrivals, Decide and Crew, the depots with their flows, and
-   Settings at the foot. It stays in view while the page scrolls under it,
-   and it is the window's height and no taller: a yard with many depots has
-   more rows than a window holds, and a sidebar that grew with them would
-   stick at the top with its lower rows and Settings out of reach until the
-   page ended. So the rows scroll inside it, thin and in the hairlines'
-   colours, while the page stays where it is; where the rows are few,
-   Settings stands at the window's foot. The vh line is the fallback of a
-   browser that has no dvh. */
-.sidebar { position: sticky; top: 0; align-self: start; display: flex; flex-direction: column; gap: 2px; height: 100vh; height: 100dvh; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--hairline-strong) var(--hairline); padding: 12px 10px; border-right: 1px solid var(--hairline); font-family: var(--sans); font-size: 13px; }
-.yard-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px 10px; font-weight: 600; }
-.yard-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.side-places { display: flex; flex-direction: column; gap: 2px; }
-.side-row { display: flex; align-items: center; gap: 10px; min-height: 30px; padding: 0 8px; border-radius: 6px; }
-.side-row:hover { color: var(--accent-hover); }
-/* The depot the page stands on: its row stands filled. */
-.side-row[aria-current="page"], .side-flow[aria-current="page"] { background: var(--panel); }
-/* On load the sidebar scrolls to the open page's row and centres it as far
-   as its two ends let it, so a depot or flow below the fold is in view and
-   one in the top half moves nothing. scroll-initial-target does the
-   scrolling and aligns the row by scroll-snap-align, the start where it
-   names none, which would push Arrivals, Decide and Crew out of view for
-   every depot but the first; the sidebar is no snap container, so the
-   alignment snaps nothing else. A flow page marks both its depot and its
-   flow, so only the flow is targeted. A browser without
-   scroll-initial-target opens the sidebar at its top. */
-.sidebar .side-flow[aria-current="page"], .sidebar:not(:has(.side-flow[aria-current="page"])) .side-row[aria-current="page"] { scroll-initial-target: nearest; scroll-snap-align: center; }
-.side-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.side-icon { flex: none; color: var(--dim); }
-.side-icon .teeth { stroke-dasharray: 3.2 2.6; }
-/* Arrivals' count stands quiet; Decide's pill carries white on the pill's
-   rust, as the rail's did. */
-.side-count { flex: none; font-size: 12px; color: var(--dim); }
-.side-pill { flex: none; font-size: 11px; font-weight: 600; color: #fff; background: var(--pill); border-radius: 9px; padding: 1px 7px; }
-.side-head { padding: 18px 8px 6px; font-size: 12px; font-weight: 500; color: var(--dim); }
-.side-depots { display: flex; flex-direction: column; gap: 2px; }
-.side-depots .side-row { gap: 8px; }
-.side-transit { flex: none; font-size: 12px; color: var(--link); }
-/* A depot's flows stand under its row, inside the hairline. */
-.side-flows { display: flex; flex-direction: column; gap: 1px; margin-left: 15px; padding-left: 8px; border-left: 1px solid var(--hairline); }
-.side-flow { display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 0 8px; border-radius: 6px; }
-.side-flow:hover { color: var(--accent-hover); }
-/* A flow's dot: a bead of the flow carries an open ask for the viewer. */
-.side-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--accent); }
-/* The folded rows: a depot's quiet flows, the quiet depots. The chevron
-   turns down while open. */
-.side-quiet summary { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 8px; border-radius: 6px; color: var(--dim); cursor: pointer; list-style: none; }
-.side-quiet summary::-webkit-details-marker { display: none; }
-.side-quiet summary::marker { content: ""; }
-.side-quiet summary:hover { color: var(--accent-hover); }
-.side-chev { flex: none; }
-.side-quiet[open] > summary .side-chev { transform: rotate(90deg); }
-.side-foot { margin-top: auto; }
-.side-foot .side-row { color: var(--dim); }
+/* The rail: a 52 px tile with a 28 px glyph and a 10 px label, the count at
+   its top right, the yard's chip at the head, Settings at the foot. */
+.wv-rail { display: flex; flex-direction: column; align-items: center; padding: 8px 0; background: var(--surface-sunken); border-right: 1px solid var(--hairline); }
+.wv-chip { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; flex: none; border-radius: var(--radius-md); background: var(--chip); color: var(--chip-ink); font: 600 13px/18px var(--sans); }
+.wv-tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; width: 52px; margin-top: 4px; padding: 4px 0; border-radius: var(--radius-md); color: var(--dim); transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
+.wv-tile:hover { background: var(--surface-hover); color: var(--ink); }
+.wv-tile[aria-current] { background: var(--surface-pressed); color: var(--ink); }
+.wv-rail > .wv-chip + .wv-tile { margin-top: 8px; }
+.wv-tile .wv-glyph { display: block; width: 28px; height: 28px; }
+.wv-tile__label { font: 400 10px/12px var(--sans); white-space: nowrap; }
+/* A tile whose mode waits on the person carries its numeral, in the accent;
+   the tile's title and aria-label carry the count in words. */
+.wv-badge { position: absolute; top: 0; right: 0; min-width: 16px; height: 16px; padding: 0 4px; border-radius: var(--radius-full); background: var(--accent); color: var(--badge-ink); font: 600 12px/16px var(--sans); text-align: center; }
+.wv-rail__foot { flex: 1; }
 
-.centre {
-  border-left: 1px solid var(--hairline);
-  border-right: 1px solid var(--hairline);
+/* The list: 340 wide, its rows scrolling inside it. */
+.wv-list { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--panel); border-right: 1px solid var(--hairline); overflow: hidden; font-family: var(--sans); }
+.wv-list a:hover { color: inherit; }
+@media (prefers-color-scheme: light) {
+  .wv-list { background: var(--ground); }
 }
+.wv-list__head { flex: none; padding: 18px 18px 12px; border-bottom: 1px solid var(--hairline); }
+.wv-list__top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.wv-list__top h2 { font: 600 17px/22px var(--sans); }
+.wv-list__count { font: 400 13px/18px var(--sans); color: var(--dim); text-align: right; }
+.wv-list__sub { margin-top: 4px; font: 400 12.5px/17px var(--sans); color: var(--dim); }
+.wv-list__close { display: none; }
+.wv-list__rows { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 0 16px; scrollbar-width: thin; scrollbar-color: var(--hairline-strong) transparent; }
+.wv-list__none { margin: 0 6px; padding: 6px 16px; font: 400 12.5px/17px var(--sans); color: var(--faint); }
 
-.right { padding: var(--gap); display: flex; flex-direction: column; gap: var(--gap); }
+/* A section: its title, its count in quiet words at the right, a fold. A
+   depot's title is a link to its page; the page it stands on is filled as a
+   row is. */
+.wv-sect { margin-top: 8px; }
+.wv-sect > summary { display: flex; align-items: center; gap: 6px; margin: 0 6px; padding: 6px 8px; border-radius: var(--radius-md); font: 600 13px/18px var(--sans); cursor: pointer; list-style: none; user-select: none; }
+.wv-sect > summary::-webkit-details-marker { display: none; }
+.wv-sect > summary:hover { background: var(--surface-hover); }
+.wv-sect > summary:has(a[aria-current]) { background: var(--surface-pressed); }
+.wv-sect > summary .wv-chev { flex: none; color: var(--dim); transition: transform var(--dur-fast) var(--ease-out); }
+.wv-sect[open] > summary .wv-chev { transform: rotate(90deg); }
+.wv-sect__count { margin-left: auto; font: 400 12px/16px var(--sans); color: var(--dim); }
+.wv-places { margin-top: 2px; }
 
-/* A page without the aside fills the window: its centre runs to the
-   window's edge, as the yard page's does. Below 1100 px the narrower
-   rule below already centres a fixed-width centre, with or without it. */
-@media (min-width: 1100px) {
-  .shell:not(:has(aside.right)) { grid-template-columns: var(--sidebar-width) minmax(0, 1fr); }
+/* A row: a dot column that is always there, a head that wraps to two lines,
+   a quiet line for each further fact, a count or an age at the end. The open
+   row is filled; the pointer's row is told by its hairline. */
+.wv-row { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; gap: 10px; align-items: start; margin: 0 6px; padding: 8px 10px; border: 1px solid transparent; border-radius: var(--radius-md); }
+.wv-row:hover { border-color: var(--hairline); }
+.wv-row[aria-current="page"] { background: var(--surface-pressed); }
+/* On load the list scrolls to the open row and centres it as far as its two
+   ends let it, in a browser that has scroll-initial-target; one that has not
+   opens the list at its top. The alignment snaps nothing else: the list is
+   no snap container. */
+.wv-list .wv-row[aria-current="page"] { scroll-initial-target: nearest; scroll-snap-align: center; }
+.wv-dot { width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; }
+.wv-dot--wait { background: var(--accent); }
+.wv-dot--run { background: var(--running); }
+.wv-dot--idle { border: 1.5px solid var(--faint); }
+.wv-dot--fault { background: var(--held); }
+.wv-row__main { display: flex; flex-direction: column; min-width: 0; }
+.wv-row__name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font: 500 14px/19px var(--sans); }
+.wv-row__meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 12.5px/17px var(--sans); color: var(--dim); }
+.wv-row__meta code { font: 400 12px/17px var(--mono); }
+.wv-row__end { white-space: nowrap; font: 400 12px/19px var(--sans); color: var(--dim); }
+.wv-row__end--wait { color: var(--text-accent); }
+.wv-row--unread .wv-row__name { font-weight: 600; }
+/* A place says in a sentence what it opens, so its line wraps where a bead's
+   is cut. */
+.wv-places .wv-row__meta { white-space: normal; }
+
+/* The stage: scrolling inside itself. Its content keeps one column, 760 at
+   most, centred, with a gutter; it starts 44 px down. */
+.wv-stage { min-width: 0; min-height: 0; padding: 44px 0 40px; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--hairline-strong) transparent; }
+.wv-stage > :not(.wv-top):not(.wv-live) { width: min(var(--wv-measure), 100% - 2 * var(--wv-gutter)); margin-inline: auto; }
+.page-head { margin-bottom: 22px; }
+.page-head h1 { font: var(--wv-title); letter-spacing: -0.005em; }
+
+/* The stage of the talk page fills the window instead: the crew above the
+   letters, the form below, and the letters scrolling between them. */
+.wv-stage:has(#talk) { display: flex; flex-direction: column; padding-block: 44px 0; overflow: hidden; }
+
+/* Under 900 px (a phone, or a window as narrow) the stage is the page and
+   the list is a drawer over it from the left: #drawer in the address opens it
+   (:target, no script), choosing a row, the scrim or Close shuts it. The rail
+   is a bar of four tiles at the foot, and the yard's chip moves into the top
+   bar. */
+@media (max-width: 899px) {
+  :root { --wv-gutter: 16px; --wv-title: 600 22px/28px var(--sans); }
+  .wv-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+  .wv-stage { grid-row: 1; padding-top: 0; }
+  .wv-stage:has(#talk) { padding-top: 0; }
+  .wv-rail { grid-row: 2; flex-direction: row; justify-content: space-around; align-items: stretch; height: var(--wv-bar); padding: 6px 0 calc(6px + env(safe-area-inset-bottom)); border-right: 0; border-top: 1px solid var(--hairline); }
+  .wv-rail .wv-chip, .wv-rail__foot { display: none; }
+  .wv-tile, .wv-rail > .wv-chip + .wv-tile { flex: 1; width: auto; max-width: 96px; min-height: 48px; margin: 0; justify-content: center; }
+  .wv-badge { right: calc(50% - 26px); }
+  .wv-top { display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 5; min-height: 52px; margin-bottom: 20px; padding: 0 var(--wv-gutter); background: var(--ground); border-bottom: 1px solid var(--hairline); }
+  .wv-stage > .wv-top { width: auto; margin-inline: 0; }
+  .wv-top .wv-chip { width: 32px; height: 32px; font-size: 12px; }
+  .wv-top__mode { font: 600 15px/20px var(--sans); }
+  .wv-top__count { font: 400 13px/18px var(--sans); color: var(--text-accent); }
+  .wv-top__list { display: flex; align-items: center; gap: 2px; min-height: 48px; margin-left: auto; padding: 0 4px 0 8px; font: 500 14px/20px var(--sans); color: var(--dim); }
+  /* Closed, the drawer is hidden as well as moved, so a keyboard does not
+     tab into rows it cannot see. */
+  .wv-list { position: fixed; z-index: 20; top: 0; bottom: var(--wv-bar); left: 0; width: min(var(--wv-list), 88vw); border-right: 1px solid var(--hairline-strong); transform: translateX(-102%); visibility: hidden; transition: transform var(--dur-med) var(--ease-out), visibility 0s var(--dur-med); }
+  .wv-shell:has(#drawer:target) .wv-list { transform: none; visibility: visible; transition-delay: 0s; box-shadow: var(--shadow-popover); }
+  .wv-shell:has(#drawer:target) .wv-scrim { display: block; position: fixed; z-index: 10; inset: 0 0 var(--wv-bar) 0; background: var(--shade); }
+  .wv-list__close { display: flex; align-items: center; min-height: 48px; margin: -12px -10px -12px 0; padding: 0 10px; font: 500 14px/20px var(--sans); color: var(--dim); }
+  .wv-row { min-height: 48px; padding: 10px; }
+  .wv-row__name { font-size: 16px; line-height: 22px; }
+  .wv-row__meta { font-size: 13px; line-height: 18px; }
+  .wv-sect > summary { min-height: 48px; }
 }
-
-/* The yard page has no right column, so its centre runs to the window's
-   edge, with the depots in as many columns as fit. On a phone they
-   stack, as every page does. */
-@media (min-width: 700px) {
-  .shell.wide { grid-template-columns: var(--sidebar-width) minmax(0, 1fr); }
-}
-/* The yard panel: each depot as wide as its widest list needs, depots
-   side by side where there is room and wrapping where not. */
-#panel { display: flex; flex-wrap: wrap; column-gap: var(--gap); }
-#panel > .item { flex: 1 1 max-content; max-width: 100%; min-width: 0; }
 
 /* --- what goes in the columns ------------------------------------------- */
 
@@ -240,23 +306,7 @@ ul, ol { list-style: none; }
 .landed { color: var(--landed); }
 .num { font-variant-numeric: tabular-nums; }
 
-.page-head {
-  position: sticky;
-  top: 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 10px;
-  padding: 12px var(--gap);
-  background: var(--ground);
-  border-bottom: 1px solid var(--hairline);
-}
-.page-head h1 { font-size: var(--small); letter-spacing: var(--label-spacing); text-transform: uppercase; }
-/* What waits for the visitor, counted in the header of a page without
-   the aside: one line to home, in the human face. */
-.page-head .needs-count { flex: 0 0 auto; color: var(--dim); font-family: var(--sans); font-size: var(--small); white-space: nowrap; }
-
-/* One entry of the centre column's feed. */
+/* One entry of the stage's feed. */
 .item { padding: var(--gap); border-bottom: 1px solid var(--hairline); }
 .item-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .item-head h2 { font-size: var(--large); overflow-wrap: anywhere; }
@@ -406,8 +456,7 @@ ul, ol { list-style: none; }
 /* The Beads page's choices: each row a label over a wrapping run of chips.
    A chip is a link at least 36 px high holding the choice and the number of
    beads it lists; the current one is filled with the pill's rust, which
-   carries white text, and the rest stay quiet. (.chip is the sidebar's
-   yard chip, one element; these are a row's links.) */
+   carries white text, and the rest stay quiet. */
 .chips p { display: flex; flex-wrap: wrap; gap: 6px; }
 .chips p + p { margin-top: 12px; }
 .chips .label { flex: 1 0 100%; }
@@ -465,18 +514,17 @@ ul, ol { list-style: none; }
 /* A note's pictures, each below its words, never wider than the column. */
 .note img { display: block; max-width: 100%; height: auto; margin-top: 8px; }
 /* The talk page: the crew to talk to, the conversation's head, the mail in
-   a reading column, the form that sends. The centre fills the viewport, the
-   crew and the head stay above the letters and the form below, and the
-   letters scroll between them. The pane runs bottom-up, so the newest
-   letter is in view on open with the form under it; each block inside
-   keeps the letters oldest first. */
-.centre:has(#talk) { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+   a reading column, the form that sends. The stage fills the window
+   (.wv-stage:has(#talk)), the crew and the head stay above the letters and
+   the form below, and the letters scroll between them. The pane runs
+   bottom-up, so the newest letter is in view on open with the form under
+   it; each block inside keeps the letters oldest first. */
 #talk { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 #letters { display: flex; flex-direction: column-reverse; flex: 1; min-height: 0; overflow-y: auto; }
 #letters > * { flex: none; }
 /* The mail stands in the reading column: as wide as the centre, to
    footplate's measure, and centred past it. */
-#live, #earlier { width: 100%; max-width: var(--reading-width); margin-inline: auto; }
+#talk #live, #talk #earlier { width: 100%; max-width: var(--reading-width); margin-inline: auto; }
 .peers { padding: 12px var(--gap); border-bottom: 1px solid var(--hairline); }
 .peers ul { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 .peers a { display: block; padding: 4px 0; color: var(--dim); font-size: var(--small); letter-spacing: var(--label-spacing); text-transform: uppercase; }
@@ -488,6 +536,7 @@ ul, ol { list-style: none; }
    member's state beside it, quiet. */
 .talk-head { display: flex; align-items: baseline; gap: 8px; padding: 12px var(--gap); border-bottom: 1px solid var(--hairline); }
 .talk-head .state { color: var(--faint); font-family: var(--sans); font-size: 13px; }
+.section-head { font-family: var(--sans); font-size: 13px; font-weight: 600; }
 /* One letter: the gutter at the left holds the time, and the body stands
    in from it. A letter that heads its group puts the sender beside the
    time and its body under it; one that reads under the head above it puts
@@ -521,21 +570,21 @@ ul, ol { list-style: none; }
    outside the live part, so what is typed survives what arrives. The line's
    text is 16px: smaller, a phone enlarges the field on focus and the page
    with it. Why a mail was not sent stands above the frame, on its edge. */
-#send, #talk > .error { width: calc(100% - 2 * var(--gap)); max-width: calc(var(--reading-width) - 2 * var(--gap)); margin-inline: auto; }
-#send { display: flex; flex-direction: column; gap: 4px; margin-block: var(--gap); padding: 8px 12px; background: var(--panel); border: 1px solid var(--hairline); border-radius: 8px; }
+.compose, #talk > .error { width: calc(100% - 2 * var(--gap)); max-width: calc(var(--reading-width) - 2 * var(--gap)); margin-inline: auto; }
+.compose { display: flex; flex-direction: column; gap: 4px; margin-block: var(--gap); padding: 8px 12px; background: var(--panel); border: 1px solid var(--hairline); border-radius: 8px; }
 #talk > .error { padding: var(--gap) 0 0; border-bottom: 0; }
 /* The line has no border to show the focus, so the frame shows it. */
-#send:focus-within { border-color: var(--accent); }
-#send textarea { width: 100%; padding: 0; background: none; color: var(--ink); border: 0; font: 16px/1.5 var(--mono); resize: vertical; }
-#send textarea:focus-visible { outline: none; }
-#send textarea::placeholder { color: var(--faint); }
+.compose:focus-within { border-color: var(--accent); }
+.compose textarea { width: 100%; padding: 0; background: none; color: var(--ink); border: 0; font: 16px/1.5 var(--mono); resize: vertical; }
+.compose textarea:focus-visible { outline: none; }
+.compose textarea::placeholder { color: var(--faint); }
 /* The Send button stands at the row's right edge, the key that sends it
    beside: faint as the view's faint text, small, and never uppercased,
    as key names are case-sensitive. */
-#send .send-row { display: flex; justify-content: flex-end; align-items: baseline; gap: 8px; }
-#send .hint { color: var(--faint); font-size: var(--small); text-wrap: balance; }
-#send button { padding: 8px 16px; background: var(--panel); color: var(--dim); border: 1px solid var(--hairline-strong); font-size: var(--small); letter-spacing: var(--label-spacing); text-transform: uppercase; }
-#send button:hover { color: var(--accent-hover); border-color: var(--accent-hover); }
+.compose .send-row { display: flex; justify-content: flex-end; align-items: baseline; gap: 8px; }
+.compose .hint { color: var(--faint); font-size: var(--small); text-wrap: balance; }
+.compose button { padding: 8px 16px; background: var(--panel); color: var(--dim); border: 1px solid var(--hairline-strong); font-size: var(--small); letter-spacing: var(--label-spacing); text-transform: uppercase; }
+.compose button:hover { color: var(--accent-hover); border-color: var(--accent-hover); }
 /* Why a mail was not sent, above the form that keeps its words. */
 .error { color: var(--held); }
 /* The pairing page: the code large in mono, the QR at its natural size on
@@ -655,7 +704,7 @@ code { font: inherit; color: var(--dim); overflow-wrap: anywhere; }
 
 /* One depot: the canvas's depot board — the title block, four counts, the
    flows with their stage strips, what waits on the viewer, what landed.
-   The page reads in the sans face throughout, as the sidebar does, with
+   The page reads in the sans face throughout, as the list does, with
    bead ids in mono; the cards, the table and the segments keep the
    canvas's rounded corners. */
 .depot { display: flex; flex-direction: column; gap: 28px; padding: 28px var(--gap); font-family: var(--sans); font-size: 13px; }
@@ -700,7 +749,7 @@ a.depot-card:hover .depot-card-num { color: var(--accent-hover); }
 .depot-quiet summary::-webkit-details-marker { display: none; }
 .depot-quiet summary::marker { content: ""; }
 .depot-quiet summary:hover { color: var(--accent-hover); }
-.depot-quiet[open] > summary .side-chev { transform: rotate(90deg); }
+.depot-quiet[open] > summary .chev { transform: rotate(90deg); }
 .depot-quiet ul { padding: 0 16px 12px 36px; color: var(--dim); }
 .depot-quiet li { padding: 2px 0; }
 /* What waits and what landed, side by side where there is room. A waiting
@@ -756,7 +805,7 @@ a.depot-card:hover .depot-card-num { color: var(--accent-hover); }
 .flow-empty summary::-webkit-details-marker { display: none; }
 .flow-empty summary::marker { content: ""; }
 .flow-empty summary:hover { color: var(--accent-hover); }
-.flow-empty[open] > summary .side-chev { transform: rotate(90deg); }
+.flow-empty[open] > summary .chev { transform: rotate(90deg); }
 .flow-empty-n { font-weight: 600; color: var(--dim); }
 .flow-empty-names { font-size: 12px; color: var(--dim); overflow-wrap: anywhere; }
 .flow-empty .flow-head { border-top: 1px solid var(--hairline); }
@@ -766,101 +815,4 @@ a.depot-card:hover .depot-card-num { color: var(--accent-hover); }
   .flow-rows li, .flow-rows li > a { padding-left: 28px; padding-right: 12px; }
   .flow-more, .flow-none { padding-left: 28px; padding-right: 12px; }
   .flow-empty summary { padding: 9px 12px; }
-}
-
-/* --- narrower windows ---------------------------------------------------- */
-
-/* No room for four columns: the right one goes. The centre keeps its
-   width, centred, as on every narrower window. */
-@media (max-width: 1099px) {
-  .shell { grid-template-columns: var(--sidebar-width) minmax(0, var(--centre-width)); justify-content: center; }
-  .right { display: none; }
-  /* The talk page's centre gives way to the reading width. */
-  .shell:has(#talk) { grid-template-columns: var(--sidebar-width) minmax(0, var(--reading-width)); }
-}
-
-/* A phone: the centre column alone, the rail a bar at the bottom in its
-   order — Crew, Decide, Lines, More — four targets of about 97 px at
-   390 px, none cut, each 48 high. Settings, which the sidebar keeps at
-   its foot on a wide window, is the last row of More's list here. The
-   bar stays in view while the page scrolls, as the sidebar does on a
-   wide window, and the open mode's rows open under More, above the bar. */
-@media (max-width: 699px) {
-  .shell { display: flex; flex-direction: column; }
-  /* min-width: 0, as the grids' minmax(0, ...) above: what is wider than
-     the window (a diagram, a stage file) pans inside its block instead of
-     widening the page and pushing the bar off it. */
-  .centre { order: 1; flex: 1 0 auto; min-width: 0; border-left: 0; border-right: 0; }
-  .sidebar { display: none; }
-  .rail {
-    order: 2;
-    position: sticky;
-    bottom: 0;
-    align-self: stretch;
-    display: flex;
-    flex-direction: row;
-    align-items: stretch;
-    gap: 0;
-    min-height: 0;
-    padding: 0 0 env(safe-area-inset-bottom);
-    background: var(--panel);
-    border-top: 1px solid var(--hairline-strong);
-    border-right: 0;
-    /* Visible, so More opens above the bar. */
-    overflow: visible;
-  }
-  /* The list items stand aside with the list: else each tile would keep
-     its 52 px inside an item of its own, and More would take the rest. */
-  .rail .tiles, .rail .tiles li { display: contents; }
-  .rail .foot { display: none; }
-  .rail .tile { flex: 1 1 0; min-width: 0; min-height: 48px; justify-content: center; border-radius: 0; }
-  .rail .tile .glyph { width: 20px; height: 20px; }
-  .rail .tile.open { background: none; box-shadow: inset 0 2px 0 var(--accent); }
-  .rail .more { display: block; flex: 1 1 0; min-width: 0; }
-  /* The bar's fourth entry. Note for the next shot: chrome
-     --screenshot drops a centred summary's text wherever the bar holds
-     more than one entry, while every browser window and CDP shot keeps
-     it — so the phone's shots come from agent-browser, not the shot
-     script. The summary stays a plain centred flex row; bending it for
-     the shot tool (left-aligned text, fixed offsets) would bend what
-     every person reads. */
-  .rail .more summary {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 48px;
-    font-size: 10px;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--dim);
-    cursor: pointer;
-    list-style: none;
-  }
-  .rail .more summary::-webkit-details-marker { display: none; }
-  .rail .more summary::marker { content: ""; }
-  .rail .more summary:hover { color: var(--accent-hover); }
-  .rail .more ul {
-    position: absolute;
-    bottom: 100%;
-    left: 0;
-    right: 0;
-    display: block;
-    background: var(--panel);
-    border-top: 1px solid var(--hairline-strong);
-  }
-  .rail .more li + li { border-top: 1px solid var(--hairline); }
-  .rail .more li a { display: block; padding: 14px var(--gap); font-family: var(--sans); font-size: 13px; min-height: 48px; }
-  .rail .more li a[aria-current="page"] { color: var(--ink); box-shadow: inset 2px 0 0 var(--accent); }
-  /* More opens as a layer over the page: a backdrop dims the page under
-     it, so the sheet's edge reads, and a tap on it closes the sheet —
-     the tap lands on the summary the backdrop belongs to, which shuts
-     the details. The sheet and the bar's More stand above the shade. */
-  .rail .more details[open] > summary { position: relative; z-index: 1; }
-  .rail .more details[open] > summary::before { content: ""; position: fixed; inset: 0; background: var(--shade); }
-  .rail .more details[open] > ul { z-index: 1; }
-  /* The talk page: the shell fills the viewport, the centre takes what
-     the bottom bar leaves, and the letters scroll between the crew and
-     the form as on a desktop. */
-  .shell:has(#talk) { height: 100vh; height: 100dvh; }
-  .shell:has(#talk) > .centre { height: auto; flex: 1 1 auto; min-height: 0; }
 }

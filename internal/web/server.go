@@ -139,7 +139,7 @@ func NewServer(st store.API, home string, log *slog.Logger) (*Server, error) {
 
 // partial are the files of templates/ that define a part of a page, not a
 // page: every page is parsed with them.
-var partial = []string{"shell", "aside", "entry", "card", "ask", "csrf"}
+var partial = []string{"shell", "entry", "card", "ask", "csrf"}
 
 // loadPages parses every template of templates/ with the shell, one set per
 // page: each page defines "content", so two pages cannot share a set.
@@ -229,7 +229,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /assets/{file}", s.handleAsset)
 	// The yard's liveness facts for a monitor, a proxy or footplate: a
 	// machine route, answered directly as JSON, with no template and no
-	// sidebar entry.
+	// place in the window.
 	s.mux.HandleFunc("GET /health", s.handleHealth)
 	// A browser asks for one unbidden; the view has no image, and an empty
 	// answer keeps its console clear of a 404.
@@ -471,21 +471,19 @@ type Page struct {
 	Template string
 	// Title is the browser's title for the page; the yard's name follows it.
 	Title string
-	// Menu is the name the bar knows the page by: its mode's tile
-	// stands open and its row under More is marked current. "" for none.
-	Menu string
-	Data any
-	// depot is the depot the page stands on, "" on any other page: the
-	// sidebar marks its row current.
-	depot string
-	// flow is the depot's flow the page stands on, "" on any other page:
-	// the sidebar marks its row current.
-	flow string
+	Data  any
+	// depot and flow are the depot and the flow of it the page stands on, ""
+	// on any other page: Lines' list marks their rows.
+	depot, flow string
+	// with is the party of the conversation the page opens in Crew's list
+	// where its address does not name one: the yardmaster a delegated record
+	// was made by.
+	with string
 	// line is the shell's line, for a handler that has read the yard
 	// already; respond reads it otherwise.
 	line *Line
-	// ov is the overview, for a handler that passes its line: respond
-	// builds the sidebar from it instead of reading the yard again.
+	// ov is the overview, for a handler that passes its line: respond counts
+	// from it instead of reading the yard again.
 	ov *Home
 	// yard is the yard's open work, for a handler that has read it and
 	// not the line: respond makes the line from it instead of reading the
@@ -496,18 +494,30 @@ type Page struct {
 	head uint64
 	// inbox is the acting user's inbox read, for a handler that has read
 	// it already; respond reads it otherwise, once, for the rail's Crew
-	// pill. The JSON never carries it.
+	// badge. The JSON never carries it.
 	inbox *store.Mailbox
+	// crew are the crew's rows, for a handler that has read them; respond
+	// reads them otherwise where the page stands in Crew, for its list.
+	crew []CrewRow
 	// stream is the ?format= of the page's stream, for a page that hangs
 	// more on it than the shell does: card on /flows, seq on a page that
 	// only reads itself again, home on / for the entries its feed keeps.
 	// "" is the feed's entries.
 	stream string
-	// Wide is the Yard panel: its centre runs to the window's edge.
-	// The pages without the aside do the same by the stylesheet.
-	// The JSON never carries it.
-	Wide bool
+	// live is how the page reads itself again on every event of the stream:
+	// the swap of the leaf the shell carries (liveStage, liveNone), "" for a
+	// page that is a snapshot, or follows the yard in fragments of its own.
+	live string
 }
+
+// The swaps of a live page's leaf: the stage's own, which a read of the page
+// puts in place keeping the list and an open drawer, or none, for a page
+// whose stage stays as it was read and whose rail and list alone follow the
+// yard.
+const (
+	liveStage = "innerHTML ignoreTitle:true"
+	liveNone  = "none"
+)
 
 // errorData is the Data of every error page, so an error reads the same in
 // JSON whichever handler met it.
@@ -519,18 +529,21 @@ type errorData struct {
 // itself shows around it.
 type view struct {
 	Page
-	Yard    string
-	Rail    rail
-	Sidebar sidebar
-	Aside   *Line
-	// Needs counts what waits for the visitor, as home lists it: the
-	// header's line on a page without the aside, nothing at zero.
-	Needs int
+	Yard string
+	Rail rail
+	List listView
+	// Bare is an error page's shell: the rail without a mode or a count, the
+	// list's head alone, and no stream.
+	Bare bool
 	// Head is the seq the page's stream starts after. It is read before
 	// what the page shows, so the stream brings everything the page lacks.
 	Head uint64
 	// Stream is the stream's ?format=, "" for the feed's entries.
 	Stream string
+	// Self is the address the page was asked at, with its query: what a live
+	// page's leaf reads again, in the swap Live says ("" for a page with no
+	// leaf).
+	Self, Live string
 }
 
 // respond answers r with p, as JSON or as HTML (see wantsJSON). Every
@@ -548,76 +561,119 @@ func (s *Server) respond(w http.ResponseWriter, r *http.Request, p Page) {
 		s.data(w, r, p.Status, p.Data)
 		return
 	}
-	t := s.pages[p.Template]
-	if t == nil {
+	if s.pages[p.Template] == nil {
 		s.fail(w, r, fmt.Errorf("no template %q", p.Template))
 		return
 	}
-	// The shell shows the yard's name on every page: the aside beside
-	// home and the line, and the header's count elsewhere.
-	v := view{Page: p, Yard: s.yardName(r.Context()), Aside: p.line, Head: p.head, Stream: p.stream}
-	ov := p.ov
-	if v.Aside == nil {
-		var err error
-		// A handler's own head stands: it is from before the handler read
-		// the yard, and one read here would skip what happened since.
-		if v.Head == 0 {
-			if v.Head, err = s.st.Head(r.Context()); err != nil {
-				s.fail(w, r, err)
-				return
-			}
-		}
-		if ov == nil {
-			if ov, err = s.overview(r.Context(), p.yard); err != nil {
-				s.fail(w, r, err)
-				return
-			}
-		}
-		if v.Aside, err = s.line(r.Context(), ov); err != nil {
+	v := s.bare(r, p)
+	if p.Template != "error" && p.Template != "unbuilt" {
+		v.Bare, v.Head, v.Stream, v.Live = false, p.head, p.stream, p.live
+		if err := s.window(r.Context(), r, &v); err != nil {
 			s.fail(w, r, err)
 			return
 		}
-		// Home and the line carry the aside and need no count; they
-		// pass their line and never reach here.
-		v.Needs = len(attention(ov, v.Aside))
-	}
-	// The rail's Crew pill beside the line: the acting user's aggregate
-	// unread, read once per request — the talk page passes its own read
-	// through — and not read at all where the view acts as no user. A
-	// visitor the yard holds no inbox for reads with no pill, as a yard
-	// whose asks cannot be read waits without them.
-	inbox := p.inbox
-	if inbox == nil {
-		if as := s.acting(r.Context()); as != "" {
-			var err error
-			if inbox, err = s.st.UserInbox(r.Context(), as, 1, as); err != nil {
-				if r.Context().Err() != nil {
-					s.fail(w, r, err)
-					return
-				}
-				s.log.Error("web: user inbox", "err", err)
-				inbox = nil
-			}
-		}
-	}
-	v.Rail = s.rail(r.Context(), p.Menu, r.URL.EscapedPath(), v.Aside, inbox)
-	// An error page renders the sidebar bare: the yard and the fixed
-	// rows, no counts, no depots.
-	if p.Template == "error" {
-		v.Sidebar = sidebarFor(v.Yard, nil, nil, "", "")
-	} else {
-		v.Sidebar = sidebarFor(v.Yard, ov, v.Aside, p.depot, p.flow)
 	}
 	// Rendered whole before the first byte: a template that fails halfway
 	// must not leave half a page under a 200.
 	var buf bytes.Buffer
-	if err := t.ExecuteTemplate(&buf, "shell.html", v); err != nil {
+	if err := s.pages[p.Template].ExecuteTemplate(&buf, "shell.html", v); err != nil {
 		s.fail(w, r, err)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(p.Status)
 	_, _ = w.Write(buf.Bytes())
+}
+
+// bare is p in the shell's bare form, an error page's: the rail with no mode
+// and no counts, the list's head alone and no stream. It reads nothing of the
+// yard but its name, so an error stays renderable whatever failed.
+func (s *Server) bare(r *http.Request, p Page) view {
+	yard := s.yardName(r.Context())
+	return view{Page: p, Yard: yard, Rail: railFor(yard, "", 0, 0), List: listView{Title: yard}, Bare: true, Self: r.URL.RequestURI()}
+}
+
+// window fills the shell around a page: the rail and the open mode's list.
+// Everything they say is read once for the request, and a handler's own read
+// of the yard, its line or its inbox stands in place of this one's: the
+// overview and the line for Decide's waits and Lines' depots and for the
+// rail's badge, the acting user's inbox for Crew's badge and for which of
+// the crew and the people have unread mail, and, on a page that stands in
+// Crew, the crew and the users.
+func (s *Server) window(ctx context.Context, r *http.Request, v *view) error {
+	p := &v.Page
+	var err error
+	// A handler's own head stands: it is from before the handler read the
+	// yard, and one read here would skip what happened since.
+	if v.Head == 0 {
+		if v.Head, err = s.st.Head(ctx); err != nil {
+			return err
+		}
+	}
+	ov := p.ov
+	if ov == nil {
+		if ov, err = s.overview(ctx, p.yard); err != nil {
+			return err
+		}
+	}
+	l := p.line
+	if l == nil {
+		if l, err = s.line(ctx, ov); err != nil {
+			return err
+		}
+	}
+	// The rail's Crew badge beside the line: the acting user's aggregate
+	// unread, read once per request, the talk page passes its own read
+	// through, and not read at all where the view acts as no user. A visitor
+	// the yard holds no inbox for reads with no badge, as a yard whose asks
+	// cannot be read waits without them.
+	inbox := p.inbox
+	if inbox == nil {
+		if as := s.acting(ctx); as != "" {
+			var ierr error
+			if inbox, ierr = s.st.UserInbox(ctx, as, 1, as); ierr != nil {
+				if ctx.Err() != nil {
+					return ierr
+				}
+				s.log.Error("web: user inbox", "err", ierr)
+				inbox = nil
+			}
+		}
+	}
+	unread := 0
+	if inbox != nil {
+		unread = inbox.Unread
+	}
+	waits := attention(ov, l)
+	pl := placeOf(r, *p)
+	v.Rail = railFor(v.Yard, pl.mode, len(waits), unread)
+	switch pl.mode {
+	case "decide":
+		v.List = decideList(pl, ov, l, waits)
+	case "lines":
+		v.List = linesList(pl, ov, l)
+	case "settings":
+		v.List = s.settingsList(ctx, pl)
+	case "crew":
+		if v.List, err = s.crewListFor(ctx, pl, p.crew, inbox); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// placeOf is where the page stands in the window, by its address.
+func placeOf(r *http.Request, p Page) place {
+	pl := place{mode: modeFor(r.URL.Path), path: r.URL.Path, depot: p.depot, flow: p.flow, with: p.with}
+	switch pl.mode {
+	case "decide":
+		pl.bead = r.PathValue("id")
+	case "crew":
+		if pl.with == "" {
+			pl.with = r.URL.Query().Get("with")
+		}
+	}
+	return pl
 }
 
 // data answers r with v as JSON, as the commands print it with --json.
@@ -654,20 +710,8 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 		_ = json.NewEncoder(w).Encode(p.Data)
 		return
 	}
-	v := view{Page: p, Yard: s.yardName(r.Context())}
-	// An error page stands under the rail with no open mode and no pills,
-	// and under the sidebar bare; it still carries the header's count
-	// when the yard can answer it. Keep the error itself renderable when
-	// those reads failed.
-	v.Rail = s.rail(r.Context(), "", r.URL.EscapedPath(), nil, nil)
-	v.Sidebar = sidebarFor(v.Yard, nil, nil, "", "")
-	if ov, overviewErr := s.overview(r.Context(), nil); overviewErr == nil {
-		if l, lineErr := s.line(r.Context(), ov); lineErr == nil {
-			v.Needs = len(attention(ov, l))
-		}
-	}
 	var buf bytes.Buffer
-	if terr := s.pages[p.Template].ExecuteTemplate(&buf, "shell.html", v); terr != nil {
+	if terr := s.pages[p.Template].ExecuteTemplate(&buf, "shell.html", s.bare(r, p)); terr != nil {
 		http.Error(w, err.Error(), status)
 		return
 	}

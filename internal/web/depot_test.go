@@ -325,35 +325,6 @@ func TestDepotHTML(t *testing.T) {
 	}
 }
 
-// The sidebar marks the depot the page stands on, and none on any other
-// page.
-func TestDepotSidebarCurrent(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	f := depotYard(t)
-	s := sidebarSection(t, squash(f.get("/depots/line").body))
-	if want := `<a class="side-row" href="/depots/line" title="line — 1 in transit" aria-label="line — 1 in transit" aria-current="page">`; !strings.Contains(s, want) {
-		t.Errorf("the sidebar lacks %s: %s", want, s)
-	}
-	if n := strings.Count(s, "aria-current"); n != 1 {
-		t.Errorf("the sidebar marks %d rows current, want line alone: %s", n, s)
-	}
-	if s := sidebarSection(t, squash(f.get("/").body)); strings.Contains(s, "aria-current") {
-		t.Errorf("the sidebar marks a depot current off its page: %s", s)
-	}
-	must(t, f.st.PutDepot(ctx, store.Depot{Name: "empty", Base: "origin/main"}, f.depotActor(ctx)))
-	s = sidebarSection(t, squash(f.get("/depots/empty").body))
-	if !strings.Contains(s, `<details class="side-quiet" open>`) {
-		t.Errorf("the quiet-depot group is closed on its current page: %s", s)
-	}
-	if want := `<a class="side-row" href="/depots/empty" aria-current="page"><span class="side-label">empty</span></a>`; !strings.Contains(s, want) {
-		t.Errorf("the quiet depot row is not marked current: %s", s)
-	}
-	if n := strings.Count(s, "aria-current"); n != 1 {
-		t.Errorf("the sidebar marks %d rows current on a quiet depot page, want empty alone: %s", n, s)
-	}
-}
-
 // A depot with no flow still has its page: every bead in transit, the
 // table replaced by the line that says so, the sections empty.
 func TestDepotNoFlows(t *testing.T) {

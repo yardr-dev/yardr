@@ -31,9 +31,10 @@
   </article>
 {{end}}
 {{define "content"}}
-{{- /* Every event of the stream reads the page again and puts the list in
-       place: a session starts, ends or blocks with an event. */}}
-<div id="live" hx-get="/sessions" hx-trigger="sse:message" hx-select="#live > *" hx-swap="innerHTML ignoreTitle:true">
+{{- /* Every event of the stream reads the page again, by the leaf in the
+       shell, and puts the list in place: a session starts, ends or blocks
+       with an event. */}}
+<div id="live">
   {{- range .Data.Sessions}}{{template "session" .}}
   {{- else}}
   <p class="item faint">No session is running.</p>

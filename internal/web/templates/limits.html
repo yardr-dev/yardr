@@ -1,12 +1,9 @@
 {{define "content"}}
-<nav class="item filters" aria-label="Config">
-  <p><a href="/config">‹ Config</a></p>
-</nav>
-{{- /* The list reads itself again whenever something happens in the yard:
-       the shell's stream carries each event's seq and nothing else. The
-       re-read runs nothing itself: the handler answers from its last ask
-       until the minute is up. */}}
-<div id="limits" hx-get="/limits" hx-trigger="sse:message" hx-select="#limits > *" hx-swap="innerHTML ignoreTitle:true">
+{{- /* The page's leaf in the shell reads it again whenever something
+       happens in the yard: the stream carries each event's seq and nothing
+       else. The re-read runs nothing itself: the handler answers from its
+       last ask until the minute is up. */}}
+<div id="limits">
   {{- range .Data.Limits}}
   <article class="item">
     <header class="item-head">

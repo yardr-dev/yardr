@@ -38,7 +38,7 @@
     <li><a href="/sessions">Running {{len .Running}} · oldest {{.OldestAge}} ›</a></li>
     {{- end}}
     {{- if .YardOpen}}
-    <li><a href="/flows?panel=1">Yard {{.YardOpen}}{{if .YardWorking}} · working {{.YardWorking}}{{end}}{{if .YardHeld}} · held {{.YardHeld}}{{end}} ›</a></li>
+    <li><a href="/flows">Yard {{.YardOpen}}{{if .YardWorking}} · working {{.YardWorking}}{{end}}{{if .YardHeld}} · held {{.YardHeld}}{{end}} ›</a></li>
     {{- end}}
     {{- if .Closed}}
     <li><a href="/beads?all=1">Closed today {{len .Closed}} ›</a></li>
@@ -51,7 +51,9 @@
 {{- end}}
 {{- end}}
 {{- /* The feed, newest first: the kept lines, or the full page behind
-       ?all=1. On the first page the shell's stream continues it after the
+       ?all=1. What listens to the stream for its own fragments says
+       hx-target="this": the shell's target is the stage, which an element
+       that swaps what the stream sends would otherwise inherit. On the first page the shell's stream continues it after the
        page's head: each kept event's entry goes on top. An older page is a
        snapshot. The header stands outside the feed, so the next page's
        entries join it without another. */}}
@@ -59,7 +61,7 @@
 <p class="item label">Just happened</p>
 {{- end}}
 <section class="feed" id="feed" aria-label="What happened"
-  {{- if not .Before}} sse-swap="message" hx-swap="afterbegin"{{end}}>
+  {{- if not .Before}} sse-swap="message" hx-target="this" hx-swap="afterbegin"{{end}}>
   {{- if .All}}{{range .Events}}{{template "entry" .}}{{end}}
   {{- else}}{{range .FeedLines}}{{template "entry" .}}{{end}}{{end}}
   <p class="item faint none">{{if .Before}}Nothing older.{{else if .Events}}Nothing for you.{{else}}Nothing has happened yet.{{end}}</p>
@@ -67,7 +69,7 @@
   {{- if .Older}}
   {{- /* The next page: a link, which htmx follows by itself once it scrolls
          into view, putting that page's entries in the link's place. */}}
-  <a class="item older label" href="/?all=1&amp;before={{.Older}}" hx-get="/?all=1&amp;before={{.Older}}" hx-trigger="intersect once" hx-select="#feed > *" hx-target="this" hx-swap="outerHTML">Older</a>
+  <a class="item older label" href="/?all=1&amp;before={{.Older}}" hx-get="/?all=1&amp;before={{.Older}}" hx-trigger="intersect once" hx-select="#feed > *" hx-target="this" hx-swap="outerHTML" hx-push-url="false" hx-select-oob="unset">Older</a>
   {{- end}}
   {{- else if .MoreActivity}}
   <a class="item older label" href="/?all=1">All activity ›</a>

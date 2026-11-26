@@ -1,134 +1,108 @@
 package web_test
 
 import (
-	"context"
 	"os"
 	"regexp"
 	"strings"
 	"testing"
-
-	"yardr.dev/yardr/internal/store"
 )
 
-// At 1100 px and wider every page fills the window: home and the line
-// keep the aside, and every other page counts what waits in its header
-// instead. The markup carries which pages keep the aside (the yard
-// panel's wide shell TestYardPageIsWide covers), the stylesheet the
-// fluid centre, the readable measure and the unchanged narrower windows;
-// what the pixels do is the bead's screenshots'.
-func TestPagesFillTheWindow(t *testing.T) {
+// The window is three columns and the document does not scroll: the rail is
+// 64 wide, the list 340 and the stage takes the rest, with its content in one
+// column of 760 at most, centred, with a gutter. The markup carries the rail,
+// the list and the stage on every page (TestEveryPageIsTheWholeShell), the
+// stylesheet the measures and the readable text; what the pixels do is the
+// bead's screenshots.
+func TestWindowFillsTheWindow(t *testing.T) {
 	t.Parallel()
-	// Peers are the operator's to read, so the walk is the operator's.
-	f, _ := talkFixture(t, "ada")
-	must(t, f.st.SetSetting(context.Background(), store.OperatorSetting, "ada", "ada"))
-	run, _, _, _, _ := stocked(t, f)
-	for _, path := range []string{"/"} {
-		r := f.get(path)
-		if r.status != 200 {
-			t.Errorf("%s: status %d", path, r.status)
-			continue
-		}
-		if !strings.Contains(r.body, `<div class="shell"`) {
-			t.Errorf("%s: not in the shell", path)
-		}
-		if strings.Contains(r.body, "shell wide") {
-			t.Errorf("%s: wide, so it keeps no aside", path)
-		}
-		if !strings.Contains(r.body, "<aside") {
-			t.Errorf("%s: keeps no aside", path)
-		}
-	}
-	for _, path := range []string{"/line", "/beads", "/sessions", "/crew", "/flows", "/beads/" + run.ID,
-		"/config", "/depots", "/groups", "/routes", "/peers", "/deps", "/limits"} {
-		r := f.get(path)
-		if r.status != 200 {
-			t.Errorf("%s: status %d", path, r.status)
-			continue
-		}
-		if !strings.Contains(r.body, `<div class="shell"`) {
-			t.Errorf("%s: not in the shell", path)
-		}
-		if strings.Contains(r.body, "shell wide") {
-			t.Errorf("%s: wide", path)
-		}
-		if strings.Contains(r.body, "<aside") {
-			t.Errorf("%s: keeps the aside home alone keeps", path)
-		}
-	}
-	css, err := os.ReadFile("assets/yard.css")
-	must(t, err)
+	css := string(readAsset(t, "yard.css"))
 	for _, want := range []string{
-		// The desktop shell: a fluid centre between the sidebar and the
-		// aside. The rail is the phone's bar and leaves the grid.
-		"grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--right-width);",
-		// A page without the aside fills the window too. An error page
-		// keeps the sidebar bare, so no rule without it stands.
-		".shell:not(:has(aside.right)) { grid-template-columns: var(--sidebar-width) minmax(0, 1fr); }",
+		"--wv-rail: 64px;", "--wv-list: 340px;", "--wv-measure: 760px;", "--wv-gutter: 24px;",
+	} {
+		if !strings.Contains(css, want) {
+			t.Errorf("the stylesheet lacks the measure %s", want)
+		}
+	}
+	shell := cssRule(t, ".wv-shell")
+	for _, want := range []string{
+		"display: grid;",
+		"grid-template-columns: var(--wv-rail) var(--wv-list) minmax(0, 1fr);",
+		// The grid is the window's height, so no column makes the document
+		// taller than it.
+		"height: 100vh;", "height: 100dvh;",
+	} {
+		if !strings.Contains(shell, want) {
+			t.Errorf(".wv-shell lacks %s: %s", want, shell)
+		}
+	}
+	if body := cssRule(t, "body"); !strings.Contains(body, "overflow: hidden;") {
+		t.Errorf("the document scrolls: %s", body)
+	}
+	// The stage's content is one column of the measure, centred: a rule on
+	// what stands directly in the stage, so a page needs no wrapper of its
+	// own for it, and the phone's top bar and a leaf stand apart from it.
+	content := cssRule(t, ".wv-stage > :not(.wv-top):not(.wv-live)")
+	for _, want := range []string{"width: min(var(--wv-measure), 100% - 2 * var(--wv-gutter));", "margin-inline: auto;"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("the stage's content lacks %s: %s", want, content)
+		}
+	}
+	for _, want := range []string{
 		// Running text keeps a measure of about 90 characters.
 		".text, .entry-note { max-width: 90ch; }",
-		// Below 1100 px the centre keeps its width, centred.
-		".shell { grid-template-columns: var(--sidebar-width) minmax(0, var(--centre-width)); justify-content: center; }",
 		// A list's rows keep their one line.
 		".entry-line .entry-what { display: flex; align-items: baseline; gap: 6px; margin-top: 0; overflow: hidden; white-space: nowrap; }",
 		".needs li > a { display: flex; align-items: baseline; gap: 6px; width: 100%; min-width: 0; box-sizing: border-box; overflow: hidden; white-space: nowrap; font-family: var(--sans); }",
 	} {
-		if !strings.Contains(string(css), want) {
+		if !strings.Contains(css, want) {
 			t.Errorf("the stylesheet lacks %s", want)
 		}
 	}
-	if strings.Contains(string(css), "rail-column") || strings.Contains(string(css), "var(--rail-width)") ||
-		strings.Contains(string(css), "var(--column-width)") {
-		t.Error("the stylesheet still names the rail's desktop column")
-	}
-	// --centre-width caps the narrow centre only: the desktop shell no
-	// longer names it.
-	if n := strings.Count(string(css), "var(--centre-width)"); n != 1 {
-		t.Errorf("var(--centre-width) is used %d times, want once (below 1100 px)", n)
+	// What the window took the place of is gone: the three fixed columns,
+	// the sidebar, the right column, the header's count, the phone's More.
+	for _, gone := range []string{"--sidebar-width", "--centre-width", "--right-width", ".sidebar", ".side-", ".right ", ".centre", "needs-count", ".rail .more", "aside"} {
+		if strings.Contains(css, gone) {
+			t.Errorf("the stylesheet still names %s", gone)
+		}
 	}
 }
 
-// The sidebar is the window's height and no taller, and its rows scroll
-// inside it: a yard with many depots has more rows than a window holds, and
-// a sidebar with only a minimum height would grow with them and stick at the
-// top, its lower rows and Settings out of reach until the page itself ends. The
-// cap is a height, not a minimum, with the vh line before the dvh one as the
-// fallback of a browser that has no dvh; the overflow is its own and
-// vertical; the bar is thin and in the hairlines' colours. Settings keeps the
-// foot of the capped column where the rows are few (TestPhoneBarMore holds
-// .side-foot's auto margin), and the open page's row is brought to the middle
-// of the sidebar on load. A flow page marks its depot row too, but the flow
-// is the target so its row stays in view even when the depot has many flows.
-// What the pixels do is the bead's screenshots.
-func TestSidebarScrollsOnItsOwn(t *testing.T) {
+// The list and the stage scroll apart, each inside itself: the list's rows
+// scroll under its head, thin and in the hairlines' colours, and the stage
+// scrolls its own content; neither makes the page taller. The open row stands
+// in the middle of the list on load, as far as its ends allow, in a browser that
+// has scroll-initial-target: a row of the open page is the target, never a
+// section's link. What the pixels do is the bead's screenshots.
+func TestListAndStageScrollApart(t *testing.T) {
 	t.Parallel()
 	// A declaration stands at the start of its rule or after a space or a
 	// semicolon, so that height does not match min-height.
 	declares := func(rule, decl string) bool {
 		return regexp.MustCompile(`(?:^|[\s;])` + regexp.QuoteMeta(decl)).MatchString(rule)
 	}
-	sidebar := cssRule(t, ".sidebar")
-	for _, want := range []string{
-		// It stays in view while the page scrolls under it, as a column
-		// that Settings' auto margin can take the room of.
-		"position: sticky;", "top: 0;", "display: flex;", "flex-direction: column;",
-		"height: 100vh; height: 100dvh;",
-		"overflow-y: auto;",
-		"scrollbar-width: thin;",
-		"scrollbar-color: var(--hairline-strong) var(--hairline);",
+	for selector, wants := range map[string][]string{
+		".wv-list": {"display: flex;", "flex-direction: column;", "min-height: 0;", "overflow: hidden;"},
+		".wv-list__rows": {"flex: 1;", "min-height: 0;", "overflow-y: auto;", "scrollbar-width: thin;",
+			"scrollbar-color: var(--hairline-strong) transparent;"},
+		".wv-list__head": {"flex: none;"},
+		".wv-stage":      {"min-height: 0;", "min-width: 0;", "overflow: auto;", "padding: 44px 0 40px;"},
 	} {
-		if !declares(sidebar, want) {
-			t.Errorf(".sidebar lacks %s: %s", want, sidebar)
+		rule := cssRule(t, selector)
+		for _, want := range wants {
+			if !declares(rule, want) {
+				t.Errorf("%s lacks %s: %s", selector, want, rule)
+			}
 		}
 	}
-	// The open row stands in the middle of the sidebar on load, as far as
-	// the sidebar's ends allow. The centre alignment is what keeps Arrivals,
-	// Decide and Crew in view for a depot near the top: the start, which an
-	// initial target takes where nothing names another, scrolls them away.
-	open := cssRule(t, `.sidebar .side-flow[aria-current="page"], .sidebar:not(:has(.side-flow[aria-current="page"])) .side-row[aria-current="page"]`)
+	open := cssRule(t, `.wv-list .wv-row[aria-current="page"]`)
 	for _, want := range []string{"scroll-initial-target: nearest;", "scroll-snap-align: center;"} {
 		if !declares(open, want) {
-			t.Errorf("the sidebar's open row lacks %s: %s", want, open)
+			t.Errorf("the list's open row lacks %s: %s", want, open)
 		}
+	}
+	// The one rule is the only use of the property beyond it.
+	if n := strings.Count(string(readAsset(t, "yard.css")), "scroll-initial-target:"); n != 1 {
+		t.Errorf("scroll-initial-target stands %d times, want the open row's rule alone", n)
 	}
 }
 
@@ -285,148 +259,61 @@ func TestRoutesCompactRows(t *testing.T) {
 	}
 }
 
-// moreRows is the rows of the bar's More list: the markup between the
-// list's tags, and whether the page has the list at all.
-func moreRows(body string) (string, bool) {
-	_, rows, ok := strings.Cut(body, `<div class="more">`)
-	if ok {
-		_, rows, ok = strings.Cut(rows, `<ul>`)
-	}
-	if ok {
-		rows, _, ok = strings.Cut(rows, `</ul>`)
-	}
-	return rows, ok
-}
-
-// On a phone the rail is a bottom bar of its three mode tiles and More:
-// four targets of about 97 px at 390 px, none cut, each 48 high. Settings
-// is no tile there but the last row of More's list, which opens the open
-// mode's rows above the bar; on a Settings page those rows are Settings'
-// own, and on a page with none More holds the Settings row alone. On a
-// wider window the sidebar stands and the bar leaves the shell. What the
-// pixels do is the bead's screenshots.
-func TestPhoneBarMore(t *testing.T) {
+// Under 900 px the stage is the page and the list is a drawer: the rail is a
+// bar of four tiles at the foot, 48 high, the yard's chip standing in the
+// stage's top bar; the drawer comes from the left over a scrim by :target and
+// :has(), with no script, and the targets are 48 high. There is no More. What
+// the pixels do is the bead's screenshots.
+func TestPhoneWindow(t *testing.T) {
 	t.Parallel()
-	f := newFixture(t)
-	body := f.get("/").body
-	// The rail's tiles in its order, Decide open on home.
+	css := string(readAsset(t, "yard.css"))
+	phone := mediaCSS(t, css, "max-width: 899px")
 	for _, want := range []string{
-		`<a class="tile" href="/talk" title="Crew" aria-label="Crew">`,
-		`<a class="tile open" href="/line" title="Decide" aria-label="Decide" aria-current="true">`,
-		`<a class="tile" href="/flows?panel=1" title="Lines" aria-label="Lines">`,
-		`<a class="tile" href="/config" title="Settings" aria-label="Settings">`,
-	} {
-		if !strings.Contains(body, want) {
-			t.Errorf("the bar lacks %s", want)
-		}
-	}
-	// The phone's bar is the three mode tiles and More: Settings stands
-	// alone in the foot, which the stylesheet hides there, and More stands
-	// last.
-	tiles := strings.Index(body, `<ul class="tiles">`)
-	foot := strings.Index(body, `<div class="foot">`)
-	more := strings.Index(body, `<div class="more">`)
-	if tiles < 0 || foot < tiles || more < foot {
-		t.Fatalf("the rail is not its tiles, its foot and More in that order (at %d, %d, %d)", tiles, foot, more)
-	}
-	if n := strings.Count(body[tiles:foot], `<a class="tile`); n != 3 || strings.Contains(body[tiles:foot], `href="/config"`) {
-		t.Errorf("the bar's tiles are not the three modes: %s", body[tiles:foot])
-	}
-	if n := strings.Count(body[foot:more], `<a class="tile`); n != 1 || !strings.Contains(body[foot:more], `href="/config" title="Settings"`) {
-		t.Errorf("the foot is not Settings alone: %s", body[foot:more])
-	}
-	// More holds the open mode's column, the current page marked, and ends
-	// in Settings, once. On a Settings page it holds Settings' own rows and
-	// no row more; where no mode is open (an error page) it holds the
-	// Settings row alone, so /config stays a tap away from every page.
-	settings := `<li><a href="/config">Settings</a></li>`
-	for _, c := range []struct{ path, rows string }{
-		{"/", `<li><a href="/" aria-current="page">Home</a></li>` +
-			`<li><a href="/line">Line</a></li>` +
-			`<li><a href="/previews">Previews</a></li>` + settings},
-		{"/crew", `<li><a href="/talk">Talk</a></li>` +
-			`<li><a href="/crew" aria-current="page">Crew</a></li>` +
-			`<li><a href="/sessions">Sessions</a></li>` + settings},
-		{"/beads", `<li><a href="/flows?panel=1">Yard</a></li>` +
-			`<li><a href="/flows">Flows</a></li>` +
-			`<li><a href="/beads" aria-current="page">Beads</a></li>` + settings},
-		{"/config", `<li><a href="/config" aria-current="page">Config</a></li>` +
-			`<li><a href="/depots">Depots</a></li>` +
-			`<li><a href="/groups">Groups</a></li>` +
-			`<li><a href="/routes">Routes</a></li>` +
-			`<li><a href="/deps">Deps</a></li>` +
-			`<li><a href="/limits">Limits</a></li>`},
-		{"/nowhere", settings},
-	} {
-		page := f.get(c.path).body
-		rows, ok := moreRows(page)
-		if !ok {
-			t.Errorf("%s: the bar has no More list", c.path)
-		} else if rows != c.rows {
-			t.Errorf("%s: More holds %s, want %s", c.path, rows, c.rows)
-		}
-		// More itself is never current: the open tile stands marked.
-		if strings.Contains(page, `<summary aria-current`) {
-			t.Errorf("%s: More stands marked current", c.path)
-		}
-	}
-	if n := strings.Count(body, `<a href="/" aria-current="page">`); n != 1 {
-		t.Errorf("/ marks %d copies of itself, want 1 (More's)", n)
-	}
-	if !strings.Contains(body, `<summary>More</summary>`) {
-		t.Error("More's summary is not plain")
-	}
-	css, err := os.ReadFile("assets/yard.css")
-	must(t, err)
-	text := string(css)
-	// The desktop shows the sidebar and no bar: More shows below 700 px
-	// only.
-	if more := cssRule(t, ".rail .more"); !strings.Contains(more, "display: none;") {
-		t.Errorf(".rail .more stands on a wide window too: %s", more)
-	}
-	if bar := cssRule(t, ".rail"); !strings.Contains(bar, "display: none;") {
-		t.Errorf(".rail stands on a wide window too: %s", bar)
-	}
-	phone := mediaCSS(t, text, "max-width: 699px")
-	for _, want := range []string{
-		".sidebar { display: none; }",
-		// The tiles' list items stand aside with the list, so each tile is
-		// a flex item of the bar and shares its width with More.
-		".rail .tiles, .rail .tiles li { display: contents; }",
-		// Settings is More's last row here: the foot that holds its tile
-		// leaves the bar, which is the three tiles and More.
-		".rail .foot { display: none; }",
-		".rail .tile { flex: 1 1 0; min-width: 0; min-height: 48px; justify-content: center; border-radius: 0; }",
-		".rail .more { display: block; flex: 1 1 0; min-width: 0; }",
-		".rail .more summary::-webkit-details-marker { display: none; }",
-		`.rail .more summary::marker { content: ""; }`,
+		// The grid is one column over the bar.
+		".wv-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }",
+		".wv-stage { grid-row: 1; padding-top: 0; }",
+		// The rail is the bar: a row of the tiles, without the chip and the
+		// foot's spacer; Settings has its own tile.
+		".wv-rail { grid-row: 2; flex-direction: row; justify-content: space-around; align-items: stretch; height: var(--wv-bar);",
+		".wv-rail .wv-chip, .wv-rail__foot { display: none; }",
+		".wv-tile, .wv-rail > .wv-chip + .wv-tile { flex: 1; width: auto; max-width: 96px; min-height: 48px; margin: 0; justify-content: center; }",
+		// The top bar holds the chip, the mode's name and its count, and
+		// the link that opens the drawer, 48 high.
+		".wv-top { display: flex; align-items: center;",
+		".wv-top__list { display: flex; align-items: center; gap: 2px; min-height: 48px;",
+		// Closed, the drawer is hidden as well as moved, so a keyboard
+		// does not tab into rows it cannot see.
+		"transform: translateX(-102%); visibility: hidden;",
+		// Open by the marker, with the scrim behind it.
+		".wv-shell:has(#drawer:target) .wv-list { transform: none; visibility: visible; transition-delay: 0s; box-shadow: var(--shadow-popover); }",
+		".wv-shell:has(#drawer:target) .wv-scrim { display: block; position: fixed; z-index: 10; inset: 0 0 var(--wv-bar) 0; background: var(--shade); }",
+		".wv-list__close { display: flex; align-items: center; min-height: 48px;",
 	} {
 		if !strings.Contains(phone, want) {
 			t.Errorf("the phone rules lack %s", want)
 		}
 	}
-	// The desktop keeps Settings at the sidebar's foot.
-	if foot := cssRule(t, ".side-foot"); !strings.Contains(foot, "margin-top: auto;") {
-		t.Errorf(".side-foot does not stand at the sidebar's foot: %s", foot)
+	// The drawer is 340 wide, or 88% of a window that is narrower.
+	if !strings.Contains(phone, "width: min(var(--wv-list), 88vw);") {
+		t.Error("the drawer is not 340 wide at most and 88% of the window")
 	}
-	// More's summary keeps the bar's 48-pixel target, four to the bar.
-	summary := phone[strings.Index(phone, ".rail .more summary {"):]
-	summary = summary[:strings.Index(summary, "}")]
-	if !strings.Contains(summary, "min-height: 48px;") {
-		t.Errorf("More's summary is not 48 high: %s", summary)
-	}
-	// More opens upward, a full-width list above the bar, each row tall
-	// enough to tap; the bar keeps its overflow for the popup.
-	for _, want := range []string{"position: absolute;", "bottom: 100%;", "left: 0;", "right: 0;", "display: block;"} {
+	// A row, a section's head and the type step up to the phone's.
+	for _, want := range []string{".wv-row { min-height: 48px; padding: 10px; }", ".wv-sect > summary { min-height: 48px; }",
+		".wv-row__name { font-size: 16px; line-height: 22px; }", "--wv-title: 600 22px/28px var(--sans);"} {
 		if !strings.Contains(phone, want) {
-			t.Errorf("More's list lacks %s", want)
+			t.Errorf("the phone rules lack %s", want)
 		}
 	}
-	if !strings.Contains(phone, "overflow: visible;") {
-		t.Error("the phone bar clips More's list")
+	// On a wider window the top bar, the scrim and the close link are not
+	// drawn, and the marker is no box.
+	if gone := cssRule(t, ".wv-live, .wv-flag, .wv-top, .wv-scrim"); !strings.Contains(gone, "display: none;") {
+		t.Errorf("the phone's parts stand on a wide window: %s", gone)
 	}
-	if !strings.Contains(phone, "min-height: 48px;") {
-		t.Error("the bar's targets are not 48 high")
+	if closer := cssRule(t, ".wv-list__close"); !strings.Contains(closer, "display: none;") {
+		t.Errorf("the close link stands on a wide window: %s", closer)
+	}
+	if strings.Contains(css, ".more") || strings.Contains(css, "More") {
+		t.Errorf("the stylesheet still has the phone's More")
 	}
 }
 
@@ -463,25 +350,6 @@ func TestFeedRowOnPhone(t *testing.T) {
 	for _, want := range []string{"display: flex;", "white-space: nowrap;"} {
 		if !strings.Contains(wide, want) {
 			t.Errorf(".entry-line .entry-what lacks %s: %s", want, wide)
-		}
-	}
-}
-
-// More opens as a layer over the page: a backdrop dims the page under it,
-// so the sheet's edge reads, and a tap on it closes the sheet. What the
-// pixels do is the bead's screenshot.
-func TestMoreBackdrop(t *testing.T) {
-	t.Parallel()
-	css, err := os.ReadFile("assets/yard.css")
-	must(t, err)
-	phone := mediaCSS(t, string(css), "max-width: 699px")
-	for _, want := range []string{
-		".rail .more details[open] > summary { position: relative; z-index: 1; }",
-		`.rail .more details[open] > summary::before { content: ""; position: fixed; inset: 0; background: var(--shade); }`,
-		".rail .more details[open] > ul { z-index: 1; }",
-	} {
-		if !strings.Contains(phone, want) {
-			t.Errorf("the phone rules lack %s", want)
 		}
 	}
 }
@@ -532,18 +400,16 @@ func TestAskRowOnPhone(t *testing.T) {
 	}
 }
 
-// The talk page reads as a messaging app: the centre fills the viewport,
-// the crew stays above the letters and the form below, and the letters
-// scroll between them, bottom-up, so the newest is in view on open with
-// the form under it. On a phone the shell fills the viewport instead and
-// the centre takes what the bottom bar leaves. What the pixels do is the
-// bead's screenshot.
+// The talk page reads as a messaging app: the stage fills the window, the
+// crew stays above the letters and the form below, and the letters scroll
+// between them, bottom-up, so the newest is in view on open with the form
+// under it. What the pixels do is the bead's screenshot.
 func TestTalkLayout(t *testing.T) {
 	t.Parallel()
-	centre := cssRule(t, ".centre:has(#talk)")
-	for _, want := range []string{"display: flex;", "flex-direction: column;", "height: 100dvh;"} {
-		if !strings.Contains(centre, want) {
-			t.Errorf(".centre:has(#talk) lacks %s: %s", want, centre)
+	stage := cssRule(t, ".wv-stage:has(#talk)")
+	for _, want := range []string{"display: flex;", "flex-direction: column;", "overflow: hidden;"} {
+		if !strings.Contains(stage, want) {
+			t.Errorf(".wv-stage:has(#talk) lacks %s: %s", want, stage)
 		}
 	}
 	talk := cssRule(t, "#talk")
@@ -563,11 +429,12 @@ func TestTalkLayout(t *testing.T) {
 		t.Errorf("#letters > * lacks flex: none;: %s", blocks)
 	}
 	// The mail stands in the reading column, footplate's 880 pixels,
-	// centred; the conversation's head carries the member's state quietly.
-	column := cssRule(t, "#live, #earlier")
+	// centred, inside the stage's own measure; the conversation's head
+	// carries the member's state quietly.
+	column := cssRule(t, "#talk #live, #talk #earlier")
 	for _, want := range []string{"max-width: var(--reading-width);", "margin-inline: auto;"} {
 		if !strings.Contains(column, want) {
-			t.Errorf("#live, #earlier lacks %s: %s", want, column)
+			t.Errorf("#talk #live, #talk #earlier lacks %s: %s", want, column)
 		}
 	}
 	if root := cssRule(t, ":root"); !strings.Contains(root, "--reading-width: 880px;") {
@@ -585,11 +452,11 @@ func TestTalkLayout(t *testing.T) {
 	// pixels, which a phone does not enlarge on focus, and the frame shows
 	// the focus.
 	for selector, wants := range map[string][]string{
-		"#send": {"background: var(--panel);", "border: 1px solid var(--hairline);", "border-radius: 8px;"},
-		"#send, #talk > .error": {"width: calc(100% - 2 * var(--gap));",
+		".compose": {"background: var(--panel);", "border: 1px solid var(--hairline);", "border-radius: 8px;"},
+		".compose, #talk > .error": {"width: calc(100% - 2 * var(--gap));",
 			"max-width: calc(var(--reading-width) - 2 * var(--gap));", "margin-inline: auto;"},
-		"#send textarea":     {"border: 0;", "font: 16px/1.5 var(--mono);"},
-		"#send:focus-within": {"border-color: var(--accent);"},
+		".compose textarea":     {"border: 0;", "font: 16px/1.5 var(--mono);"},
+		".compose:focus-within": {"border-color: var(--accent);"},
 	} {
 		rule := cssRule(t, selector)
 		for _, want := range wants {
@@ -598,23 +465,11 @@ func TestTalkLayout(t *testing.T) {
 			}
 		}
 	}
-	css, err := os.ReadFile("assets/yard.css")
-	must(t, err)
-	// Where the window has no room for the right column, every page's
-	// centre is capped at --centre-width but the talk page's, which takes
-	// the reading width.
-	narrow := mediaCSS(t, string(css), "max-width: 1099px")
-	if want := ".shell:has(#talk) { grid-template-columns: var(--sidebar-width) minmax(0, var(--reading-width)); }"; !strings.Contains(narrow, want) {
-		t.Errorf("the rules below 1100 px lack %s", want)
-	}
-	phone := mediaCSS(t, string(css), "max-width: 699px")
-	for _, want := range []string{
-		".shell:has(#talk) { height: 100vh; height: 100dvh; }",
-		".shell:has(#talk) > .centre { height: auto; flex: 1 1 auto; min-height: 0; }",
-	} {
-		if !strings.Contains(phone, want) {
-			t.Errorf("the phone rules lack %s", want)
-		}
+	// On a phone the stage takes what the bar leaves, with no top padding: the
+	// top bar stands there instead.
+	phone := mediaCSS(t, string(readAsset(t, "yard.css")), "max-width: 899px")
+	if want := ".wv-stage:has(#talk) { padding-top: 0; }"; !strings.Contains(phone, want) {
+		t.Errorf("the phone rules lack %s", want)
 	}
 }
 
@@ -640,6 +495,63 @@ func TestFilePagesOnPhone(t *testing.T) {
 			if !strings.Contains(rule, want) {
 				t.Errorf("%s lacks %s: %s", selector, want, rule)
 			}
+		}
+	}
+}
+
+// The light look: the same tokens with the design system's light values for a
+// visitor whose system asks for light, with dark staying the default. The
+// window's surfaces and its rust-as-text follow, and the list stands on the
+// ground in light where it stands on the raised surface in dark.
+func TestLightTheme(t *testing.T) {
+	t.Parallel()
+	text := string(readAsset(t, "yard.css"))
+	if !strings.Contains(text, "@media (prefers-color-scheme: light) {") {
+		t.Fatal("the stylesheet has no light theme")
+	}
+	_, light, _ := strings.Cut(text, "@media (prefers-color-scheme: light) {")
+	for _, want := range []string{
+		"color-scheme: light;",
+		"--ground: #F7F7F6;",          // --surface-app
+		"--panel: #FFFFFF;",           // --surface-raised
+		"--hairline: #E2E2DF;",        // --border-subtle
+		"--hairline-strong: #CFCFCB;", // --border-strong
+		"--ink: #161718;",             // --text-primary
+		"--dim: #5B5E64;",             // --text-secondary
+		"--faint: #8E9196;",           // --text-disabled
+		"--running: #1F9A60;",         // --status-running
+		"--held: #B3382C;",            // --status-error
+		"--link: #1A56C8;",            // --text-link
+		"--surface-sunken: #EDEDEB;",
+		"--surface-hover: #EDEDEB;",
+		"--surface-pressed: #E2E2DF;",
+		"--border-hover: #B3B3AE;",
+		"--text-accent: #8F3C19;", // --yard-700
+		"--chip: #B54E22;",        // --yard-600
+		"--chip-ink: #FFFFFF;",
+		".wv-list { background: var(--ground); }",
+	} {
+		if !strings.Contains(light, want) {
+			t.Errorf("the light theme lacks %s", want)
+		}
+	}
+	// Dark stays: the base tokens keep their values.
+	dark, _, _ := strings.Cut(text, "@media (prefers-color-scheme: light) {")
+	for _, want := range []string{
+		"color-scheme: dark light;",
+		"--ground: #161718;",
+		"--panel: #1c1d1f;",
+		"--hairline: #27282b;",
+		"--hairline-strong: #333538;",
+		"--ink: #e9e9ea;",
+		"--dim: #abadb0;",
+		"--faint: #808286;",
+		"--running: #4cc38a;",
+		"--held: #e5675a;",
+		"--link: #7aa2f7;",
+	} {
+		if !strings.Contains(dark, want) {
+			t.Errorf("the dark tokens lack %s", want)
 		}
 	}
 }

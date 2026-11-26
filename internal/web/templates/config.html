@@ -22,10 +22,10 @@
   </header>
   <p>On, the yardmaster may run an operator's defining commands for them on that operator's own mail to it: a group's kind, model, directories and permission preset, a crew member's beside the yardmaster's own, a depot's test command and base, where a user is told, and a new hook in its safe shape. Each run is recorded and mailed to the operator as it runs. Prompts, commands, secrets and free args stay on cards or at a terminal.</p>
   {{- if eq . "on"}}
-  <form method="post" action="/config/delegation">{{template "csrf"}}<button type="submit" name="action" value="off">Turn off</button></form>
+  <form method="post" action="/config/delegation" hx-post="/config/delegation" hx-push-url="false">{{template "csrf"}}<button type="submit" name="action" value="off">Turn off</button></form>
   {{- else}}
   <p class="faint">Turning it on takes a fresh sign-in.</p>
-  <form method="post" action="/config/delegation">{{template "csrf"}}<button type="submit" name="action" value="on">Turn on</button></form>
+  <form method="post" action="/config/delegation" hx-post="/config/delegation" hx-push-url="false">{{template "csrf"}}<button type="submit" name="action" value="on">Turn on</button></form>
   {{- end}}
 </article>
 {{- end}}

@@ -56,7 +56,7 @@ func (s *Server) handlePairing(w http.ResponseWriter, r *http.Request) {
 		s.refusePairing(w, r)
 		return
 	}
-	s.respond(w, r, Page{Template: "pairing", Title: "Pair a device", Menu: "pairing", Data: pairingPage(s.acting(r.Context()))})
+	s.respond(w, r, Page{Template: "pairing", Title: "Pair a device", Data: pairingPage(s.acting(r.Context()))})
 }
 
 // handlePairingPost took the pairing page's forms. The page has none
@@ -76,7 +76,7 @@ func (s *Server) handlePairingPost(w http.ResponseWriter, r *http.Request) {
 	}
 	d := pairingPage(s.acting(r.Context()))
 	d.Error = "no pairing was opened or ended: " + pairingNotice
-	s.respond(w, r, Page{Template: "pairing", Title: "Pair a device", Menu: "pairing", Data: d})
+	s.respond(w, r, Page{Template: "pairing", Title: "Pair a device", Data: d})
 }
 
 // handlePairingPNG served the QR code of the visitor's own pairing.

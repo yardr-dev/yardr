@@ -141,7 +141,7 @@ func listedPage[T any](s *Server, w http.ResponseWriter, r *http.Request, read f
 	if rows == nil {
 		rows = []T{}
 	}
-	s.respond(w, r, Page{Template: template, Title: title, Menu: "config", Data: wrap(rows, head), head: head, stream: "seq"})
+	s.respond(w, r, Page{Template: template, Title: title, Data: wrap(rows, head), head: head, stream: "seq", live: liveStage})
 }
 
 func (s *Server) handleDepots(w http.ResponseWriter, r *http.Request) {
@@ -230,7 +230,7 @@ func (s *Server) config(w http.ResponseWriter, r *http.Request, why string) {
 		out.Delegation = delegationSwitch(settings)
 	}
 	out.Error = why
-	s.respond(w, r, Page{Template: "config", Title: "Config", Menu: "config", Data: out, head: head})
+	s.respond(w, r, Page{Template: "config", Title: "Config", Data: out, head: head})
 }
 
 // peersLink is the Peers page on the config hub: the yards this one is
@@ -314,5 +314,5 @@ func (s *Server) handleDeps(w http.ResponseWriter, r *http.Request) {
 		}
 		d.Groups[i].Deps = append(d.Groups[i].Deps, row)
 	}
-	s.respond(w, r, Page{Template: "deps", Title: "Deps", Menu: "config", Data: d, head: d.Head, stream: "seq"})
+	s.respond(w, r, Page{Template: "deps", Title: "Deps", Data: d, head: d.Head, stream: "seq", live: liveStage})
 }

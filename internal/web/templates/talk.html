@@ -29,9 +29,9 @@
     {{- else if eq $kind "image"}}
     <img src="{{blobURL .Hash .Name}}" alt="{{$words}}">
     {{- else if .Name}}
-    <a href="{{blobURL .Hash .Name}}">file {{.Name}}</a>
+    <a href="{{blobURL .Hash .Name}}" hx-boost="false">file {{.Name}}</a>
     {{- else}}
-    <a href="{{blobURL .Hash .Name}}">file {{slice .Hash 0 8}}</a>
+    <a href="{{blobURL .Hash .Name}}" hx-boost="false">file {{slice .Hash 0 8}}</a>
     {{- end}}
     {{- end}}
     {{- if and .Own .Read}}
@@ -81,10 +81,11 @@
          with the form under it; each block inside keeps its own order. The
          blocks stand in the reading column. */}}
   <div id="letters">
-    {{- /* Every event of the stream reads the newest page again and puts the
-           letters in place: mail sent and mail read arrive with an event.
-           An older page is a snapshot, read undisturbed. */}}
-    <div id="live"{{if eq .Data.Before 0}} hx-get="/talk?with={{.Data.With}}" hx-trigger="sse:message" hx-select="#live > *" hx-swap="innerHTML ignoreTitle:true"{{end}}>
+    {{- /* Every event of the stream reads the newest page again, by the leaf
+           in the shell, and puts the letters in place: mail sent and mail
+           read arrive with an event. An older page is a snapshot, read
+           undisturbed. */}}
+    <div id="live">
       {{- if eq .Data.Before 0}}
       {{- range .Data.Letters}}{{template "letter" .}}
       {{- else}}
@@ -98,7 +99,7 @@
     <div id="earlier">
       {{- if and .Data.More .Data.Letters}}
       {{- with index .Data.Letters 0}}
-      <a class="item older label" href="/talk?with={{$.Data.With}}&amp;before={{.Seq}}" hx-get="/talk?with={{$.Data.With}}&amp;before={{.Seq}}" hx-trigger="intersect once" hx-select="#earlier > *" hx-target="this" hx-swap="outerHTML">Older mail</a>
+      <a class="item older label" href="/talk?with={{$.Data.With}}&amp;before={{.Seq}}" hx-get="/talk?with={{$.Data.With}}&amp;before={{.Seq}}" hx-trigger="intersect once" hx-select="#earlier > *" hx-target="this" hx-swap="outerHTML" hx-push-url="false" hx-select-oob="unset">Older mail</a>
       {{- end}}
       {{- end}}
       {{- if ne .Data.Before 0}}
@@ -114,11 +115,14 @@
   {{- end}}
   {{- /* The composer: a framed box in the reading column under the mail,
          holding the label, the line and the Send row. The form posts and
-         puts the page's answer in place of the talk, letters and an emptied
-         form alike; without scripts it posts and loads the conversation it
-         lands on. It stands outside the live part, so what is typed
-         survives what arrives. */}}
-  <form id="send" method="post" action="/talk?with={{.Data.With}}" hx-post="/talk?with={{.Data.With}}" hx-target="#talk" hx-select="#talk > *" hx-swap="innerHTML ignoreTitle:true">
+         puts the page's answer in the stage, letters and an emptied form
+         alike; without scripts it posts and loads the conversation it
+         lands on. A read of the page again leaves the form where it is
+         (hx-preserve), so what is typed survives what arrives: its id
+         names the conversation and the newest letter the user wrote, so
+         the form a send brings, and another conversation's, are new
+         ones. */}}
+  <form class="compose" id="{{.Data.Composer}}" hx-preserve="true" method="post" action="/talk?with={{.Data.With}}" hx-post="/talk?with={{.Data.With}}" hx-push-url="false">
     {{template "csrf"}}
     <label class="label" for="text">Mail to {{.Data.With}} as {{.Data.As}}</label>
     <textarea id="text" name="text" rows="3" required maxlength="{{.Data.MaxMail}}" placeholder="Write to {{.Data.With}}…">{{.Data.Draft}}</textarea>

@@ -263,8 +263,8 @@ func TestLineAskContext(t *testing.T) {
 	if strings.Contains(text, "<details class=\"wait-ask\" open") {
 		t.Error("/line opens an ask card nobody opened")
 	}
-	if n := strings.Count(text, "Move the links now?"); n != 2 {
-		t.Errorf("/line says the question %d times, want twice: the row and its card", n)
+	if n := strings.Count(text, "Move the links now?"); n != 3 {
+		t.Errorf("/line says the question %d times, want three times: the row, its card and Decide's list", n)
 	}
 	// An open card's row is clipped away, never display: none, so the
 	// summary's accessible name keeps the question and several open cards
@@ -594,24 +594,25 @@ func TestHomeNeedsAskTwice(t *testing.T) {
 		t.Fatalf("/line waits %+v, want both asks", got)
 	}
 	body := f.get("/").body
-	if !strings.Contains(body, `title="Decide — 1 waits for you" aria-label="Decide — 1 waits for you"`) ||
-		!strings.Contains(body, `<span class="pill" aria-hidden="true">1</span>`) {
-		t.Errorf("two asks on one bead do not count once in Decide: %s", body)
+	if tile := tileOf(t, body, "/"); !strings.Contains(tile, `title="1 waits for you" aria-label="Decide, 1 waits for you"`) ||
+		!strings.Contains(tile, `<span class="wv-badge" aria-hidden="true">1</span>`) {
+		t.Errorf("two asks on one bead do not count once in Decide: %s", tile)
 	}
 	if strings.Contains(body, `title="Crew —`) {
-		t.Errorf("Crew carries a pill where the view acts as no user: %s", body)
+		t.Errorf("Crew carries a badge where the view acts as no user: %s", railOf(t, body))
 	}
-	if tile := linesTile(t, body); strings.Contains(tile, "pill") {
-		t.Errorf("Lines carries a pill: %s", tile)
+	if tile := tileOf(t, body, "/flows"); strings.Contains(tile, "wv-badge") {
+		t.Errorf("Lines carries a badge: %s", tile)
 	}
-	// A held asked bead still counts, while a held bead with no ask does not.
+	// A held asked bead stands once, and a held bead with no ask waits too:
+	// the badge counts what waits, the asks among it.
 	ctx := context.Background()
 	must(t, func() error { _, err := f.st.SetHold(ctx, b.ID, true, store.Expect{}, "me"); return err }())
 	plain := askBead(t, f, "a plain door", "new")
 	must(t, func() error { _, err := f.st.SetHold(ctx, plain.ID, true, store.Expect{}, "me"); return err }())
 	body = f.get("/").body
-	if !strings.Contains(body, `title="Decide — 1 waits for you"`) {
-		t.Errorf("a held asked bead and a held bead with no ask count incorrectly: %s", body)
+	if tile := tileOf(t, body, "/"); !strings.Contains(tile, `title="2 wait for you"`) {
+		t.Errorf("a held asked bead and a held bead with no ask do not count as two waits: %s", tile)
 	}
 	// The numeral caps above nine; the accessible name retains the count.
 	for i := 0; i < 9; i++ {
@@ -619,9 +620,9 @@ func TestHomeNeedsAskTwice(t *testing.T) {
 		askOn(t, f, extra.ID, store.Ask{Question: "Move it?", To: "mckean", Context: []string{"The shed is full."}})
 	}
 	body = f.get("/").body
-	if !strings.Contains(body, `title="Decide — 10 wait for you" aria-label="Decide — 10 wait for you"`) ||
-		!strings.Contains(body, `<span class="pill" aria-hidden="true">9&#43;</span>`) {
-		t.Errorf("ten asked beads do not use the capped pill: %s", body)
+	if tile := tileOf(t, body, "/"); !strings.Contains(tile, `title="11 wait for you" aria-label="Decide, 11 wait for you"`) ||
+		!strings.Contains(tile, `<span class="wv-badge" aria-hidden="true">9&#43;</span>`) {
+		t.Errorf("eleven waiting beads do not use the capped badge: %s", tile)
 	}
 }
 

@@ -882,7 +882,7 @@ func TestJWTTwoUsersActAsThemselves(t *testing.T) {
 	if r.status != 200 || !strings.Contains(r.body, "paint the shed") ||
 		strings.Contains(r.body, "fix the gate") ||
 		!strings.Contains(r.body, "Mail to yardmaster as jo") ||
-		!strings.Contains(r.body, `<form id="send" method="post"`) {
+		!strings.Contains(r.body, `<form class="compose" id="send-`) {
 		t.Errorf("jo's talk: status %d, want jo's letters and the form, and none of kay's:\n%s", r.status, r.body)
 	}
 	// The gateway's token is the proof of who writes, and the form carries

@@ -229,7 +229,7 @@ func TestBlobNoteRoute(t *testing.T) {
 	}
 	// The bead page links the stable address with the current hash.
 	body := f.get("/beads/" + b.ID).body
-	if want := `<a href="` + addr + `">page ` + fresh.Hash[:8] + `</a>`; !strings.Contains(body, want) {
+	if want := `<a href="` + addr + `" hx-boost="false">page ` + fresh.Hash[:8] + `</a>`; !strings.Contains(body, want) {
 		t.Errorf("the bead page lacks %s", want)
 	}
 }
@@ -470,7 +470,7 @@ func TestBeadPageNoteFiles(t *testing.T) {
 	}
 
 	body := f.get("/beads/" + b.ID).body
-	if want := `<a href="/blobs/` + ref.Hash + `/report.pdf">file report.pdf</a>`; !strings.Contains(body, want) {
+	if want := `<a href="/blobs/` + ref.Hash + `/report.pdf" hx-boost="false">file report.pdf</a>`; !strings.Contains(body, want) {
 		t.Errorf("the page lacks %s", want)
 	}
 	if strings.Contains(body, "<img") {
@@ -513,7 +513,7 @@ func TestBeadPageNotePages(t *testing.T) {
 	if csp := r.header.Get("Content-Security-Policy"); !strings.Contains(csp, "default-src 'self'") || strings.Contains(csp, "sandbox") {
 		t.Errorf("the bead's own Content-Security-Policy %q, want the yard page's", csp)
 	}
-	if want := `<a href="/blobs/note/` + itoa(note.Seq) + `/1">page ` + ref.Hash[:8] + `</a>`; !strings.Contains(r.body, want) {
+	if want := `<a href="/blobs/note/` + itoa(note.Seq) + `/1" hx-boost="false">page ` + ref.Hash[:8] + `</a>`; !strings.Contains(r.body, want) {
 		t.Errorf("the page lacks %s", want)
 	}
 	if strings.Contains(r.body, "<img") {

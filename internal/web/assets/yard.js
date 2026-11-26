@@ -25,6 +25,11 @@
 // event of the yard, which would fold a card under the person reading it:
 // a card that was opened is opened again after each swap (reopenAsks, at
 // the end).
+//
+// A link htmx boosts that the server answers with an error page (a bead that
+// is gone, a page the view refuses) would do nothing, for htmx swaps no 4xx
+// or 5xx answer. The same address loaded plainly shows the error page as a
+// pasted link does, so the click falls back to that (the last listener).
 document.addEventListener("keydown", function (event) {
   if (event.key !== "Enter" || event.shiftKey || event.altKey) return;
   // An Enter that confirms what an input method is composing is the
@@ -139,3 +144,11 @@ function reopenAsks() {
   });
 }
 document.addEventListener("htmx:afterSwap", reopenAsks);
+
+// A boosted click the server refused is loaded as a link without script is:
+// the address shows its own error page, inside the same window.
+document.addEventListener("htmx:responseError", function (event) {
+  var info = event.detail;
+  if (!info.boosted || !info.pathInfo || !info.requestConfig || info.requestConfig.verb !== "get") return;
+  window.location.assign(info.pathInfo.finalRequestPath);
+});

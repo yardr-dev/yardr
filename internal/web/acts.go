@@ -365,7 +365,7 @@ func (s *Server) beadAgain(w http.ResponseWriter, r *http.Request, id, why strin
 		return
 	}
 	d.Error = why
-	s.respond(w, r, Page{Template: "bead", Title: id, Menu: "beads", Data: d, head: d.Head, stream: "seq"})
+	s.respond(w, r, Page{Template: "bead", Title: id, Data: d, head: d.Head, stream: "seq", live: liveStage})
 }
 
 // revOrNone is the revision a form carried as the refusal names it: what

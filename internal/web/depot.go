@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,8 +60,13 @@ func (p DepotPage) Subhead() string {
 	return s
 }
 
-// QuietLabel is the folded quiet-flows row's words, the sidebar's.
-func (p DepotPage) QuietLabel() string { return quietFlowsLabel(len(p.Quiet)) }
+// QuietLabel is the folded quiet-flows row's words.
+func (p DepotPage) QuietLabel() string {
+	if n := len(p.Quiet); n != 1 {
+		return strconv.Itoa(n) + " quiet flows"
+	}
+	return "1 quiet flow"
+}
 
 // DepotFlowRow is one of the depot's flows: its strip and its four
 // counts, the depot's sliced by flow.
@@ -240,8 +246,8 @@ func depotPage(d *HomeDepot, open []store.Bead, l *Line, all []store.Bead, now t
 	}
 	// The depot's open beads, per flow: backlog where a bead sits in its
 	// flow's first stage, transit everywhere else. A bead no flow
-	// governs counts in the depot's transit and under no flow, as under
-	// the sidebar, whose per-depot counts these equal.
+	// governs counts in the depot's transit and under no flow, as in the
+	// lists beside the stage, whose per-depot counts these equal.
 	inTransit, inBacklog := make([]int, len(d.Flows)), make([]int, len(d.Flows))
 	terminalOpen := make([]map[string]int, len(d.Flows))
 	for i := range open {
@@ -262,7 +268,7 @@ func depotPage(d *HomeDepot, open []store.Bead, l *Line, all []store.Bead, now t
 			inTransit[j]++
 		}
 		// A bead reopened into a terminal stage counts as in transit,
-		// as under the sidebar, and stands on its strip's segment.
+		// as in the lists, and stands on its strip's segment.
 		if !hasStage(d.Flows[j].Stages, b.Stage) && slices.Contains(d.Flows[j].Terminal, b.Stage) {
 			if terminalOpen[j] == nil {
 				terminalOpen[j] = map[string]int{}
@@ -270,9 +276,9 @@ func depotPage(d *HomeDepot, open []store.Bead, l *Line, all []store.Bead, now t
 			terminalOpen[j][b.Stage]++
 		}
 	}
-	// What waits on the viewer in this depot: the rail pill's predicate
+	// What waits on the viewer in this depot: the rail badge's predicate
 	// restricted to it, the newest first. A bead with no depot stands
-	// under no row, as in the sidebar.
+	// under no row, as in Lines' list.
 	var waits []Waiting
 	for _, ws := range [][]Waiting{l.Waits, l.Parked} {
 		for _, w := range ws {
@@ -288,7 +294,7 @@ func depotPage(d *HomeDepot, open []store.Bead, l *Line, all []store.Bead, now t
 	for _, w := range waits {
 		flow := ""
 		// The asked bead's flow by the overview's rule, joined in
-		// memory through the overview, as the sidebar joins it.
+		// memory through the overview, as Lines' list joins it.
 		if b := byID[w.Bead]; b != nil {
 			if j := d.flowIndex(b.Type); j >= 0 {
 				flow = d.Flows[j].Name
@@ -322,7 +328,7 @@ func depotPage(d *HomeDepot, open []store.Bead, l *Line, all []store.Bead, now t
 			row.Src = f.Type + " · " + f.Src
 		}
 		if inTransit[j] == 0 && inBacklog[j] == 0 && onYou[j] == 0 {
-			// Quiet, as under the sidebar: nothing in transit, no
+			// Quiet, as in Lines' list: nothing in transit, no
 			// backlog, no open ask. Folded into one row.
 			out.Quiet = append(out.Quiet, f.Name)
 			continue
@@ -409,6 +415,6 @@ func (s *Server) handleDepot(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	s.respond(w, r, Page{Template: "depot", Title: name, Menu: "depot",
+	s.respond(w, r, Page{Template: "depot", Title: name,
 		Data: depotPage(d, ov.yard.beads, l, all, time.Now()), line: l, ov: ov, head: head, depot: name})
 }

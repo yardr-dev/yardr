@@ -132,23 +132,27 @@ func TestTalk(t *testing.T) {
 	for _, want := range []string{
 		"paint the shed", "it is painted", // the letters, both directions
 		"jo", "yardmaster", // who wrote each
-		`<form id="send" method="post" action="/talk?with=yardmaster"`,
 		`<textarea id="text" name="text"`, // yard.js sends on Enter in this box
 		// yard.js puts these words, the keys that stand, in the hint and shows it
 		`<span class="hint" id="send-keys" data-hint="Enter to send · Shift+Enter for a new line" hidden></span>`,
 		`hx-post="/talk?with=yardmaster"`,
-		`hx-get="/talk?with=yardmaster"`, // the newest page is live
+		`<i class="wv-live" hidden hx-get="/talk" hx-trigger="sse:message"`, // the newest page is live: its leaf reads the address it was asked at
 		`maxlength="65536"`,
 		`<a href="/talk?with=scribe">scribe</a>`,
 		`<a href="/talk?with=yardmaster" aria-current="page">`, // the one in conversation
-		`<a href="/talk" aria-current="page">`,                 // the Crew column's entry
-		`class="dot unread"`,                                   // the yardmaster's mail to jo is unread
-		`title="Crew — 1 unread letter" aria-label="Crew — 1 unread letter"`,
-		`<span class="pill" aria-hidden="true">1</span>`,
+		`<a class="wv-row wv-row--unread" href="/talk?with=yardmaster" aria-current="page">`, // Crew's list opens the conversation
+		`class="dot unread"`, // the yardmaster's mail to jo is unread
+		`title="Crew — 1 unread letter" aria-label="Crew, 1 unread letter"`,
+		`<span class="wv-badge" aria-hidden="true">1</span>`,
 	} {
 		if !strings.Contains(r.body, want) {
 			t.Errorf("the page lacks %q:\n%s", want, r.body)
 		}
+	}
+	// The composer is a form of its own id, kept by a read of the page again,
+	// and new after a send or in another conversation.
+	if !regexp.MustCompile(`<form class="compose" id="send-yardmaster-[0-9]+" hx-preserve="true" method="post" action="/talk\?with=yardmaster" hx-post="/talk\?with=yardmaster" hx-push-url="false">`).MatchString(r.body) {
+		t.Errorf("the page lacks the composer's form:\n%s", r.body)
 	}
 	// The conversation opens with its head, the party's name in the section
 	// face, above the letters that scroll under it; each letter carries the
@@ -168,7 +172,7 @@ func TestTalk(t *testing.T) {
 	// runs. The hint is empty and hidden and the keys stand once, in
 	// data-hint, so a page without scripts names no key: there Enter breaks
 	// the line and only the button sends.
-	form := body[strings.Index(body, `<form id="send"`):]
+	form := body[strings.Index(body, `<form class="compose"`):]
 	form = form[:strings.Index(form, `</form>`)]
 	at := -1
 	for _, part := range []string{
@@ -208,8 +212,8 @@ func TestTalk(t *testing.T) {
 	must(t, f.st.Mail(ctx, "jo", "sweep the yard", "scribe"))
 	must(t, f.st.Mail(ctx, "jo", "and oil the gate", "yardmaster"))
 	r = f.get("/talk?with=yardmaster")
-	if r.status != 200 || !strings.Contains(r.body, `title="Crew — 3 unread letters" aria-label="Crew — 3 unread letters"`) ||
-		!strings.Contains(r.body, `<span class="pill" aria-hidden="true">3</span>`) {
+	if r.status != 200 || !strings.Contains(r.body, `title="Crew — 3 unread letters" aria-label="Crew, 3 unread letters"`) ||
+		!strings.Contains(r.body, `<span class="wv-badge" aria-hidden="true">3</span>`) {
 		t.Errorf("opening the conversation changed the aggregate unread count: %s", r.body)
 	}
 	if !strings.Contains(r.body, `<a href="/talk?with=scribe"><span class="dot unread"`) {
@@ -226,8 +230,8 @@ func TestTalk(t *testing.T) {
 		must(t, f.st.Mail(ctx, "jo", fmt.Sprintf("letter %d", i), "yardmaster"))
 	}
 	r = f.get("/talk?with=yardmaster")
-	if !strings.Contains(r.body, `title="Crew — 10 unread letters" aria-label="Crew — 10 unread letters"`) ||
-		!strings.Contains(r.body, `<span class="pill" aria-hidden="true">9&#43;</span>`) {
+	if !strings.Contains(r.body, `title="Crew — 10 unread letters" aria-label="Crew, 10 unread letters"`) ||
+		!strings.Contains(r.body, `<span class="wv-badge" aria-hidden="true">9&#43;</span>`) {
 		t.Errorf("ten unread letters do not use the capped pill: %s", r.body)
 	}
 	box, err = f.st.UserInbox(ctx, "jo", 0, "jo")
@@ -235,7 +239,7 @@ func TestTalk(t *testing.T) {
 	must(t, f.st.AckUserInbox(ctx, "jo", box.Mail[0].Seq, "jo"))
 	r = f.get("/talk?with=yardmaster")
 	if !strings.Contains(r.body, `title="Crew — 9 unread letters"`) ||
-		!strings.Contains(r.body, `<span class="pill" aria-hidden="true">9</span>`) {
+		!strings.Contains(r.body, `<span class="wv-badge" aria-hidden="true">9</span>`) {
 		t.Errorf("an acknowledgement elsewhere did not lower the next render: %s", r.body)
 	}
 
@@ -265,7 +269,7 @@ func TestTalk(t *testing.T) {
 		t.Errorf("/talk with the yardmaster setting mayor opens on %q, want mayor", got)
 	}
 	if r := defaults.get("/talk"); r.status != http.StatusOK ||
-		!strings.Contains(r.body, `<form id="send" method="post" action="/talk?with=mayor"`) {
+		!strings.Contains(r.body, `method="post" action="/talk?with=mayor"`) {
 		t.Errorf("the page's form is not to mayor (status %d):\n%s", r.status, r.body)
 	}
 	if err := defaults.st.SetSetting(defaultCtx, store.YardmasterSetting, "nosuch", "jo"); err != nil {
@@ -434,7 +438,7 @@ func TestTalkPaging(t *testing.T) {
 	link := func(before uint64) string {
 		q := "/talk?with=yardmaster&amp;before=" + strconv.FormatUint(before, 10)
 		return `<a class="item older label" href="` + q + `" hx-get="` + q +
-			`" hx-trigger="intersect once" hx-select="#earlier > *" hx-target="this" hx-swap="outerHTML">Older mail</a>`
+			`" hx-trigger="intersect once" hx-select="#earlier > *" hx-target="this" hx-swap="outerHTML" hx-push-url="false" hx-select-oob="unset">Older mail</a>`
 	}
 
 	body := f.get("/talk?with=yardmaster").body
@@ -442,7 +446,7 @@ func TestTalkPaging(t *testing.T) {
 	letters := strings.Index(body, `<div id="letters">`)
 	live := strings.Index(body, `<div id="live"`)
 	earlier := strings.Index(body, `<div id="earlier">`)
-	form := strings.Index(body, `<form id="send"`)
+	form := strings.Index(body, `<form class="compose"`)
 	if peers < 0 || letters < 0 || live < 0 || earlier < 0 || form < 0 ||
 		!(peers < letters && letters < live && live < earlier && earlier < form) {
 		t.Fatalf("peers %d, letters %d, live %d, earlier %d, form %d, want them in that order",
@@ -740,7 +744,7 @@ func TestTalkPerson(t *testing.T) {
 	for _, want := range []string{
 		"lend me the ladder", "it is by the shed", "and the paint",
 		`<a href="/talk?with=amy" aria-current="page">`,
-		`<form id="send" method="post" action="/talk?with=amy"`,
+		`method="post" action="/talk?with=amy"`,
 		`<a href="/talk?with=yardmaster">`, // the crew stays listed
 	} {
 		if !strings.Contains(r.body, want) {
@@ -802,7 +806,7 @@ func TestTalkPersonWithoutCrew(t *testing.T) {
 	}
 	for _, want := range []string{
 		`<a href="/talk?with=amy" aria-current="page">amy</a>`,
-		`<form id="send" method="post" action="/talk?with=amy"`,
+		`method="post" action="/talk?with=amy"`,
 		"No mail between jo and amy yet.",
 	} {
 		if !strings.Contains(r.body, want) {
@@ -923,7 +927,7 @@ func TestTalkPostInvalid(t *testing.T) {
 	}
 	// The words are back in the line of the form, which is the composer
 	// still, and the reason stands above it.
-	if why, form := strings.Index(r.body, `<p class="item error">`), strings.Index(r.body, `<form id="send"`); why < 0 || form < why {
+	if why, form := strings.Index(r.body, `<p class="item error">`), strings.Index(r.body, `<form class="compose"`); why < 0 || form < why {
 		t.Errorf("long mail: the reason stands at %d and the form at %d, want the reason first", why, form)
 	}
 	if want := `placeholder="Write to yardmaster…">` + big[:100]; !strings.Contains(r.body, want) {

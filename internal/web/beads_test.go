@@ -183,7 +183,7 @@ func TestFlowsReadError(t *testing.T) {
 
 // section is the id of the element that holds a card on /flows.
 var (
-	sectionRE = regexp.MustCompile(`<div class="cards" id="([^"]+)" sse-swap="[^"]+" hx-swap="afterbegin settle:0ms">(.*?)</div>`)
+	sectionRE = regexp.MustCompile(`<div class="cards" id="([^"]+)" sse-swap="[^"]+" hx-target="this" hx-swap="afterbegin settle:0ms">(.*?)</div>`)
 	cardRE    = regexp.MustCompile(`<article class="card( arrived)?" id="([^"]+)"`)
 )
 
@@ -236,17 +236,17 @@ func TestFlowsHTML(t *testing.T) {
 	}
 	bs := f.byTitle()
 	for _, want := range []string{
-		fmt.Sprintf(`<div class="shell" hx-ext="sse" sse-connect="/events?after=%d&amp;format=card">`, head),
+		shellOpen(head, "card"),
 		// settle:0ms: a card the stream brought listens at once, so the
 		// bead's next event, however soon, takes it out again.
-		`<div class="cards" id="at/line//backlog" sse-swap="at/line//backlog" hx-swap="afterbegin settle:0ms">`,
-		`<div class="cards" id="at/line//merged" sse-swap="at/line//merged" hx-swap="afterbegin settle:0ms">`,
-		`<div class="cards" id="at/line/bug/triage" sse-swap="at/line/bug/triage" hx-swap="afterbegin settle:0ms">`,
-		`<div class="cards" id="off/loose" sse-swap="off/loose" hx-swap="afterbegin settle:0ms">`,
-		`<article class="card" id="bead/` + bs["three"].ID + `" sse-swap="bead/` + bs["three"].ID + `" hx-swap="delete">`,
+		`<div class="cards" id="at/line//backlog" sse-swap="at/line//backlog" hx-target="this" hx-swap="afterbegin settle:0ms">`,
+		`<div class="cards" id="at/line//merged" sse-swap="at/line//merged" hx-target="this" hx-swap="afterbegin settle:0ms">`,
+		`<div class="cards" id="at/line/bug/triage" sse-swap="at/line/bug/triage" hx-target="this" hx-swap="afterbegin settle:0ms">`,
+		`<div class="cards" id="off/loose" sse-swap="off/loose" hx-target="this" hx-swap="afterbegin settle:0ms">`,
+		`<article class="card" id="bead/` + bs["three"].ID + `" sse-swap="bead/` + bs["three"].ID + `" hx-target="this" hx-swap="delete">`,
 		`<a class="bead" href="/beads/` + bs["three"].ID + `">` + bs["three"].ID + `</a>`,
 		`<p class="card-title">three</p>`,
-		`<a href="/flows" aria-current="page">`,
+		`<a class="wv-row" href="/flows" aria-current="page">`,
 	} {
 		if !strings.Contains(r.body, want) {
 			t.Errorf("the page lacks %s", want)
@@ -258,10 +258,10 @@ func TestFlowsHTML(t *testing.T) {
 	page := squash(r.body)
 	for _, want := range []string{
 		`<li class="stage quiet terminal"><details><summary><h4>merged</h4><span class="label stage-who">closes the bead</span></summary>` +
-			`<div class="cards" id="at/line//merged" sse-swap="at/line//merged" hx-swap="afterbegin settle:0ms"></div></details>` +
+			`<div class="cards" id="at/line//merged" sse-swap="at/line//merged" hx-target="this" hx-swap="afterbegin settle:0ms"></div></details>` +
 			`<span class="count num" aria-hidden="true"></span></li>`,
 		`<li class="stage"><h4>new</h4><p class="label stage-who">no route: waits for a person</p>` +
-			`<div class="cards" id="at/line//new" sse-swap="at/line//new" hx-swap="afterbegin settle:0ms"><article class="card"`,
+			`<div class="cards" id="at/line//new" sse-swap="at/line//new" hx-target="this" hx-swap="afterbegin settle:0ms"><article class="card"`,
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the page lacks %s", want)
@@ -307,7 +307,7 @@ func apply(t *testing.T, cards map[string]string, fr frame) {
 			delete(cards, left)
 		case i == 1 && (strings.HasPrefix(m.event, "at/") || strings.HasPrefix(m.event, "off/")):
 			c := cardRE.FindStringSubmatch(m.data)
-			if c == nil || c[2] != left || !strings.Contains(m.data, ` sse-swap="`+left+`" hx-swap="delete"`) {
+			if c == nil || c[2] != left || !strings.Contains(m.data, ` sse-swap="`+left+`" hx-target="this" hx-swap="delete"`) {
 				t.Fatalf("frame %d puts in another card than it took out, or one that cannot leave: %s", fr.id, m.data)
 			}
 			cards[c[2]] = m.event
@@ -575,11 +575,11 @@ func TestBeadsHTML(t *testing.T) {
 	}
 	three := f.byTitle()["three"]
 	for _, want := range []string{
-		fmt.Sprintf(`<div class="shell" hx-ext="sse" sse-connect="/events?after=%d&amp;format=seq">`, head),
-		`<div id="beads" hx-get="/beads?depot=line&amp;stage=new" hx-trigger="sse:message" hx-select="#beads > *" hx-swap="innerHTML ignoreTitle:true">`,
+		shellOpen(head, "seq"),
+		`<i class="wv-live" hidden hx-get="/beads?depot=line&amp;stage=new" hx-trigger="sse:message" hx-push-url="false" hx-swap="innerHTML ignoreTitle:true" hx-select-oob="#rail:outerHTML,#list-head:innerHTML,#list-rows:innerHTML"></i>`,
 		`<a class="bead" href="/beads/` + three.ID + `">`,
 		`line · new · task`,
-		`<a href="/beads" aria-current="page">`,
+		`<a class="wv-row" href="/beads" aria-current="page">`,
 	} {
 		if !strings.Contains(r.body, want) {
 			t.Errorf("the page lacks %s", want)
@@ -769,8 +769,8 @@ func TestBeadHTML(t *testing.T) {
 		t.Fatalf("status %d: %s", r.status, r.body)
 	}
 	for _, want := range []string{
-		fmt.Sprintf(`<div class="shell" hx-ext="sse" sse-connect="/events?after=%d&amp;format=seq">`, head),
-		`<div id="bead" hx-get="/beads/` + b.ID + `" hx-trigger="sse:message" hx-select="#bead > *" hx-swap="innerHTML ignoreTitle:true">`,
+		shellOpen(head, "seq"),
+		`<i class="wv-live" hidden hx-get="/beads/` + b.ID + `" hx-trigger="sse:message" hx-push-url="false" hx-swap="innerHTML ignoreTitle:true" hx-select-oob="#rail:outerHTML,#list-head:innerHTML,#list-rows:innerHTML"></i>`,
 		`<title>` + b.ID + ` · depot</title>`,
 		`<h2>a door</h2>`,
 		`task · stage new · open · P1`,
@@ -784,7 +784,6 @@ func TestBeadHTML(t *testing.T) {
 		`<code>yardr bead done ` + b.ID + ` --outcome question</code>`,
 		`<pre class="text">the hinge is missing</pre>`,
 		`builders · stage new`,
-		`<a href="/beads" aria-current="page">`,
 	} {
 		if !strings.Contains(r.body, want) {
 			t.Errorf("the page lacks %s", want)
@@ -1533,15 +1532,7 @@ func TestBeadsReadsTheYardOnce(t *testing.T) {
 	// A bead of no depot is in the list and in no depot's count.
 	bead("a thought", "inbox", "")
 
-	column := func(body string) string {
-		t.Helper()
-		_, aside, ok := strings.Cut(body, "<aside")
-		if !ok {
-			t.Fatalf("the page has no aside: %s", body)
-		}
-		return aside
-	}
-	home := column(f.get("/").body)
+	home := f.get("/").body
 	// The line keeps the waits in its centre and no aside beside them.
 	whole := f.get("/line").body
 	if strings.Contains(whole, "<aside") {
@@ -1555,14 +1546,13 @@ func TestBeadsReadsTheYardOnce(t *testing.T) {
 	if want := map[string]int{"ListBeads": 1, "Sessions": 2, "Events": 2}; !reflect.DeepEqual(got, want) {
 		t.Errorf("/beads asked the store for %v, want %v", got, want)
 	}
-	// /beads counts what waits in its header instead: the blocked bead,
-	// the held one and the three parked, one line to home, and no aside.
-	beads := squash(r.body)
-	if !strings.Contains(beads, `<a class="needs-count" href="/">5 wait for you</a>`) {
-		t.Errorf("/beads counts no waiting bead in its header: %s", beads)
+	// /beads counts what waits in the rail's badge instead: the blocked
+	// bead, the held one and the three parked, and no aside.
+	if tile := tileOf(t, r.body, "/"); !strings.Contains(tile, `title="5 wait for you"`) {
+		t.Errorf("/beads counts no waiting bead in its rail: %s", tile)
 	}
-	if strings.Contains(beads, "<aside") {
-		t.Errorf("/beads keeps the aside home alone keeps: %s", beads)
+	if strings.Contains(r.body, "<aside") {
+		t.Errorf("/beads keeps a column the window has no place for: %s", r.body)
 	}
 	text := squash(whole)
 	for _, want := range []string{
@@ -1575,16 +1565,15 @@ func TestBeadsReadsTheYardOnce(t *testing.T) {
 			t.Errorf("the line lacks %s: %s", want, text)
 		}
 	}
-	// Home's is the line alone: the numbers stay, and the waits are gone
-	// from beside the centre that lists them.
-	homeText := squash(home)
-	if !strings.Contains(homeText, `<dt>open</dt><dd>5</dd>`) {
-		t.Errorf("home's aside lacks the open count: %s", homeText)
-	}
-	for _, not := range []string{`Waits for you`, `Parked · 3`, `<article class="wait">`} {
+	// Home has no aside: the line's numbers and panels are the line page's.
+	homeText := squash(stageOf(t, home))
+	for _, not := range []string{`<dt>open</dt>`, `Parked · 3`, `<article class="wait">`, "<aside"} {
 		if strings.Contains(homeText, not) {
-			t.Errorf("home's aside has %s: %s", not, homeText)
+			t.Errorf("home has %s: %s", not, homeText)
 		}
+	}
+	if waits := section2(t, listSections(t, home), "Waits for you"); waits.count != "5" {
+		t.Errorf("Decide's list holds %+v, want the five that wait", waits)
 	}
 	var list web.Beads
 	f.getJSON("/beads", &list)

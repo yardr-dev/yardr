@@ -139,5 +139,5 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out.List = dispatch.Listed(listed)
-	s.respond(w, r, Page{Template: "sessions", Title: "Sessions", Menu: "sessions", Data: out, head: head})
+	s.respond(w, r, Page{Template: "sessions", Title: "Sessions", Data: out, head: head, live: liveStage})
 }

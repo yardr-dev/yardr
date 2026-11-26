@@ -13,114 +13,123 @@
 <script src="{{asset "yard.js"}}" defer></script>
 </head>
 <body>
-{{- /* One stream for the page (a browser allows a host few connections):
-       home's column reads itself again on every event of it, and a page
-       that is live hangs its own part on it, in the format it asks for
-       (Page.stream): each has an unnamed message per event, which is all
-       the column needs. An error page has no column and no stream. */}}
-<div class="shell{{if .Wide}} wide{{end}}"{{if .Aside}} hx-ext="sse" sse-connect="/events?after={{.Head}}{{with .Stream}}&amp;format={{.}}{{end}}"{{end}}>
-  {{- /* The rail is the phone's bottom bar: the three mode tiles and
-         More, in the rail's order. Each tile links to its page; the open
-         one stands marked, and a tile whose mode waits on the person
-         carries its numeral, with the count in words in its title and
-         aria-label. More opens the open mode's rows above the bar and ends
-         in Settings, which the bar has no tile for. A Settings page's rows
-         are Settings' own, so it adds none; an error page has no rows, so
-         Settings is its one row. The stylesheet shows the rail below
-         700 px only; on a wider window the sidebar stands instead. The
-         glyphs are footplate's own drawings on its 24-grid, in the
-         current colour. */}}
-  <nav class="rail" aria-label="Modes">
-    <ul class="tiles">
-      {{- range .Rail.Tiles}}{{if ne .Name "settings"}}<li>{{template "tile" .}}</li>{{end}}{{end}}
-    </ul>
-    <div class="foot">{{range .Rail.Tiles}}{{if eq .Name "settings"}}{{template "tile" .}}{{end}}{{end}}</div>
-    <div class="more"><details><summary>More</summary><ul>
-      {{- with .Rail.Column}}{{range .Rows}}<li><a href="{{.Path}}"{{if .Current}} aria-current="page"{{end}}>{{.Label}}</a></li>{{end}}{{end}}
-      {{- range .Rail.Tiles}}{{if and (eq .Name "settings") (not .Open)}}<li><a href="{{.Path}}">{{.Label}}</a></li>{{end}}{{end -}}
-    </ul></details></div>
+{{- /* The window: the rail of the four modes, the open mode's list, and the
+       stage that holds the page. Every address answers all three, so a
+       pasted link, a reload and a first visit look as a click does, and
+       nothing here needs script to be read or used: htmx makes the same
+       click cheaper. One stream for the page (a browser allows a host few
+       connections), in the format the page asks for (Page.stream); an error
+       page has no stream. The attributes of the shell are the swap's
+       contract (docs/web.md, Swaps): a link inside swaps the stage with the
+       new page's and, out of band, the rail, the drawer's marker and the
+       list's head and rows, which leaves the list element, and its scroll,
+       where it is; a block whose links all leave the mode says so and has
+       the whole list swapped, so the new mode's list starts at its top. The
+       stage scrolls to its top with each swap that is a navigation or an
+       answer, as a page loaded plainly starts there; a live read says its
+       own swap and leaves it where it is. The server sends the same whole
+       page to every request, htmx's included, and hx-select picks the
+       stage. */}}
+<div class="wv-shell"{{if not .Bare}} hx-ext="sse" sse-connect="/events?after={{.Head}}{{with .Stream}}&amp;format={{.}}{{end}}"{{end}} hx-boost="true" hx-push-url="true" hx-target="#stage" hx-select="#stage > *" hx-select-oob="#rail:outerHTML,#drawer:outerHTML,#list-head:innerHTML,#list-rows:innerHTML" hx-swap="innerHTML scroll:top">
+  {{- /* The rail: the yard's chip, which opens Decide, the three modes, and
+         Settings at the foot. A tile carries the count of what its mode
+         waits on, in words in its title and aria-label. The glyphs are
+         footplate's own drawings on its 24-grid, in the current colour.
+         Under 900 px it is the bar at the foot, without the chip. */}}
+  <nav class="wv-rail" id="rail" aria-label="Modes" hx-select-oob="#rail:outerHTML,#drawer:outerHTML,#list:outerHTML">
+    <a class="wv-chip" href="/" title="{{.Yard}}" aria-label="{{.Yard}}">{{.Rail.Chip}}</a>
+    {{- range .Rail.Tiles}}{{if ne .Name "settings"}}{{template "tile" .}}{{end}}{{end}}
+    <span class="wv-rail__foot"></span>
+    {{- range .Rail.Tiles}}{{if eq .Name "settings"}}{{template "tile" .}}{{end}}{{end}}
   </nav>
-  {{- /* The sidebar: the yard's chip and name, Arrivals and Decide with
-         their counts, Crew bare, the depots with their flows, and Settings
-         at the foot. A flow's dot means a bead of that flow carries an
-         open ask for the viewer. Depot rows go to the depot's page and
-         flow rows to the flow's list, with the current depot and flow
-         marked. An error page renders it bare: the yard and the fixed
-         rows, no counts, no depots. */}}
-  <nav class="sidebar" aria-label="Depots and flows">
-    <a class="yard-row" href="/line" title="{{.Sidebar.Yard}}" aria-label="{{.Sidebar.Yard}}"><span class="chip chip-{{.Sidebar.Shade}}">{{.Sidebar.Chip}}</span><span class="yard-name">{{.Sidebar.Yard}}</span></a>
-    <ul class="side-places">
-      <li><a class="side-row" href="/line" title="{{.Sidebar.ArrivalsTitle}}" aria-label="{{.Sidebar.ArrivalsTitle}}"><svg class="side-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 13h5l2 3h4l2-3h5"/><path d="M5 5h14l2 8v6H3v-6z"/></svg><span class="side-label">Arrivals</span>{{if not .Sidebar.Bare}}<span class="side-count">{{.Sidebar.Arrivals}}</span>{{end}}</a></li>
-      <li><a class="side-row" href="/" title="{{.Sidebar.DecideTitle}}" aria-label="{{.Sidebar.DecideTitle}}"><svg class="side-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg><span class="side-label">Decide</span>{{if .Sidebar.DecidePill}}<span class="side-pill" aria-hidden="true">{{.Sidebar.DecidePill}}</span>{{end}}</a></li>
-      <li><a class="side-row" href="/talk" title="Crew" aria-label="Crew"><svg class="side-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 010 6.8M18.5 14.8c1.6.8 2.6 2.5 3 5.2"/></svg><span class="side-label">Crew</span></a></li>
-    </ul>
-    {{- if not .Sidebar.Bare}}
-    <p class="side-head">Depots</p>
-    <ul class="side-depots">
-      {{- range .Sidebar.Depots}}
-      <li><a class="side-row" href="/depots/{{.Name}}" title="{{.Title}}" aria-label="{{.Title}}"{{if .Current}} aria-current="page"{{end}}><span class="side-label">{{.Name}}</span><span class="side-transit">{{.Transit}}</span></a>
-        {{- if or .Flows .Quiet}}
-        <ul class="side-flows">
-          {{- range .Flows}}
-          <li><a class="side-flow" href="/depots/{{.Depot}}/{{.Name}}" title="{{.Title}}" aria-label="{{.Title}}"{{if .Current}} aria-current="page"{{end}}>{{if .Dot}}<span class="side-dot" aria-hidden="true"></span>{{end}}<span class="side-label">{{.Name}}</span></a></li>
-          {{- end}}
-          {{- if .Quiet}}
-          <li><details class="side-quiet"{{if .QuietCurrent}} open{{end}}><summary><svg class="side-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>{{.QuietLabel}}</summary>
-            <ul class="side-flows">
-              {{- range .Quiet}}
-              <li><a class="side-flow" href="/depots/{{.Depot}}/{{.Name}}"{{if .Current}} aria-current="page"{{end}}><span class="side-label">{{.Name}}</span></a></li>
-              {{- end}}
-            </ul>
-          </details></li>
-          {{- end}}
-        </ul>
-        {{- end}}
-      </li>
+  {{- /* The drawer's marker: under 900 px the list is a drawer, which
+         #drawer in the address opens (:target, no script). A swap that
+         brings a new marker shuts it; a live read leaves it. */}}
+  <span id="drawer" class="wv-flag"></span>
+  {{- /* The list: what stands in the open mode, with the open row marked.
+         An error page has the head alone. */}}
+  <nav class="wv-list" id="list" aria-labelledby="list-title">
+    <header class="wv-list__head" id="list-head">
+      <div class="wv-list__top"><h2 id="list-title">{{.List.Title}}</h2>{{with .List.Count}}<span class="wv-list__count">{{if $.List.Wait}}<span class="wv-wait">{{.}}</span>{{else}}{{.}}{{end}}</span>{{end}}<a class="wv-list__close" href="#stage">Close</a></div>
+      {{- with .List.Sub}}
+      <p class="wv-list__sub">{{.}}</p>
       {{- end}}
-    </ul>
-    {{- if .Sidebar.Quiet}}
-    <details class="side-quiet"{{if .Sidebar.QuietCurrent}} open{{end}}><summary><svg class="side-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>{{.Sidebar.QuietLabel}}</summary>
-      <ul class="side-depots">
-        {{- range .Sidebar.Quiet}}
-        <li><a class="side-row" href="/depots/{{.Name}}"{{if .Current}} aria-current="page"{{end}}><span class="side-label">{{.Name}}</span></a></li>
-        {{- end}}
-      </ul>
-    </details>
-    {{- end}}
-    {{- end}}
-    <div class="side-foot"><a class="side-row" href="/config" title="Settings" aria-label="Settings"><svg class="side-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><circle class="teeth" cx="12" cy="12" r="7"/></svg><span class="side-label">Settings</span></a></div>
+    </header>
+    <div class="wv-list__rows" id="list-rows">
+      {{- range .List.Sections}}{{template "section" .}}{{end}}
+    </div>
   </nav>
-  <main class="centre" id="centre">
-    {{- /* Home lists what waits in its centre and the line keeps it in
-           its own; every other page counts it in its header, one line
-           to home, nothing at zero. */}}
-    <header class="page-head"><h1>{{.Title}}</h1>{{if .Needs}}<a class="needs-count" href="/">{{if eq .Needs 1}}1 waits for you{{else}}{{.Needs}} wait for you{{end}}</a>{{end}}</header>
+  <a class="wv-scrim" href="#stage" aria-label="Close the list"></a>
+  {{- /* The stage: the phone's top bar, the page's leaf where it is live,
+         and the page itself. The leaf is childless, since htmx's attributes
+         inherit and these would otherwise reach every link of the page: it
+         reads the page's own address again at every event of the stream,
+         and puts the stage, the rail and the list's head and rows in place
+         with no marker, so a drawer that is open stays open. A page that
+         is a snapshot has none. */}}
+  <main class="wv-stage" id="stage">
+    <div class="wv-top">
+      <a class="wv-chip" href="/" title="{{.Yard}}" aria-label="{{.Yard}}">{{.Rail.Chip}}</a>
+      <span class="wv-top__mode">{{.List.Title}}</span>{{with .List.Count}}<span class="wv-top__count">{{.}}</span>{{end}}
+      <a class="wv-top__list" href="#drawer">List<svg class="wv-glyph wv-chev" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></a>
+    </div>
+    {{- with .Live}}
+    <i class="wv-live" hidden hx-get="{{$.Self}}" hx-trigger="sse:message" hx-push-url="false" hx-swap="{{.}}" hx-select-oob="#rail:outerHTML,#list-head:innerHTML,#list-rows:innerHTML"></i>
+    {{- end}}
+    <header class="page-head"><h1>{{.Title}}</h1></header>
     {{template "content" .}}
   </main>
-  {{- /* The aside stands beside home alone, and in the line's home mode,
-         which home's aside re-reads. The line's own page holds the waits
-         and the line in its centre, so an aside beside it would say every
-         card twice. Every other page counts what waits in its header. */}}
-  {{- if and (not .Wide) .Aside (or (eq .Menu "home") (and (eq .Menu "line") .Aside.Home))}}
-  <aside class="right" aria-label="The line" hx-get="/line{{if .Aside.Home}}?home=1{{end}}" hx-trigger="sse:message" hx-select="aside.right > *" hx-swap="innerHTML ignoreTitle:true">
-    {{template "aside" .Aside}}
-  </aside>
-  {{- end}}
 </div>
 </body>
 </html>
 {{define "tile"}}
-<a class="tile{{if .Open}} open{{end}}" href="{{.Path}}" title="{{.Title}}" aria-label="{{.Title}}"{{if .Open}} aria-current="true"{{end}}>
+<a class="wv-tile" href="{{.Path}}" title="{{.Title}}" aria-label="{{.Aria}}"{{if .Open}} aria-current="true"{{end}}>
   {{- if eq .Glyph "lamp"}}
-  <svg class="glyph" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><line x1="12" y1="21" x2="12" y2="13"/><circle cx="12" cy="7" r="4"/></svg>
+  <svg class="wv-glyph" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="21" x2="12" y2="13"/><circle cx="12" cy="7" r="4"/></svg>
   {{- else if eq .Glyph "semaphore"}}
-  <svg class="glyph" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><line x1="6" y1="21" x2="6" y2="4"/><line x1="6" y1="5" x2="17" y2="11"/><circle class="solid" cx="6" cy="4" r="1.4"/></svg>
+  <svg class="wv-glyph" viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="21" x2="6" y2="4"/><line x1="6" y1="5" x2="17" y2="11"/><circle class="solid" cx="6" cy="4" r="1.4"/></svg>
   {{- else if eq .Glyph "track"}}
-  <svg class="glyph" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><line x1="7" y1="1.5" x2="7" y2="22.5"/><line x1="17" y1="1.5" x2="17" y2="22.5"/><g class="heavy"><line x1="4.5" y1="5.5" x2="19.5" y2="5.5"/><line x1="4.5" y1="12" x2="19.5" y2="12"/><line x1="4.5" y1="18.5" x2="19.5" y2="18.5"/></g></svg>
+  <svg class="wv-glyph" viewBox="0 0 24 24" aria-hidden="true"><line x1="7" y1="1.5" x2="7" y2="22.5"/><line x1="17" y1="1.5" x2="17" y2="22.5"/><line x1="4.5" y1="5.5" x2="19.5" y2="5.5"/><line x1="4.5" y1="12" x2="19.5" y2="12"/><line x1="4.5" y1="18.5" x2="19.5" y2="18.5"/></svg>
   {{- else}}
-  <svg class="glyph" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><circle class="teeth" cx="12" cy="12" r="7"/></svg>
+  <svg class="wv-glyph" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="7" stroke-dasharray="3 2.5"/></svg>
   {{- end}}
-  <span class="tile-label">{{.Label}}</span>
-  {{- if .Pill}}<span class="pill" aria-hidden="true">{{.Pill}}</span>{{end}}
+  <span class="wv-tile__label">{{.Label}}</span>
+  {{- with .Badge}}<span class="wv-badge" aria-hidden="true">{{.}}</span>{{end}}
 </a>
 {{end}}
+{{- /* A section of the list: a fold with its title and count, or bare rows
+       (a mode's places). A depot's title links to its page. */}}
+{{define "section"}}
+{{- if .Bare}}
+<ul class="wv-places">
+  {{- range .Rows}}
+  <li>{{template "row" .}}</li>
+  {{- end}}
+</ul>
+{{- else}}
+<details class="wv-sect"{{if not .Fold}} open{{end}}>
+  <summary><svg class="wv-glyph wv-chev" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>{{if .Href}}<a href="{{.Href}}"{{if .Current}} aria-current="page"{{end}}>{{.Title}}</a>{{else}}<span>{{.Title}}</span>{{end}}{{with .Count}}<span class="wv-sect__count">{{.}}</span>{{end}}</summary>
+  <ul{{if .Leaves}} hx-select-oob="#rail:outerHTML,#drawer:outerHTML,#list:outerHTML"{{end}}>
+    {{- range .Rows}}
+    <li>{{template "row" .}}</li>
+    {{- else}}
+    {{- with .Empty}}
+    <li class="wv-list__none">{{.}}</li>
+    {{- end}}
+    {{- end}}
+  </ul>
+</details>
+{{- end}}
+{{end}}
+{{- /* One row of the list: the dot column is always there, empty where the
+       row has no dot; the lines under the name are quiet. */}}
+{{define "row"}}<a class="wv-row{{if .Unread}} wv-row--unread{{end}}" href="{{.Href}}"{{if .Current}} aria-current="page"{{end}}>
+  <span class="wv-dot{{with .Dot}} wv-dot--{{.}}{{end}}"></span>
+  <span class="wv-row__main">
+    <span class="wv-row__name">{{.Name}}</span>
+    {{- range .Lines}}
+    <span class="wv-row__meta">{{range $i, $p := .}}{{if $i}} · {{end}}{{if $p.Code}}<code>{{$p.Text}}</code>{{else if $p.Class}}<span class="wv-{{$p.Class}}">{{$p.Text}}</span>{{else}}{{$p.Text}}{{end}}{{end}}</span>
+    {{- end}}
+  </span>
+  <span class="wv-row__end{{if .EndWait}} wv-row__end--wait{{end}}">{{.End}}</span>
+</a>{{end}}

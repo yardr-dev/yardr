@@ -1,9 +1,9 @@
 {{define "content"}}
-{{- /* Every event of the stream reads the page again and puts the list in
-       place: a proposal, an approval, a start or a stop each lands with
-       an event. The card is inline, not a named template, so $ still
-       names the page beside the card. */}}
-<div id="live" hx-get="/previews" hx-trigger="sse:message" hx-select="#live > *" hx-swap="innerHTML ignoreTitle:true">
+{{- /* Every event of the stream reads the page again, by the leaf in the
+       shell, and puts the list in place: a proposal, an approval, a start
+       or a stop each lands with an event. The card is inline, not a named
+       template, so $ still names the page beside the card. */}}
+<div id="live">
   {{- with .Data.Error}}
   <p class="item error">{{.}}</p>
   {{- end}}
@@ -64,9 +64,9 @@
            where the edge's refusal is kept. */}}
     {{- if $.Data.As}}
     {{- if eq .State "pending"}}
-    <form class="preview-actions" method="post" action="/previews" hx-post="/previews" hx-target="#live" hx-select="#live > *" hx-swap="innerHTML ignoreTitle:true">{{template "csrf"}}<input type="hidden" name="app" value="{{.App}}"><button type="submit" name="action" value="approve">Approve</button><button type="submit" name="action" value="refuse">Refuse</button></form>
+    <form class="preview-actions" method="post" action="/previews" hx-post="/previews" hx-push-url="false">{{template "csrf"}}<input type="hidden" name="app" value="{{.App}}"><button type="submit" name="action" value="approve">Approve</button><button type="submit" name="action" value="refuse">Refuse</button></form>
     {{- else if ne .State "refused"}}
-    <form class="preview-actions" method="post" action="/previews" hx-post="/previews" hx-target="#live" hx-select="#live > *" hx-swap="innerHTML ignoreTitle:true">{{template "csrf"}}<input type="hidden" name="app" value="{{.App}}">{{with .Host}}<a href="https://{{.}}/">Open</a>{{else}}<span class="faint">no address from the edge yet{{with .StateDetail}} ({{.}}){{end}}</span>{{end}}<button type="submit" name="action" value="stop">Stop</button>{{if ne .Kind "watch"}}<button type="submit" name="action" value="restart">Restart</button>{{end}}</form>
+    <form class="preview-actions" method="post" action="/previews" hx-post="/previews" hx-push-url="false">{{template "csrf"}}<input type="hidden" name="app" value="{{.App}}">{{with .Host}}<a href="https://{{.}}/">Open</a>{{else}}<span class="faint">no address from the edge yet{{with .StateDetail}} ({{.}}){{end}}</span>{{end}}<button type="submit" name="action" value="stop">Stop</button>{{if ne .Kind "watch"}}<button type="submit" name="action" value="restart">Restart</button>{{end}}</form>
     {{- end}}
     {{- end}}
   </article>

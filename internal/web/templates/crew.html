@@ -1,6 +1,6 @@
 {{define "content"}}
 {{- /* Read again on every event of the stream, as the sessions are. */}}
-<div id="live" hx-get="/crew" hx-trigger="sse:message" hx-select="#live > *" hx-swap="innerHTML ignoreTitle:true">
+<div id="live">
   {{- range .Data.Crew}}
   <article class="item">
     <header class="item-head">

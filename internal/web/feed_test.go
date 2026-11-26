@@ -312,8 +312,9 @@ func TestFeedHTML(t *testing.T) {
 	// The newest 50 are all creations, which home keeps none of.
 	text := squash(f.get("/").body)
 	for _, want := range []string{
-		fmt.Sprintf(`<div class="shell" hx-ext="sse" sse-connect="/events?after=%d&amp;format=home">`, h.Head),
-		`<section class="feed" id="feed" aria-label="What happened" sse-swap="message" hx-swap="afterbegin">`,
+		shellOpen(h.Head, "home"),
+		leafOf("/", "none"),
+		`<section class="feed" id="feed" aria-label="What happened" sse-swap="message" hx-target="this" hx-swap="afterbegin">`,
 		`<p class="item label">Just happened</p>`,
 		`Nothing for you.`,
 		`<a class="item older label" href="/?all=1">All activity ›</a>`,
@@ -332,9 +333,10 @@ func TestFeedHTML(t *testing.T) {
 
 	all := squash(f.get("/?all=1").body)
 	for _, want := range []string{
-		fmt.Sprintf(`<div class="shell" hx-ext="sse" sse-connect="/events?after=%d">`, h.Head),
+		shellOpen(h.Head, ""),
+		leafOf("/?all=1", "none"),
 		fmt.Sprintf(`<article class="item entry entry-line" id="e%d">`, h.Head),
-		fmt.Sprintf(`<a class="item older label" href="/?all=1&amp;before=%d" hx-get="/?all=1&amp;before=%[1]d" hx-trigger="intersect once" hx-select="#feed > *" hx-target="this" hx-swap="outerHTML">Older</a>`, h.Older),
+		fmt.Sprintf(`<a class="item older label" href="/?all=1&amp;before=%d" hx-get="/?all=1&amp;before=%[1]d" hx-trigger="intersect once" hx-select="#feed > *" hx-target="this" hx-swap="outerHTML" hx-push-url="false" hx-select-oob="unset">Older</a>`, h.Older),
 	} {
 		if !strings.Contains(all, want) {
 			t.Errorf("the full page lacks %q", want)

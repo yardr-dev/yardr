@@ -85,27 +85,26 @@ func TestWaitsHeld(t *testing.T) {
 			t.Errorf("/line lacks %q", part)
 		}
 	}
-	// Every other page counts it in its header, one line to home, and
-	// keeps no aside.
-	for _, path := range []string{"/sessions", "/crew", "/beads", "/nowhere"} {
-		text := squash(f.get(path).body)
-		if !strings.Contains(text, `<a class="needs-count" href="/">1 waits for you</a>`) {
-			t.Errorf("%s counts no held bead in its header", path)
+	// Every other page counts it in the rail's badge, and keeps no aside.
+	for _, path := range []string{"/", "/sessions", "/crew", "/beads"} {
+		body := f.get(path).body
+		if tile := tileOf(t, body, "/"); !strings.Contains(tile, `title="1 waits for you"`) {
+			t.Errorf("%s counts no held bead in its rail: %s", path, tile)
 		}
-		if strings.Contains(text, "<aside") {
-			t.Errorf("%s keeps the aside home alone keeps", path)
+		if strings.Contains(body, "<aside") {
+			t.Errorf("%s keeps a column the window has no place for", path)
 		}
 	}
-	// Home's aside is the line alone: the held count stays beside the
-	// centre that lists the bead, and the waits panel is gone.
-	home := squash(f.get("/").body)
-	if !strings.Contains(home, `<dt><span class="dot held"></span>held</dt><dd>1</dd>`) {
-		t.Error(`/ lacks the held count beside its centre`)
+	// Home lists the bead in its centre, and Decide's list holds it as a
+	// wait, by its title and its reason.
+	home := f.get("/").body
+	waits := section2(t, listSections(t, home), "Waits for you")
+	if waits.count != "1" || len(waits.rows) != 1 || waits.rows[0].name != "a door" || waits.rows[0].lines[0] != "held by builder" ||
+		waits.rows[0].lines[1] != "the hinge is <missing>" {
+		t.Errorf("Decide's list does not hold the held bead: %+v", waits)
 	}
-	for _, not := range []string{`Waits for you`, `<article class="wait">`, "Nothing waits for you."} {
-		if strings.Contains(home, not) {
-			t.Errorf(`/ has %q beside its centre`, not)
-		}
+	if strings.Contains(squash(stageOf(t, home)), `<article class="wait">`) {
+		t.Error("/ has the waits panel in its centre")
 	}
 
 	// A hold with no note of its holder right before it has no reason to
@@ -257,20 +256,12 @@ func TestWaitsManual(t *testing.T) {
 			t.Errorf("the column lacks %q", part)
 		}
 	}
-	// Home's aside is the line panel alone: the numbers stay, the waits
-	// panel is gone from beside the centre that lists them.
-	home := squash(f.get("/").body)
-	for _, part := range []string{
-		`<dt>open</dt><dd>3</dd>`,
-		`<li><span>decide</span><span class="num">2</span></li>`,
-	} {
-		if !strings.Contains(home, part) {
-			t.Errorf("home's aside lacks %q", part)
-		}
-	}
-	for _, not := range []string{`Waits for you`, `Parked · 2`, `<article class="wait">`} {
+	// Home has no aside: its page holds the waits in its centre and none
+	// of the line's numbers or panels.
+	home := squash(stageOf(t, f.get("/").body))
+	for _, not := range []string{`<dt>open</dt>`, `Parked · 2`, `<article class="wait">`, `<aside`} {
 		if strings.Contains(home, not) {
-			t.Errorf("home's aside has %q", not)
+			t.Errorf("home has %q", not)
 		}
 	}
 	// The column prints no zero: nothing working and no session running is
@@ -671,23 +662,23 @@ func TestManualClaimsOnly(t *testing.T) {
 	if strings.Contains(text, "Nothing waits for you.") {
 		t.Error("/line says nothing waits, over five parked beads")
 	}
-	// Every other page counts them in its header instead, one line to
-	// home, and keeps no aside.
-	sessions := squash(f.get("/sessions").body)
-	if !strings.Contains(sessions, `<a class="needs-count" href="/">5 wait for you</a>`) {
-		t.Error("/sessions counts no parked bead in its header")
+	// Every other page counts them in the rail's badge instead, and keeps no
+	// aside; Decide's list holds them as waits.
+	sessions := f.get("/sessions").body
+	if tile := tileOf(t, sessions, "/"); !strings.Contains(tile, `title="5 wait for you"`) {
+		t.Errorf("/sessions counts no parked bead in its rail: %s", tile)
 	}
 	if strings.Contains(sessions, "<aside") {
-		t.Error("/sessions keeps the aside home alone keeps")
+		t.Error("/sessions keeps a column the window has no place for")
 	}
-	// Home's aside is the line panel alone: the open count stays, and the
-	// five parked beads are gone from beside the centre that lists them.
-	home := squash(f.get("/").body)
-	if !strings.Contains(home, `<dt>open</dt><dd>5</dd>`) {
-		t.Error(`/ lacks the open count beside its centre`)
+	// Home has no aside: the five parked beads stand in its centre's list
+	// of waits and in Decide's, and the line's numbers are not on it.
+	home := f.get("/").body
+	if waits := section2(t, listSections(t, home), "Waits for you"); waits.count != "5" || len(waits.rows) != 5 {
+		t.Errorf("Decide's list holds %+v, want the five parked beads", waits)
 	}
-	for _, not := range []string{`Waits for you`, `Parked · 5`, `<article class="wait">`, "Nothing waits for you."} {
-		if strings.Contains(home, not) {
+	for _, not := range []string{`<dt>open</dt>`, `Parked · 5`, `<article class="wait">`, "<aside"} {
+		if strings.Contains(squash(stageOf(t, home)), not) {
 			t.Errorf(`/ has %q`, not)
 		}
 	}
@@ -761,30 +752,21 @@ func TestManualClaimsMixed(t *testing.T) {
 			t.Errorf("/line lacks %q", part)
 		}
 	}
-	// Every other page counts what waits in its header instead: the held
-	// bead and the two parked, one line to home, and no aside.
-	text = squash(f.get("/sessions").body)
-	if !strings.Contains(text, `<a class="needs-count" href="/">3 wait for you</a>`) {
-		t.Error("/sessions counts no waiting bead in its header")
+	// Every other page counts what waits in the rail's badge instead: the
+	// held bead and the two parked, and no aside.
+	sessions := f.get("/sessions").body
+	if tile := tileOf(t, sessions, "/"); !strings.Contains(tile, `title="3 wait for you"`) {
+		t.Errorf("/sessions counts no waiting bead in its rail: %s", tile)
 	}
-	if strings.Contains(text, "<aside") {
-		t.Error("/sessions keeps the aside home alone keeps")
+	if strings.Contains(sessions, "<aside") {
+		t.Error("/sessions keeps a column the window has no place for")
 	}
-	// Home's aside is the line panel alone: the numbers stay, and the
-	// waits are gone from beside the centre that lists them.
-	home := squash(f.get("/").body)
-	for _, part := range []string{
-		`<dt><span class="dot working"></span>working</dt><dd>2</dd>`,
-		`<dt><span class="dot held"></span>held</dt><dd>1</dd>`,
-		`<dt><span class="dot running"></span>sessions</dt><dd>2</dd>`,
-	} {
-		if !strings.Contains(home, part) {
-			t.Errorf("home's aside lacks %q", part)
-		}
-	}
-	for _, not := range []string{`Waits for you`, `<article class="wait">`} {
+	text = squash(sessions)
+	// Home has no aside: the line's numbers are the line page's alone.
+	home := squash(stageOf(t, f.get("/").body))
+	for _, not := range []string{`<dt><span class="dot working"></span>working</dt>`, `<article class="wait">`, "<aside"} {
 		if strings.Contains(home, not) {
-			t.Errorf("home's aside has %q", not)
+			t.Errorf("home has %q", not)
 		}
 	}
 	if !strings.Contains(text, `<h2 class="item label">Claimed by a manual group · 2</h2>`) ||
@@ -888,11 +870,10 @@ func TestWaitsStranded(t *testing.T) {
 	}
 }
 
-// Every page carries one stream, starting after the yard's head. Home's
-// aside reads itself again on each of its events, and the line page does
-// the same for its own copy; home's aside reads the home mode, which is
-// the line alone.
-func TestColumnIsLive(t *testing.T) {
+// A page holds one stream, which the shell opens: a browser allows a host few
+// connections. A page says what its stream carries besides the unnamed
+// message per event the leaf hears, and an error page opens none.
+func TestShellStream(t *testing.T) {
 	t.Parallel()
 	// Peers are the operator's to read, so the walk is the operator's,
 	// made one before the yard is staged and its head read.
@@ -901,161 +882,29 @@ func TestColumnIsLive(t *testing.T) {
 	f.populate()
 	head, err := f.st.Head(context.Background())
 	must(t, err)
-	// A page says what its stream carries besides the unnamed message per
-	// event the column hears.
 	three := "/beads/" + f.byTitle()["three"].ID
-	formats := map[string]string{"/": "&amp;format=home", "/flows": "&amp;format=card",
-		"/beads": "&amp;format=seq", three: "&amp;format=seq",
-		"/depots": "&amp;format=seq", "/groups": "&amp;format=seq", "/routes": "&amp;format=seq",
-		"/peers": "&amp;format=seq", "/deps": "&amp;format=seq", "/limits": "&amp;format=seq"}
-	home := `<aside class="right" aria-label="The line" hx-get="/line?home=1" hx-trigger="sse:message" hx-select="aside.right > *" hx-swap="innerHTML ignoreTitle:true">`
-	for _, path := range []string{"/", "/line", "/sessions", "/crew", "/flows", "/beads", three,
-		"/config", "/depots", "/groups", "/routes", "/peers", "/deps", "/limits", "/nowhere"} {
-		text := squash(f.get(path).body)
-		shell := `<div class="shell" hx-ext="sse" sse-connect="/events?after=` + itoa(head) + formats[path] + `">`
-		if !strings.Contains(text, shell) {
-			t.Errorf("%s lacks %q", path, shell)
+	formats := map[string]string{"/": "home", "/flows": "card", "/beads": "seq", three: "seq",
+		"/depots": "seq", "/groups": "seq", "/routes": "seq", "/peers": "seq", "/deps": "seq", "/limits": "seq",
+		"/line": "", "/sessions": "", "/crew": "", "/config": ""}
+	for path, format := range formats {
+		body := f.get(path).body
+		if want := shellOpen(head, format); !strings.Contains(body, want) {
+			t.Errorf("%s lacks %s", path, want)
 		}
-		// Home alone keeps the aside: the line holds the waits and the
-		// line in its centre, and every other page counts what waits in
-		// its header instead.
-		if path == "/" {
-			if !strings.Contains(text, home) {
-				t.Errorf("%s lacks %q", path, home)
-			}
-		} else if strings.Contains(text, "<aside") {
-			t.Errorf("%s keeps the aside home alone keeps", path)
-		}
-		if n := strings.Count(text, "sse-connect"); n != 1 {
-			t.Errorf("%s opens %d streams, want one: a browser allows a host few connections", path, n)
+		if n := strings.Count(body, "sse-connect"); n != 1 {
+			t.Errorf("%s opens %d streams, want one", path, n)
 		}
 	}
-	for path, part := range map[string]string{
-		"/line":     `<div class="item" id="line" hx-get="/line" hx-trigger="sse:message" hx-select="#line > *" hx-swap="innerHTML ignoreTitle:true">`,
-		"/sessions": `<div id="live" hx-get="/sessions" hx-trigger="sse:message" hx-select="#live > *" hx-swap="innerHTML ignoreTitle:true">`,
-		"/crew":     `<div id="live" hx-get="/crew" hx-trigger="sse:message" hx-select="#live > *" hx-swap="innerHTML ignoreTitle:true">`,
-		"/depots":   `<div id="depots" hx-get="/depots" hx-trigger="sse:message" hx-select="#depots > *" hx-swap="innerHTML ignoreTitle:true">`,
-		"/groups":   `<div id="groups" hx-get="/groups" hx-trigger="sse:message" hx-select="#groups > *" hx-swap="innerHTML ignoreTitle:true">`,
-		"/routes":   `<div id="routes" hx-get="/routes" hx-trigger="sse:message" hx-select="#routes > *" hx-swap="innerHTML ignoreTitle:true">`,
-		"/peers":    `<div id="peers" hx-get="/peers" hx-trigger="sse:message" hx-select="#peers > *" hx-swap="innerHTML ignoreTitle:true">`,
-		"/deps":     `<div id="deps" hx-get="/deps" hx-trigger="sse:message" hx-select="#deps > *" hx-swap="innerHTML ignoreTitle:true">`,
-		"/limits":   `<div id="limits" hx-get="/limits" hx-trigger="sse:message" hx-select="#limits > *" hx-swap="innerHTML ignoreTitle:true">`,
-	} {
-		if text := squash(f.get(path).body); !strings.Contains(text, part) {
-			t.Errorf("%s lacks %q", path, part)
-		}
+	if body := f.get("/nowhere").body; strings.Contains(body, "sse-connect") || !strings.Contains(body, `<div class="wv-shell" hx-boost="true"`) {
+		t.Errorf("an error page opens a stream, or lacks the shell's swap attributes: %s", body)
 	}
 }
 
-// Home's aside is the line alone: the numbers stay beside the centre,
-// with no second waits list, in the first render and after every stream
-// message. Home's aside re-reads the home mode of /line, which renders
-// only the line panel; the parameter shapes the HTML alone.
-func TestHomeColumnIsTheLineAlone(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	f.populate()
-	text := squash(f.get("/").body)
-	for _, part := range []string{
-		`<aside class="right" aria-label="The line" hx-get="/line?home=1"`,
-		`<h2 class="label">The line</h2>`,
-		`<dt>open</dt><dd>5</dd>`,
-	} {
-		if !strings.Contains(text, part) {
-			t.Errorf("/ lacks %q", part)
-		}
-	}
-	for _, not := range []string{`Waits for you`, `<article class="wait">`, "Nothing waits for you."} {
-		if strings.Contains(text, not) {
-			t.Errorf("/ has %q beside its centre", not)
-		}
-	}
-	// The re-read answers line-only too, and stays in the mode: an event
-	// never brings the waits back.
-	mode := squash(f.get("/line?home=1").body)
-	for _, part := range []string{
-		`<aside class="right" aria-label="The line" hx-get="/line?home=1"`,
-		`<div class="item" id="line" hx-get="/line?home=1"`,
-		`<h2 class="label">The line</h2>`,
-		`<dt>open</dt><dd>5</dd>`,
-	} {
-		if !strings.Contains(mode, part) {
-			t.Errorf("/line?home=1 lacks %q", part)
-		}
-	}
-	for _, not := range []string{`Waits for you`, `<article class="wait">`} {
-		if strings.Contains(mode, not) {
-			t.Errorf("/line?home=1 has %q", not)
-		}
-	}
-	// ?home=0 is no home mode: /line as it was, the waits and the line.
-	plain := squash(f.get("/line?home=0").body)
-	if strings.Contains(plain, "<aside") {
-		t.Error("/line?home=0 keeps an aside beside its centre")
-	}
-	for _, part := range []string{
-		`<div class="item" id="line" hx-get="/line" hx-trigger=`,
-		`<h2 class="label">Waits for you</h2>`,
-		`<article class="wait">`,
-		`<h2 class="label">The line</h2>`,
-	} {
-		if !strings.Contains(plain, part) {
-			t.Errorf("/line?home=0 lacks %q", part)
-		}
-	}
-	// The line keeps the waits and the line whole in its centre, once:
-	// an aside beside it would say every card a second time. Every other
-	// page counts what waits in its header instead, one line to home,
-	// and keeps no aside.
-	line := squash(f.get("/line").body)
-	for _, part := range []string{`<h2 class="label">Waits for you</h2>`, `<article class="wait">`, `<h2 class="label">The line</h2>`} {
-		if n := strings.Count(line, part); n != 1 {
-			t.Errorf("/line has %q %d times, want once", part, n)
-		}
-	}
-	if strings.Contains(line, "<aside") {
-		t.Error("/line keeps an aside beside its centre")
-	}
-	for _, path := range []string{"/flows", "/beads", "/sessions", "/crew"} {
-		text := squash(f.get(path).body)
-		if !strings.Contains(text, `<a class="needs-count" href="/">1 waits for you</a>`) {
-			t.Errorf("%s counts no waiting bead in its header", path)
-		}
-		if strings.Contains(text, "<aside") {
-			t.Errorf("%s keeps the aside home alone keeps", path)
-		}
-	}
-	// The JSON is the line's either way.
-	whole := f.get("/line", "Accept", "application/json")
-	home := f.get("/line?home=1", "Accept", "application/json")
-	if whole.status != 200 || home.status != 200 {
-		t.Fatalf("status %d and %d: %s", whole.status, home.status, home.body)
-	}
-	if whole.body != home.body {
-		t.Error("the JSON of /line?home=1 is not the JSON of /line")
-	}
-	var a, b web.Line
-	f.getJSON("/line", &a)
-	f.getJSON("/line?home=1", &b)
-	if !reflect.DeepEqual(a, b) {
-		t.Errorf("?home=1 decodes as %+v, /line as %+v", b, a)
-	}
-	// An empty yard's home says the line is empty, and nothing about waits.
-	empty := squash(newFixture(t).get("/").body)
-	if !strings.Contains(empty, `<p class="faint">Nothing is open.</p>`) {
-		t.Error("an empty yard's home does not say the line is empty")
-	}
-	if strings.Contains(empty, "Nothing waits for you.") {
-		t.Error("an empty yard's home names the waits panel it no longer shows")
-	}
-}
-
-// Every page but home and the line counts what waits for the visitor in
-// its header: one line to home, nothing at zero. Home lists the waits in
-// its centre and the line keeps them in its own, so neither counts them.
-// The count is home's: a bead parked where its flow starts is on /line,
-// not in the header.
-func TestHeaderNeedsCount(t *testing.T) {
+// Every page counts what waits for the visitor in the rail's Decide badge,
+// which the list's head says too, nothing at zero. The count is home's: a bead
+// parked where its flow starts is on /line, not in the count. An error page
+// stands bare, with none.
+func TestRailCountsWhatWaits(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	f := newFixture(t)
@@ -1069,101 +918,71 @@ func TestHeaderNeedsCount(t *testing.T) {
 	must(t, f.st.PutGroup(ctx, store.Group{Name: "triage", Runner: "manual"}, "me"))
 	_, err = f.st.AddRoute(ctx, store.Route{Stage: "backlog", Group: "triage"}, "me")
 	must(t, err)
+	pages := []string{"/", "/line", "/beads", "/sessions", "/crew", "/flows", "/config", "/depots", "/groups", "/routes",
+		"/deps", "/limits", "/talk"}
+	badge := func(path string) string {
+		t.Helper()
+		return tileOf(t, f.get(path).body, "/")
+	}
 
-	// Nothing waits: no count, and no aside outside home and the line.
-	for _, path := range []string{"/beads", "/sessions", "/crew", "/flows", "/flows?panel=1",
-		"/config", "/depots", "/talk", "/nowhere"} {
-		text := squash(f.get(path).body)
-		if strings.Contains(text, "needs-count") {
-			t.Errorf("%s counts waits in its header, and nothing waits", path)
-		}
-		if strings.Contains(text, "<aside") {
-			t.Errorf("%s keeps the aside home alone keeps", path)
+	// Nothing waits: no count, and no aside anywhere.
+	for _, path := range pages {
+		if tile := badge(path); strings.Contains(tile, "wv-badge") {
+			t.Errorf("%s counts waits, and nothing waits: %s", path, tile)
 		}
 	}
 	missing := f.get("/beads/no-such-bead")
-	if missing.status != http.StatusNotFound {
-		t.Errorf("missing bead: status %d, want 404", missing.status)
-	} else if text := squash(missing.body); strings.Contains(text, "needs-count") || strings.Contains(text, "<aside") {
-		t.Errorf("empty missing-bead page shows a count or aside: %s", text)
+	if missing.status != http.StatusNotFound || strings.Contains(railOf(t, missing.body), "wv-badge") {
+		t.Errorf("missing bead: status %d, want 404 with no count", missing.status)
 	}
 
-	// A bead parked where its flow starts waits on no one in particular:
-	// it is on /line, not in the header, as home needs no one.
+	// A bead parked where its flow starts waits on no one in particular: it
+	// is on /line, not in the count, as home needs no one.
 	parked, err := f.st.CreateBead(ctx, store.NewBead{Title: "an idea", Stage: "backlog", Depot: "line"}, "me")
 	must(t, err)
 	if s := answerSection(t, f.get("/").body); !strings.HasPrefix(s, "Nothing needs you.</p>") {
 		t.Errorf("home needs %q, want nothing: the bead is parked where it starts", s)
 	}
-	if text := squash(f.get("/beads").body); strings.Contains(text, "needs-count") {
-		t.Error("/beads counts the backlog in its header, and home needs no one")
+	if tile := badge("/beads"); strings.Contains(tile, "wv-badge") {
+		t.Errorf("/beads counts the backlog, and home needs no one: %s", tile)
 	}
 	if text := squash(f.get("/line").body); !strings.Contains(text, `<h3 class="label">Parked · 1</h3>`) {
 		t.Error("/line lists no parked bead")
 	}
 
-	// One waits: the header counts it, singular, to home.
+	// One waits: every page counts it, singular, and the list's head says
+	// so where it stands in Decide.
 	door, err := f.st.CreateBead(ctx, store.NewBead{Title: "a door", Stage: "new", Depot: "line"}, "me")
 	must(t, err)
 	_, err = f.st.SetHold(ctx, door.ID, true, store.Expect{}, "me")
 	must(t, err)
-	one := `<header class="page-head"><h1>Beads</h1><a class="needs-count" href="/">1 waits for you</a></header>`
-	if text := squash(f.get("/beads").body); !strings.Contains(text, one) {
-		t.Errorf("/beads lacks %q", one)
-	}
-	for _, path := range []string{"/sessions", "/crew", "/flows", "/flows?panel=1", "/config",
-		"/depots", "/groups", "/routes", "/peers", "/deps", "/limits", "/talk", "/beads/" + door.ID,
-		"/beads/" + parked.ID, "/nowhere"} {
-		text := squash(f.get(path).body)
-		if !strings.Contains(text, `<a class="needs-count" href="/">1 waits for you</a>`) {
-			t.Errorf("%s counts no waiting bead in its header", path)
-		}
-		if strings.Contains(text, "<aside") {
-			t.Errorf("%s keeps the aside home alone keeps", path)
+	one := `title="1 waits for you" aria-label="Decide, 1 waits for you"`
+	for _, path := range append(pages, "/beads/"+door.ID, "/beads/"+parked.ID) {
+		if tile := badge(path); !strings.Contains(tile, one) || !strings.Contains(tile, `<span class="wv-badge" aria-hidden="true">1</span>`) {
+			t.Errorf("%s counts no waiting bead in its rail: %s", path, tile)
 		}
 	}
-	missing = f.get("/beads/no-such-bead")
-	if missing.status != http.StatusNotFound {
-		t.Errorf("missing bead: status %d, want 404", missing.status)
-	} else if text := squash(missing.body); !strings.Contains(text, `<a class="needs-count" href="/">1 waits for you</a>`) {
-		t.Errorf("missing bead page omits the waiting bead count: %s", text)
-	} else if strings.Contains(text, "<aside") {
-		t.Errorf("missing-bead page has an aside: %s", text)
+	for _, path := range []string{"/", "/line", "/beads/" + door.ID} {
+		if head := regionOf(t, f.get(path).body, `<header class="wv-list__head" id="list-head">`, `</header>`); !strings.Contains(head, "1 waits for you") {
+			t.Errorf("%s: the list's head does not say what waits: %s", path, head)
+		}
+	}
+	// An error page stands under no mode, even where something waits.
+	if r := f.get("/beads/no-such-bead"); r.status != http.StatusNotFound || strings.Contains(railOf(t, r.body), "wv-badge") {
+		t.Errorf("the missing bead's page counts: %d %s", r.status, railOf(t, r.body))
 	}
 
-	// Two wait: the header counts them, plural.
+	// Two wait: the count is plural.
 	window, err := f.st.CreateBead(ctx, store.NewBead{Title: "a window", Stage: "new", Depot: "line"}, "me")
 	must(t, err)
 	_, err = f.st.SetHold(ctx, window.ID, true, store.Expect{}, "me")
 	must(t, err)
-	if text := squash(f.get("/beads").body); !strings.Contains(text, `<a class="needs-count" href="/">2 wait for you</a>`) {
-		t.Error("/beads does not count two waiting beads in its header")
+	if tile := badge("/beads"); !strings.Contains(tile, `title="2 wait for you"`) {
+		t.Errorf("/beads does not count two waiting beads: %s", tile)
 	}
-
-	// Home and the line count nothing: home lists the waits in its
-	// centre, the line keeps them in its own, each beside its aside.
-	for _, path := range []string{"/", "/line", "/line?home=1"} {
-		text := squash(f.get(path).body)
-		if strings.Contains(text, "needs-count") {
-			t.Errorf("%s counts waits in its header beside what lists them", path)
-		}
-		if aside := strings.Contains(text, "<aside"); aside != (path != "/line") {
-			t.Errorf("%s: aside %v, want it beside home and the line's home mode alone", path, aside)
-		}
-	}
-
-	// The header holds its one line on a phone too: the title and the
-	// count share the row, and the count never wraps.
-	head := cssRule(t, ".page-head")
-	for _, want := range []string{"display: flex;", "justify-content: space-between;", "align-items: baseline;"} {
-		if !strings.Contains(head, want) {
-			t.Errorf(".page-head lacks %s: %s", want, head)
-		}
-	}
-	count := cssRule(t, ".page-head .needs-count")
-	for _, want := range []string{"font-family: var(--sans);", "font-size: var(--small);", "white-space: nowrap;"} {
-		if !strings.Contains(count, want) {
-			t.Errorf(".page-head .needs-count lacks %s: %s", want, count)
+	for _, path := range pages {
+		if text := squash(f.get(path).body); strings.Contains(text, "<aside") || strings.Contains(text, "needs-count") {
+			t.Errorf("%s keeps a column or a count the window has no place for", path)
 		}
 	}
 }
@@ -1240,7 +1059,7 @@ func TestSessions(t *testing.T) {
 		`<p class="entry-title">which &lt;colour&gt;</p>`,
 		`<dt>stage</dt><dd>new</dd>`, `<dt>group</dt><dd>builders</dd>`, `<dt>runner</dt><dd>fake door-new</dd>`,
 		`<dt>session</dt><dd>` + sess.ID + `</dd>`,
-		`<a href="/sessions" aria-current="page">Sessions</a>`,
+		`<a class="wv-row" href="/sessions" aria-current="page">`,
 	} {
 		if !strings.Contains(text, part) {
 			t.Errorf("the page lacks %q", part)
@@ -1440,11 +1259,13 @@ func TestCrew(t *testing.T) {
 		`<h2>zed</h2><span class="state"><span>stopped</span> · disabled</span></header>`,
 		`<dt>agent</dt><dd>herdr · claude · opus</dd>`,
 		`<dt>running since</dt><dd><time datetime="`,
-		`<a href="/crew" aria-current="page">Crew</a>`,
 	} {
 		if !strings.Contains(text, part) {
 			t.Errorf("the page lacks %q", part)
 		}
+	}
+	if got := marked(railOf(t, f.get("/crew").body), "aria-current", "true"); len(got) != 1 || got[0] != "/crew" {
+		t.Errorf("the crew page opens the tiles %v, want Crew's", got)
 	}
 	if strings.Count(text, "running since") != 1 {
 		t.Error("the stopped crew member is shown running since some time")
@@ -1550,7 +1371,7 @@ func TestWaitsWeightyAsk(t *testing.T) {
 		`Approve it with <code>yardr bead answer ` + b.ID + ` ` + ask + ` &lt;n&gt;</code>`,
 		`<li><span>1. ada</span>`,
 		`<li><span>2. mckean</span>`,
-		`<input type="text" name="words"`,
+		`hx-preserve="true" name="words"`,
 		`<button type="submit" name="action" value="later">Later</button>`,
 		`<button type="submit" name="action" value="decline" title="Say no to all options. The asker finds another way.">Decline</button>`,
 	} {

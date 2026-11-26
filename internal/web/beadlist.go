@@ -184,5 +184,5 @@ func (s *Server) handleBeads(w http.ResponseWriter, r *http.Request) {
 	slices.SortStableFunc(d.Beads, func(a, b BeadRow) int {
 		return cmp.Or(b.UpdatedAt.Compare(a.UpdatedAt), cmp.Compare(a.ID, b.ID))
 	})
-	s.respond(w, r, Page{Template: "beads", Title: "Beads", Menu: "beads", Data: d, yard: y, head: d.Head, stream: "seq"})
+	s.respond(w, r, Page{Template: "beads", Title: "Beads", Data: d, yard: y, head: d.Head, stream: "seq", live: liveStage})
 }

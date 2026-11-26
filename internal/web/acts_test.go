@@ -182,7 +182,7 @@ func TestBeadAskButtons(t *testing.T) {
 		"The links file declares the new source.",
 		`<li><span>1. Move them now</span><span class="faint"> — all links point at the new source tonight</span><span class="recommended">recommended: the test passed</span></li>`,
 		`<li><span>2. After Friday</span>`,
-		`<form class="need-answer" method="post" action="/beads/` + b.ID + `" hx-post="/beads/` + b.ID + `" hx-target="#bead"`,
+		`<form class="need-answer" method="post" action="/beads/` + b.ID + `" hx-post="/beads/` + b.ID + `" hx-push-url="false">`,
 		`<input type="hidden" name="rev" value="`,
 		`<input type="hidden" name="ask" value="` + strconv.FormatUint(seq, 10) + `">`,
 		`<button type="submit" name="option" value="1">Answer: 1 · Move them now</button>`,
@@ -341,7 +341,7 @@ func TestBeadMoveButtons(t *testing.T) {
 	r := f.get("/beads/" + b.ID)
 	for _, want := range []string{
 		`<h3 class="label">send on as jo</h3>`,
-		`<form class="move-form" method="post" action="/beads/` + b.ID + `" hx-post="/beads/` + b.ID + `" hx-target="#bead"`,
+		`<form class="move-form" method="post" action="/beads/` + b.ID + `" hx-post="/beads/` + b.ID + `" hx-push-url="false">`,
 		`<input type="hidden" name="rev" value="` + moved.Revision + `">`,
 		`<button type="submit" name="outcome" value="done">done: finish as merged (closes the bead)</button>`,
 		`<button type="submit" name="outcome" value="changes">changes: send back to new (note required)</button>`,
@@ -977,7 +977,7 @@ func TestBeadMappingWeightyCard(t *testing.T) {
 		`<li><span>2. mckean</span>`,
 		`This card is weighty and this window has no gate. Approve it in footplate, or in a terminal on the yard's machine:`,
 		`Approve it with <code>yardr bead answer ` + b.ID + ` ` + ask + ` &lt;n&gt;</code>`,
-		`<input type="text" name="words"`,
+		`hx-preserve="true" name="words"`,
 		`<button type="submit" name="action" value="later">Later</button>`,
 		`<button type="submit" name="action" value="decline" title="Say no to all options. The asker finds another way.">Decline</button>`,
 	} {

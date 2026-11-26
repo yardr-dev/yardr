@@ -3,9 +3,6 @@
        reader, and for the operator the switch, the install id and the
        next payload as yardr telemetry show renders them. The switch turns
        only on an explicit click: nothing here changes on a read. */}}
-<nav class="item filters" aria-label="Config">
-  <p><a href="/config">‹ Config</a></p>
-</nav>
 {{- with .Data.Error}}
 <p class="item error">{{.}}</p>
 {{- end}}
@@ -37,9 +34,9 @@
   <p>{{.}}</p>
   {{- end}}
   <p>{{.Data.Deletion}}</p>
-  <form method="post" action="/telemetry">{{template "csrf"}}<button type="submit" name="action" value="off">Turn off</button></form>
+  <form method="post" action="/telemetry" hx-post="/telemetry" hx-push-url="false">{{template "csrf"}}<button type="submit" name="action" value="off">Turn off</button></form>
   {{- else}}
-  <form method="post" action="/telemetry">{{template "csrf"}}<button type="submit" name="action" value="on">Turn on</button></form>
+  <form method="post" action="/telemetry" hx-post="/telemetry" hx-push-url="false">{{template "csrf"}}<button type="submit" name="action" value="on">Turn on</button></form>
   {{- end}}
   {{- else}}
   <p class="faint">Telemetry is the operator's to see and set.</p>

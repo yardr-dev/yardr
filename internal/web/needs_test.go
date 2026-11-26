@@ -406,7 +406,7 @@ func TestHomeNeedsWeightyMapping(t *testing.T) {
 		`Approve it with <code>yardr bead answer ` + b.ID + ` ` + ask + ` &lt;n&gt;</code>`,
 		`<li><span>1. ada</span>`,
 		`<li><span>2. mckean</span>`,
-		`<input type="text" name="words"`,
+		`hx-preserve="true" name="words"`,
 		`<button type="submit" name="action" value="later">Later</button>`,
 		`<button type="submit" name="action" value="decline" title="Say no to all options. The asker finds another way.">Decline</button>`,
 	} {

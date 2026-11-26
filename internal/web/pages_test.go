@@ -473,10 +473,10 @@ func TestBeadPageNoteRunLink(t *testing.T) {
 	}
 	stable := "/blobs/note/" + itoa(notes[0].Seq) + "/2"
 	body := f.get("/beads/" + bead).body
-	if want := `<a href="` + stable + `">page ` + page.Hash[:8] + `</a>`; !strings.Contains(body, want) {
+	if want := `<a href="` + stable + `" hx-boost="false">page ` + page.Hash[:8] + `</a>`; !strings.Contains(body, want) {
 		t.Errorf("the page lacks its static link %s", want)
 	}
-	if want := `<a href="//127.0.0.1:8789` + stable + `">run</a>`; !strings.Contains(body, want) {
+	if want := `<a href="//127.0.0.1:8789` + stable + `" hx-boost="false">run</a>`; !strings.Contains(body, want) {
 		t.Errorf("the page lacks %s", want)
 	}
 }

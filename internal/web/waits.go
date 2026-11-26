@@ -12,8 +12,8 @@ import (
 	"yardr.dev/yardr/internal/store"
 )
 
-// Line is what waits for a person, and under it the line in numbers:
-// the aside beside home, and the line page whole.
+// Line is what waits for a person, and under it the line in numbers: the
+// line page whole, and what the window's list and badge count from.
 type Line struct {
 	// As is the user the view acts as, "" when it does not act: an asked
 	// row then answers with buttons, and no other row takes a write.
@@ -26,8 +26,8 @@ type Line struct {
 	Parked []Waiting `json:"parked"`
 	// Late are the open beads running past their usual time, the newest
 	// change first: /line's own rows under the waits. A late bead needs
-	// nothing yet, so they stand apart from the waits and the header's
-	// count. Only the /line page reads them; the asides leave them out.
+	// nothing yet, so they stand apart from the waits and the rail's
+	// count. Only the /line page reads them.
 	Late []LateRow `json:"late"`
 	Open int       `json:"open"`
 	// Working counts the beads an agent's or a command's session has
@@ -41,10 +41,6 @@ type Line struct {
 	// the order of their flows.
 	Stages []StageCount `json:"stages"`
 	Depots []LineDepot  `json:"depots"`
-	// Home is the home mode (?home=1): the line panel alone, without the
-	// waits home lists at the top of its centre already. HTML-only: the
-	// JSON carries the waits either way.
-	Home bool `json:"-"`
 }
 
 type LineDepot struct {
@@ -815,18 +811,6 @@ func sessionName(sess store.Session) string {
 	return sess.ID
 }
 
-// homeLine reports whether the request asks for the home mode of /line
-// (?home=1): the line panel alone, what home's aside shows and re-reads,
-// following the boolean query-parameter convention of ?panel=1 and ?all=1.
-// The parameter shapes the HTML alone.
-func homeLine(r *http.Request) bool {
-	switch r.URL.Query().Get("home") {
-	case "", "0", "false":
-		return false
-	}
-	return true
-}
-
 // handleLine is what waits for a person, and the line in numbers, as a
 // page of its own.
 func (s *Server) handleLine(w http.ResponseWriter, r *http.Request) {
@@ -845,18 +829,12 @@ func (s *Server) handleLine(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	// The late beads under the waits: the page's own rows, which the
-	// asides leave out.
+	// The late beads under the waits: the page's own rows, and its list's.
 	if l.Late, err = s.lateRows(r.Context(), ov.yard); err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	l.Home = homeLine(r)
-	// The page lists late beads in its centre. Keep them out of the
-	// aside, which /line also serves after every event beside home.
-	column := *l
-	column.Late = nil
-	s.respond(w, r, Page{Template: "line", Title: "Line", Menu: "line", Data: l, line: &column, ov: ov, head: head})
+	s.respond(w, r, Page{Template: "line", Title: "Line", Data: l, line: l, ov: ov, head: head, live: liveStage})
 }
 
 // lateRows lists the open beads running past their usual time, the newest

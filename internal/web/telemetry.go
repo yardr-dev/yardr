@@ -78,7 +78,7 @@ func (s *Server) handleTelemetry(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	s.respond(w, r, Page{Template: "telemetry", Title: "Telemetry", Menu: "config", Data: d, head: head})
+	s.respond(w, r, Page{Template: "telemetry", Title: "Telemetry", Data: d, head: head})
 }
 
 func (s *Server) telemetryPage(ctx context.Context, head uint64) (Telemetry, error) {
@@ -165,7 +165,7 @@ func (s *Server) telemetryAgain(w http.ResponseWriter, r *http.Request, why stri
 		return
 	}
 	d.Error = why
-	s.respond(w, r, Page{Template: "telemetry", Title: "Telemetry", Menu: "config", Data: d, head: head})
+	s.respond(w, r, Page{Template: "telemetry", Title: "Telemetry", Data: d, head: head})
 }
 
 // telemetryLink is the Telemetry page on the config hub: the yard's

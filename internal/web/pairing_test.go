@@ -106,8 +106,15 @@ func TestPairingPageSaysWherePairingIsOpened(t *testing.T) {
 	if r.status != 200 || !strings.Contains(r.body, pairingNoticeOnPage) ||
 		strings.Contains(r.body, "pairing-code") || strings.Contains(r.body, `src="/pairing.png"`) ||
 		strings.Contains(r.body, "Open pairing") || strings.Contains(r.body, "Pair one of your own devices") ||
-		!strings.Contains(r.body, `href="/pairing" aria-current="page"`) {
+		!strings.Contains(listOf(t, r.body), `<span class="wv-row__name">Pair device</span>`) {
 		t.Fatalf("the pairing page: status %d: %s", r.status, r.body)
+	}
+	// The page stands under Settings, in no row of the map: no row is open.
+	if got := marked(railOf(t, r.body), "aria-current", "true"); len(got) != 1 || got[0] != "/config" {
+		t.Errorf("the pairing page opens the tiles %v, want Settings'", got)
+	}
+	if got := marked(listOf(t, r.body), "aria-current", "page"); len(got) != 0 {
+		t.Errorf("the pairing page marks %v open", got)
 	}
 	// A reload is the same page.
 	if again := pairingGet(t, f, ada, "/pairing"); again.body != r.body {

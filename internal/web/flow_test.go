@@ -388,52 +388,6 @@ func TestFlowHTML(t *testing.T) {
 	}
 }
 
-// The sidebar marks the depot and the flow the page stands on, and opens
-// the quiet fold that holds the current flow.
-func TestFlowSidebarCurrent(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	f := flowYard(t)
-	fl, err := store.ParseFlow("draft -> done\ndone terminal\n")
-	must(t, err)
-	fl.Name = "docs"
-	_, err = f.st.PutFlow(ctx, *fl, "me")
-	must(t, err)
-	must(t, f.st.SetFlowPointer(ctx, "line", "doc", "docs", "me"))
-
-	s := sidebarSection(t, squash(f.get("/depots/line/code").body))
-	for _, want := range []string{
-		`<a class="side-row" href="/depots/line" title="line — 1 in transit" aria-label="line — 1 in transit" aria-current="page">`,
-		`<a class="side-flow" href="/depots/line/code" title="code" aria-label="code" aria-current="page">`,
-		`<a class="side-flow" href="/depots/line/bugs" title="bugs" aria-label="bugs">`,
-		`<a class="side-flow" href="/depots/line/docs"><span class="side-label">docs</span></a>`,
-	} {
-		if !strings.Contains(s, want) {
-			t.Errorf("the sidebar lacks %s: %s", want, s)
-		}
-	}
-	if n := strings.Count(s, "aria-current"); n != 2 {
-		t.Errorf("the sidebar marks %d rows current, want the depot and its flow: %s", n, s)
-	}
-	if strings.Contains(s, `<details class="side-quiet" open>`) {
-		t.Errorf("the quiet fold stands open with nothing current in it: %s", s)
-	}
-	s = sidebarSection(t, squash(f.get("/depots/line/docs").body))
-	if !strings.Contains(s, `<details class="side-quiet" open>`) {
-		t.Errorf("the quiet fold is closed on its current page: %s", s)
-	}
-	if want := `<a class="side-flow" href="/depots/line/docs" aria-current="page"><span class="side-label">docs</span></a>`; !strings.Contains(s, want) {
-		t.Errorf("the quiet flow row is not marked current: %s", s)
-	}
-	if n := strings.Count(s, "aria-current"); n != 2 {
-		t.Errorf("the sidebar marks %d rows current on a quiet flow page, want the depot and its flow: %s", n, s)
-	}
-	s = sidebarSection(t, squash(f.get("/depots/line").body))
-	if n := strings.Count(s, "aria-current"); n != 1 {
-		t.Errorf("the sidebar marks %d rows current on the depot page, want the depot alone: %s", n, s)
-	}
-}
-
 // A depot or flow nobody knows is a 404, as JSON and as HTML.
 func TestFlowNotFound(t *testing.T) {
 	t.Parallel()

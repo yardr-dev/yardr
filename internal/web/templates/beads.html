@@ -1,9 +1,10 @@
 {{define "content"}}
 {{- with .Data}}
 {{- $d := .}}
-{{- /* The list reads itself again whenever something happens in the yard:
-       the shell's stream carries each event's seq and nothing else. */}}
-<div id="beads" hx-get="{{.Self}}" hx-trigger="sse:message" hx-select="#beads > *" hx-swap="innerHTML ignoreTitle:true">
+{{- /* The page's leaf in the shell reads it again whenever something
+       happens in the yard: the stream carries each event's seq and nothing
+       else. */}}
+<div id="beads">
   {{- /* Each choice is a chip with the number of beads its own link lists:
          a depot's under the stage kept, a stage's under the depot kept,
          each row's all under the other filter alone. */}}

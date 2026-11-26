@@ -303,7 +303,7 @@ func (s *Server) handleLimits(w http.ResponseWriter, r *http.Request) {
 		}
 		out.Sources = append(out.Sources, src)
 	}
-	s.respond(w, r, Page{Template: "limits", Title: "Limits", Menu: "config", Data: out, head: head, stream: "seq"})
+	s.respond(w, r, Page{Template: "limits", Title: "Limits", Data: out, head: head, stream: "seq", live: liveStage})
 }
 
 // askProvider asks for the provider once through its source, and says what

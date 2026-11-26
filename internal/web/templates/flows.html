@@ -55,7 +55,7 @@
   {{- end}}
   <section class="flow off">
     <h3 class="label">off the flow</h3>
-    <div class="cards" id="{{.Section}}" sse-swap="{{.Section}}" hx-swap="afterbegin settle:0ms">
+    <div class="cards" id="{{.Section}}" sse-swap="{{.Section}}" hx-target="this" hx-swap="afterbegin settle:0ms">
       {{- range .Elsewhere}}{{template "card" .}}{{end}}
     </div>
   </section>
@@ -75,6 +75,6 @@
 {{- if .StageFile}} · stage file{{end -}}
 {{end}}
 {{- /* The element the stream puts a stage's cards in, named after the stage. */}}
-{{define "stagecards"}}<div class="cards" id="{{.Section}}" sse-swap="{{.Section}}" hx-swap="afterbegin settle:0ms">
+{{define "stagecards"}}<div class="cards" id="{{.Section}}" sse-swap="{{.Section}}" hx-target="this" hx-swap="afterbegin settle:0ms">
   {{- range .Beads}}{{template "card" .}}{{end}}
 </div>{{end}}

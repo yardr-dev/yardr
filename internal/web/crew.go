@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"time"
@@ -74,29 +75,21 @@ func agentOf(r store.CrewMember) string {
 	return strings.Join(parts, " · ")
 }
 
-func (s *Server) handleCrew(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	head, err := s.st.Head(ctx)
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
+// crewRows reads the crew as the crew's page and Crew's list show it.
+func (s *Server) crewRows(ctx context.Context) ([]CrewRow, error) {
 	rs, err := s.st.Crew(ctx)
 	if err != nil {
-		s.fail(w, r, err)
-		return
+		return nil, err
 	}
 	lostAt, lost, err := store.DaemonLostEpisode(ctx, s.st)
 	if err != nil {
-		s.fail(w, r, err)
-		return
+		return nil, err
 	}
 	as, err := limits.Answerers(ctx, s.st, s.home)
 	if err != nil {
-		s.fail(w, r, err)
-		return
+		return nil, err
 	}
-	out := Crew{Crew: []CrewRow{}, Head: head}
+	out := []CrewRow{}
 	for _, res := range rs {
 		row := CrewRow{CrewMember: res, Name: res.Name, State: res.State, Status: res.Status, Running: res.Live(), Enabled: res.Enabled,
 			Agent: agentOf(res), Restart: res.RestartRequested}
@@ -115,11 +108,25 @@ func (s *Server) handleCrew(w http.ResponseWriter, r *http.Request) {
 		// The count alone: the events are the crew member's to read.
 		inbox, err := s.st.Inbox(ctx, res.Name, 1)
 		if err != nil {
-			s.fail(w, r, err)
-			return
+			return nil, err
 		}
 		row.Unread = inbox.Total
-		out.Crew = append(out.Crew, row)
+		out = append(out, row)
 	}
-	s.respond(w, r, Page{Template: "crew", Title: "Crew", Menu: "crew", Data: out, head: head})
+	return out, nil
+}
+
+func (s *Server) handleCrew(w http.ResponseWriter, r *http.Request) {
+	head, err := s.st.Head(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	rows, err := s.crewRows(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	out := Crew{Crew: rows, Head: head}
+	s.respond(w, r, Page{Template: "crew", Title: "Crew", Data: out, head: head, crew: out.Crew, live: liveStage})
 }

@@ -266,7 +266,7 @@ const (
 	noGateLine = "This card is weighty and this window has no gate."
 	// wordsField is the field a card's words ride in, a decline's reason
 	// among them, and declineButton the button that sends the decline.
-	wordsField    = `<input type="text" name="words" placeholder="Words with the answer, or why not" aria-label="Words">`
+	wordsField    = `hx-preserve="true" name="words" placeholder="Words with the answer, or why not" aria-label="Words">`
 	declineButton = `<button type="submit" name="action" value="decline" title="Say no to all options. The asker finds another way.">Decline</button>`
 )
 
@@ -1952,7 +1952,7 @@ func TestWebApprovesAStrongSetupCard(t *testing.T) {
 		`<p>When you approve, the yard applies the pack setupmail as jo, and nothing else:</p>`,
 		approveButton + `</form>`,
 		// On its bead's page the form answers in place.
-		`<form class="need-approve" method="post" action="/beads/` + b.ID + `" hx-post="/beads/` + b.ID + `" hx-target="#bead"`,
+		`<form class="need-approve" method="post" action="/beads/` + b.ID + `" hx-post="/beads/` + b.ID + `" hx-push-url="false">`,
 	} {
 		if !strings.Contains(page.body, want) {
 			t.Errorf("the setup card lacks %q:\n%s", want, page.body)
@@ -1977,7 +1977,7 @@ func TestWebApprovesAStrongSetupCard(t *testing.T) {
 		}
 		// A preset is picked in the approval, never answered by a button,
 		// and a setup takes no words as a note.
-		for _, foreign := range []string{`<button type="submit" name="option"`, `value="send"`, `hx-target="#bead"`} {
+		for _, foreign := range []string{`<button type="submit" name="option"`, `value="send"`, `hx-post=`} {
 			if strings.Contains(body, foreign) {
 				t.Errorf("%s: the setup card carries %q:\n%s", s.name, foreign, body)
 			}

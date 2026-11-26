@@ -298,17 +298,20 @@ func TestHomeHTML(t *testing.T) {
 		t.Fatalf("status %d, type %q", r.status, r.header.Get("Content-Type"))
 	}
 	bs := f.byTitle()
-	text := squash(r.body)
+	text := squash(stageOf(t, r.body))
 	for _, want := range []string{
-		"<title>Home · depot</title>",
-		`<a class="yard-row" href="/line" title="depot" aria-label="depot"><span class="chip chip-2">de</span><span class="yard-name">depot</span></a>`,
 		`<p class="answer">1 needs you. 1 fault.</p>`,
 		`<a href="/beads/` + bs["two"].ID + `"><span class="dot held"></span><span class="held">held</span><span class="separator" aria-hidden="true">·</span><span class="entry-title">two</span><span class="separator" aria-hidden="true">·</span><span class="label">` + shortID(bs["two"].ID) + `</span><span class="faint">`,
-		`<li><a href="/flows?panel=1">Yard 5 · held 1 ›</a></li>`,
+		`<li><a href="/flows">Yard 5 · held 1 ›</a></li>`,
 		`<li><a href="/beads?all=1">Closed today 1 ›</a></li>`,
-		`<a href="/" aria-current="page">Home</a>`,
 	} {
 		if !strings.Contains(text, want) {
+			t.Errorf("the page lacks %q", want)
+		}
+	}
+	// The yard's chip heads the rail and opens Decide; the title names the page.
+	for _, want := range []string{"<title>Home · depot</title>", `<a class="wv-chip" href="/" title="depot" aria-label="depot">de</a>`} {
+		if !strings.Contains(r.body, want) {
 			t.Errorf("the page lacks %q", want)
 		}
 	}
@@ -333,9 +336,9 @@ func TestHomeHTML(t *testing.T) {
 		t.Errorf("the JSON lost the depots or the closed title: %+v %+v", h.Depots, h.Closed)
 	}
 	must(t, f.st.SetSetting(context.Background(), "name", "plantime", "me"))
-	if body := f.get("/").body; !strings.Contains(body, `href="/line" title="plantime" aria-label="plantime"><span class="chip chip-`) ||
-		!strings.Contains(body, `>pl</span><span class="yard-name">plantime</span></a>`) {
-		t.Errorf("a named yard's chip carries no name: %s", body)
+	if body := f.get("/").body; !strings.Contains(body, `<a class="wv-chip" href="/" title="plantime" aria-label="plantime">pl</a>`) ||
+		!strings.Contains(body, "<title>Home · plantime</title>") {
+		t.Errorf("a named yard's chip carries no name: %s", railOf(t, body))
 	}
 }
 
@@ -414,7 +417,7 @@ func TestHomeOverview(t *testing.T) {
 		t.Errorf("closed %+v, want the bead shut today", h.Closed)
 	}
 
-	text := squash(f.get("/").body)
+	text := squash(stageOf(t, f.get("/").body))
 	// The answer and the three rows in order, above the feed. The row
 	// markers name their counts, so the rail's Lines tile does not match.
 	heads := []string{`<p class="answer">`, `>Running 2 · oldest `, `>Yard 5 · working 2 · held 1 ›<`,
@@ -462,7 +465,7 @@ func TestHomeOverview(t *testing.T) {
 		t.Errorf("the Running row has no age: %q", tail)
 	}
 	for _, want := range []string{
-		`<li><a href="/flows?panel=1">Yard 5 · working 2 · held 1 ›</a></li>`,
+		`<li><a href="/flows">Yard 5 · working 2 · held 1 ›</a></li>`,
 		`<li><a href="/beads?all=1">Closed today 1 ›</a></li>`,
 	} {
 		if !strings.Contains(text, want) {
@@ -500,11 +503,11 @@ func TestHomeOverviewEmpty(t *testing.T) {
 	must(t, f.st.PutDepot(ctx, store.Depot{Name: "solo", Base: "origin/main"}, "me"))
 	_, err := f.st.CreateBead(ctx, store.NewBead{Title: "only", Type: "task", Stage: "new", Depot: "solo"}, "me")
 	must(t, err)
-	text := squash(f.get("/").body)
+	text := squash(stageOf(t, f.get("/").body))
 	for _, want := range []string{
 		`<p class="answer">Nothing needs you.</p>`,
 		`<p class="faint">All clear.</p>`,
-		`<li><a href="/flows?panel=1">Yard 1 ›</a></li>`,
+		`<li><a href="/flows">Yard 1 ›</a></li>`,
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("the page lacks %q", want)
@@ -742,7 +745,7 @@ func TestNegotiation(t *testing.T) {
 	}
 }
 
-// The line page is the right column's data, for a window without the column.
+// The line page is what waits for the person and the line in numbers.
 func TestLine(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
@@ -761,26 +764,23 @@ func TestLine(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("line\n got %+v\nwant %+v", got, want)
 	}
-	// Home and the line carry it in the aside; every other page counts
-	// what waits in its header instead.
-	for _, path := range []string{"/", "/line"} {
-		if text := squash(f.get(path).body); !strings.Contains(text, `<dt>open</dt><dd>5</dd>`) {
-			t.Errorf("%s does not show the line's 5 open beads", path)
-		}
+	// The line page shows the numbers; every other page counts what waits in
+	// the rail's badge.
+	if text := squash(f.get("/line").body); !strings.Contains(text, `<dt>open</dt><dd>5</dd>`) {
+		t.Error("/line does not show the line's 5 open beads")
 	}
-	if text := squash(f.get("/beads").body); !strings.Contains(text, `<a class="needs-count" href="/">1 waits for you</a>`) {
-		t.Error("/beads counts no waiting bead in its header")
+	if tile := tileOf(t, f.get("/beads").body, "/"); !strings.Contains(tile, `title="1 waits for you"`) {
+		t.Errorf("/beads counts no waiting bead in its rail: %s", tile)
 	}
 }
 
-// Every page of the bar answers: the tiles in the rail's order, each
-// opening its page, and each mode's rows under More. The pages
-// later children add say so, in both forms, under a status no client
-// takes for an empty answer.
+// Every row of every mode's list opens a page that answers, and that page
+// marks the row it was opened from: the tiles open Decide, Lines, Crew and
+// Settings at their roots, and the operator's Settings name six pages.
 func TestRailPages(t *testing.T) {
 	t.Parallel()
 	// Peers are the operator's to read, so the rail is walked as the
-	// operator's, which names seventeen pages with Telemetry.
+	// operator's, which names Telemetry too.
 	api, own := storetest.NewOwned(t)
 	own.SetTelemetrySwitch(telemetry.Switch{})
 	srv, err := web.NewServer(api, filepath.Join(t.TempDir(), ".depot"), nil)
@@ -793,101 +793,63 @@ func TestRailPages(t *testing.T) {
 	ctx := context.Background()
 	must(t, f.st.SetSetting(ctx, store.OperatorSetting, "ada", "ada"))
 	must(t, f.st.PutDepot(ctx, store.Depot{Name: "line", Base: "origin/main"}, "ada"))
-	run, err := f.st.CreateBead(ctx, store.NewBead{Title: "at work", Stage: "new", Depot: "line"}, "me")
+	_, err = f.st.CreateBead(ctx, store.NewBead{Title: "at work", Stage: "new", Depot: "line"}, "me")
 	must(t, err)
-	tiles := regexp.MustCompile(`<a class="tile[^"]*" href="([^"]+)"`)
-	var hrefs []string
-	for _, m := range tiles.FindAllStringSubmatch(f.get("/").body, -1) {
-		hrefs = append(hrefs, m[1])
+	_, err = f.st.PutCrew(ctx, store.CrewMember{Name: "yardmaster", Runner: "herdr"}, "ada")
+	must(t, err)
+	rails := regexp.MustCompile(`<a class="wv-tile" href="([^"]+)"`)
+	var tiles []string
+	for _, m := range rails.FindAllStringSubmatch(f.get("/").body, -1) {
+		tiles = append(tiles, m[1])
 	}
-	if want := []string{"/talk", "/line", "/flows?panel=1", "/config"}; !slices.Equal(hrefs, want) {
-		t.Errorf("the rail's tiles open %v, want %v", hrefs, want)
+	if want := []string{"/", "/flows", "/crew", "/config"}; !slices.Equal(tiles, want) {
+		t.Fatalf("the rail's tiles open %v, want %v", tiles, want)
 	}
-	for _, mode := range []struct{ path, tile string }{
-		{"/talk", "/talk"},
-		{"/line", "/line"},
-		{"/flows?panel=1", "/flows?panel=1"},
-		{"/config", "/config"},
-	} {
-		body := f.get(mode.path).body
-		if want := `<a class="tile open" href="` + mode.tile + `"`; !strings.Contains(body, want) {
-			t.Errorf("%s leaves no tile open for %s", mode.path, want)
-		}
-		if !strings.Contains(body, `<nav class="sidebar"`) {
-			t.Errorf("%s renders no sidebar", mode.path)
-		}
-	}
-	// One page per mode exposes every row; More itself names seventeen
-	// pages for the operator.
-	links := regexp.MustCompile(`<li><a href="([^"]+)"`)
-	var paths []string
 	seen := map[string]bool{}
-	for _, page := range []string{"/talk", "/line", "/flows?panel=1", "/config"} {
-		rows, ok := moreRows(f.get(page).body)
-		if !ok {
-			t.Fatalf("%s has no More list", page)
+	var hrefs []string
+	for _, root := range tiles {
+		r := f.get(root)
+		if r.status != 200 {
+			t.Errorf("%s: status %d", root, r.status)
+			continue
 		}
-		for _, l := range links.FindAllStringSubmatch(rows, -1) {
-			if !seen[l[1]] {
-				seen[l[1]] = true
-				paths = append(paths, l[1])
+		for _, row := range listRows(listOf(t, r.body)) {
+			if !seen[row.href] {
+				seen[row.href] = true
+				hrefs = append(hrefs, row.href)
 			}
 		}
 	}
-	if len(paths) != 17 {
-		t.Fatalf("More names %d pages, want 17: %v", len(paths), paths)
-	}
-	for _, path := range paths {
-		r := f.get(path)
-		switch path {
-		case "/", "/talk", "/line", "/flows", "/flows?panel=1", "/beads", "/sessions", "/crew", "/previews", "/config",
-			"/depots", "/groups", "/routes", "/peers", "/deps", "/limits", "/telemetry":
-			if r.status != 200 {
-				t.Errorf("%s: status %d", path, r.status)
-			}
-		default:
-			if r.status != http.StatusNotImplemented || !strings.Contains(r.body, "Not built yet.") {
-				t.Errorf("%s: status %d, want 501 and the not-built page", path, r.status)
-			}
-			j := f.get(path, "Accept", "application/json")
-			var got web.Unbuilt
-			if err := json.Unmarshal([]byte(j.body), &got); err != nil || j.status != http.StatusNotImplemented ||
-				got != (web.Unbuilt{Page: strings.TrimPrefix(path, "/")}) {
-				t.Errorf("%s as JSON: status %d, %+v (%v)", path, j.status, got, err)
-			}
+	for _, href := range hrefs {
+		r := f.get(href)
+		if r.status != 200 {
+			t.Errorf("%s: status %d", href, r.status)
+			continue
 		}
-		if !strings.Contains(r.body, `<a href="`+path+`" aria-current="page">`) {
-			t.Errorf("%s does not mark its own row under More", path)
+		if got := marked(listOf(t, r.body), "aria-current", "page"); !slices.Contains(got, href) {
+			t.Errorf("%s does not mark its own row in the list: %v", href, got)
 		}
 	}
-	bead := f.get("/beads/" + run.ID)
-	if bead.status != http.StatusOK || !strings.Contains(bead.body, `<a class="tile open" href="/flows?panel=1"`) ||
-		!strings.Contains(bead.body, `<a href="/beads" aria-current="page">Beads</a>`) {
-		t.Errorf("a bead page does not stand with the Lines tile open: %s", bead.body)
+	for _, want := range []string{"/config", "/groups", "/routes", "/peers", "/limits", "/telemetry", "/flows", "/depots", "/beads", "/sessions", "/previews", "/deps"} {
+		if !seen[want] {
+			t.Errorf("no mode's list has a row for %s: %v", want, hrefs)
+		}
+	}
+	bead := f.get("/beads/" + f.byTitle()["at work"].ID)
+	if got := marked(railOf(t, bead.body), "aria-current", "true"); bead.status != http.StatusOK || !slices.Equal(got, []string{"/"}) {
+		t.Errorf("a bead page does not stand with the Decide tile open: %v", got)
 	}
 }
 
 func TestNotFound(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	if r := f.get("/nowhere"); r.status != 404 || !strings.Contains(r.body, "no page at /nowhere") || !strings.Contains(r.body, `class="rail"`) {
+	if r := f.get("/nowhere"); r.status != 404 || !strings.Contains(r.body, "no page at /nowhere") || !strings.Contains(r.body, `id="rail"`) {
 		t.Errorf("status %d, want 404 inside the shell: %s", r.status, r.body)
-	} else if strings.Contains(r.body, `class="tile open"`) || strings.Contains(r.body, `class="pill"`) {
-		t.Errorf("the error page opens a mode or a pill: %s", r.body)
-	} else {
-		// The sidebar stands bare: the yard and the fixed rows, no
-		// counts, no depots.
-		s := sidebarSection(t, r.body)
-		for _, want := range []string{`<a class="yard-row"`, `>Arrivals</span>`, `>Decide</span>`, `>Crew</span>`, `>Settings</span>`} {
-			if !strings.Contains(s, want) {
-				t.Errorf("the bare sidebar lacks %s: %s", want, s)
-			}
-		}
-		for _, not := range []string{"side-count", "side-pill", "side-transit", "side-dot", "side-head", "side-quiet", ">Depots</p>"} {
-			if strings.Contains(s, not) {
-				t.Errorf("the bare sidebar carries %q: %s", not, s)
-			}
-		}
+	} else if rail := railOf(t, r.body); strings.Contains(rail, "aria-current") || strings.Contains(rail, "wv-badge") {
+		// The error page stands bare, under no mode and with no count:
+		// TestErrorPageIsBare has the list.
+		t.Errorf("the error page opens a mode or a badge: %s", rail)
 	}
 	r := f.get("/nowhere", "Accept", "application/json")
 	var got map[string]string
@@ -1230,8 +1192,11 @@ func TestNoOtherHost(t *testing.T) {
 	var runs int
 	seen := map[string]bool{}
 	// /telemetry and /peers stand alone: the hub links them for the
-	// operator alone, and the walk reads as no one.
-	queue := []string{"/", "/nowhere", "/telemetry", "/peers"}
+	// operator alone, and the walk reads as no one. /line and /talk have
+	// no link in this yard (Decide opens /, and Crew's list has no row
+	// where there is no crew), and /flows?panel=1 is an address kept for
+	// the links that name it.
+	queue := []string{"/", "/nowhere", "/telemetry", "/peers", "/line", "/talk", "/flows?panel=1"}
 	ref := regexp.MustCompile(`(?:href|src)="([^"]+)"`)
 	for len(queue) > 0 {
 		path := queue[0]
@@ -1266,6 +1231,10 @@ func TestNoOtherHost(t *testing.T) {
 			// link off this server; it is followed nowhere.
 			if isRunLink(m[1]) {
 				runs++
+				continue
+			}
+			// The drawer opens and shuts by the page's own fragments.
+			if m[1] == "#stage" || m[1] == "#drawer" {
 				continue
 			}
 			if !strings.HasPrefix(m[1], "/") || strings.HasPrefix(m[1], "//") {
@@ -1412,22 +1381,46 @@ func TestTokens(t *testing.T) {
 			t.Errorf("font token --%s is not %s", name, stack)
 		}
 	}
-	// Square corners everywhere; circles only for status dots, the bar's
-	// tiles and pills, which keep footplate's rounded corners, and the
-	// sidebar's chip, rows, dots and pills and the depot page's cards,
-	// table, rows, dots and segments, which keep the canvas's, as
-	// the talk page's composer keeps its card radius, and pills only for
-	// the Beads filters' chips.
+	// The window's own tokens: the surfaces, and rust as text and as the
+	// chip, with the corners and the measures of the kit.
+	for name, value := range map[string]string{
+		"surface-sunken": "#101112", "surface-hover": "#232426", "surface-pressed": "#2a2b2e", "border-hover": "#46484c",
+		"text-accent": "#e2794a", "chip": "#e2794a", "chip-ink": "#161718", "badge-ink": "#161718", "on-accent": "#ffffff",
+		"wv-rail": "64px", "wv-list": "340px", "wv-measure": "760px", "wv-bar": "64px",
+		"radius-sm": "4px", "radius-md": "6px", "radius-lg": "8px", "radius-full": "999px",
+	} {
+		if !strings.Contains(string(css), "--"+name+": "+value+";") {
+			t.Errorf("token --%s is not %s", name, value)
+		}
+	}
+	for name, source := range map[string]string{
+		"surface-sunken": "--dusk-950", "surface-hover": "--dusk-800", "surface-pressed": "--dusk-750", "border-hover": "--dusk-600",
+		"text-accent": "--yard-400", "chip": "--yard-400", "chip-ink": "--dusk-900", "badge-ink": "--dusk-900", "on-accent": "--text-on-accent",
+	} {
+		line := regexp.MustCompile(`(?m)^\s*--` + regexp.QuoteMeta(name) + `: [^;]+; /\* ` + regexp.QuoteMeta(source) + ` \*/$`)
+		if !line.Match(css) {
+			t.Errorf("token --%s does not name its design source %s", name, source)
+		}
+	}
+	// Square corners in the pages' bodies, which the reset squares; the
+	// window's parts take the design system's: 4, 6, 8 and full, by token,
+	// and a circle for a dot. Circles stay for status dots, pills for the
+	// Beads filters' chips, and the depot page's cards, table, rows and
+	// segments, and the talk page's composer, keep the canvas's.
 	radii := regexp.MustCompile(`(?m)^(.*)border-radius:\s*([^;]+);`).FindAllStringSubmatch(string(css), -1)
 	for _, r := range radii {
 		before := strings.TrimSpace(r[1])
-		round := strings.HasPrefix(before, ".dot ") || strings.HasPrefix(before, ".chip ") ||
-			strings.HasPrefix(before, ".tile ") || strings.HasPrefix(before, ".pill ") ||
-			strings.HasPrefix(before, ".chips a ") || strings.HasPrefix(before, "#send ") ||
-			strings.HasPrefix(before, ".side-") || strings.HasPrefix(before, ".depot-") ||
-			strings.HasPrefix(before, ".seg ")
-		if r[2] != "0" && !round {
-			t.Errorf("a corner that is not square: %s", r[0])
+		switch {
+		case strings.HasPrefix(before, ".wv-"):
+			if !slices.Contains([]string{"50%", "var(--radius-sm)", "var(--radius-md)", "var(--radius-lg)", "var(--radius-full)"}, r[2]) {
+				t.Errorf("a window corner outside the design system's: %s", r[0])
+			}
+		case strings.HasPrefix(before, ".dot "), strings.HasPrefix(before, ".chips a "), strings.HasPrefix(before, ".compose "),
+			strings.HasPrefix(before, ".depot-"), strings.HasPrefix(before, ".seg "):
+		default:
+			if r[2] != "0" {
+				t.Errorf("a corner that is not square: %s", r[0])
+			}
 		}
 	}
 }

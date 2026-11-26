@@ -3,8 +3,8 @@ package web_test
 import (
 	"context"
 	"fmt"
-	"os"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -76,40 +76,59 @@ func stocked(t *testing.T, f *fixture) (run, w1, w2, train, six *store.Bead) {
 	return run, w1, w2, train, six
 }
 
-// The yard panel: every depot's flows as a list, with the beads in no
-// stage off the line. No diagram is drawn: the flows page's cards carry
-// the beads.
-func TestPanelHTML(t *testing.T) {
+// The yard panel, ?panel=1, is the Lines list beside the stage now, and
+// /line's home mode, ?home=1, is the home page's own column: both answer as
+// the page without the parameter, in HTML and as JSON, and a parameter that
+// said no panel is no panel.
+func TestPanelAndHomeParametersAnswerAsThePage(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	stocked(t, f)
+	for _, pair := range [][2]string{{"/flows?panel=1", "/flows"}, {"/flows?panel=0", "/flows"}, {"/line?home=1", "/line"}} {
+		with, plain := f.get(pair[0]), f.get(pair[1])
+		if with.status != 200 || plain.status != 200 {
+			t.Fatalf("%s: status %d, %s: %d", pair[0], with.status, pair[1], plain.status)
+		}
+		// The leaf of a live page reads the address it was asked at, the
+		// parameter with it, so it is the one difference.
+		leaf := regexp.MustCompile(`<i class="wv-live"[^>]*></i>`)
+		if a, b := sameWhole(leaf.ReplaceAllString(with.body, "")), sameWhole(leaf.ReplaceAllString(plain.body, "")); a != b {
+			t.Errorf("%s does not answer as %s:\n%s\nwant\n%s", pair[0], pair[1], a, b)
+		}
+		wj, pj := f.get(pair[0], "Accept", "application/json"), f.get(pair[1], "Accept", "application/json")
+		if wj.status != 200 || wj.body != pj.body {
+			t.Errorf("the JSON of %s is not the JSON of %s", pair[0], pair[1])
+		}
+	}
+	var a, b web.Flows
+	f.getJSON("/flows", &a)
+	f.getJSON("/flows?panel=1", &b)
+	if !reflect.DeepEqual(a, b) {
+		t.Errorf("?panel=1 decodes as %+v, /flows as %+v", b, a)
+	}
+}
+
+// /flows is the page of cards: the stream moves each bead's card between the
+// stages, so it has no leaf, and Flows is the row of the Lines list that
+// stands open. The yard panel's markup is gone.
+func TestFlowsIsTheCardPage(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	_, _, _, _, six := stocked(t, f)
-	ctx := context.Background()
-	head, err := f.st.Head(ctx)
-	must(t, err)
-	r := f.get("/flows?panel=1")
-	if r.status != 200 || !strings.HasPrefix(r.header.Get("Content-Type"), "text/html") {
-		t.Fatalf("status %d, type %q", r.status, r.header.Get("Content-Type"))
-	}
+	r := f.get("/flows")
 	for _, want := range []string{
-		"<title>Yard · depot</title>",
-		`<a href="/flows?panel=1" aria-current="page">Yard</a>`,
-		`<a href="/flows">Flows</a>`,
-		fmt.Sprintf(`<div class="shell wide" hx-ext="sse" sse-connect="/events?after=%d&amp;format=seq">`, head),
-		`<div id="panel" hx-get="/flows?panel=1" hx-trigger="sse:message" hx-select="#panel > *" hx-swap="innerHTML ignoreTitle:true">`,
-		`<h2>shop</h2>`,
-		`flow code`,
-		// The bead of the depot with no flow stands off the line, with
-		// its stage named.
-		`<span class="label">off the line: 1</span>`,
-		`<a class="bead" href="/beads/` + six.ID + `">` + six.ID + `</a> (inbox)`,
+		`format=card`,
+		`<a class="wv-row" href="/flows" aria-current="page">`,
+		`<h3 class="label">off the flow</h3>`,
+		`<a class="bead" href="/beads/` + six.ID + `">`,
 	} {
 		if !strings.Contains(r.body, want) {
-			t.Errorf("the panel lacks %s", want)
+			t.Errorf("/flows lacks %s", want)
 		}
 	}
-	for _, not := range []string{"panel-svg", "Panel diagram", `class="diagram"`} {
+	for _, not := range []string{"panel-svg", `id="panel"`, "off the line:", "format=seq", "shell wide", "wv-live"} {
 		if strings.Contains(r.body, not) {
-			t.Errorf("the panel has %s, the diagram's", not)
+			t.Errorf("/flows has %q", not)
 		}
 	}
 	// The flows page still stages every bead: backlog holds twelve.
@@ -127,83 +146,6 @@ func TestPanelHTML(t *testing.T) {
 	for _, st := range codeFlow.Stages {
 		if st.Stage == "backlog" && len(st.Beads) != 12 {
 			t.Fatalf("backlog holds %d beads, want 12", len(st.Beads))
-		}
-	}
-}
-
-// The panel is HTML alone: as JSON the page answers the same with the
-// parameter as without it.
-func TestPanelJSONUnchanged(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	stocked(t, f)
-	plain := f.get("/flows", "Accept", "application/json")
-	with := f.get("/flows?panel=1", "Accept", "application/json")
-	if plain.status != 200 || with.status != 200 {
-		t.Fatalf("status %d and %d: %s", plain.status, with.status, with.body)
-	}
-	if plain.body != with.body {
-		t.Error("the JSON of /flows?panel=1 is not the JSON of /flows")
-	}
-	var a, b web.Flows
-	f.getJSON("/flows", &a)
-	f.getJSON("/flows?panel=1", &b)
-	if !reflect.DeepEqual(a, b) {
-		t.Errorf("?panel=1 decodes as %+v, /flows as %+v", b, a)
-	}
-	// ?panel=0 is no panel: /flows as it was, moving cards one by one.
-	r := f.get("/flows?panel=0")
-	if r.status != 200 || strings.Contains(r.body, "panel-svg") || !strings.Contains(r.body, "format=card") {
-		t.Errorf("?panel=0 answers status %d, not /flows as it was", r.status)
-	}
-}
-
-// A depot whose flows cannot be read lists no flow and still names its
-// beads off the line; a depot with no flow at all says so.
-func TestPanelReadError(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	f.populate()
-	srv, err := web.NewServer(failingDepotFlows{API: f.st, depot: "line"}, f.home, nil)
-	must(t, err)
-	f.ts.Config.Handler = srv
-	r := f.get("/flows?panel=1")
-	if r.status != 200 {
-		t.Fatalf("status %d: %s", r.status, r.body)
-	}
-	for _, want := range []string{
-		`repository is unavailable`,
-		`off the line: 4`,
-		`No flow governs this depot.`,
-	} {
-		if !strings.Contains(r.body, want) {
-			t.Errorf("the panel lacks %q", want)
-		}
-	}
-	if n := strings.Count(r.body, "panel-svg"); n != 0 {
-		t.Errorf("the panel lists %d diagrams, want none: line's flows fail and loose has none", n)
-	}
-}
-
-// /flows without the parameter is unchanged: no panel markup, the card
-// stream, the Flows entry current.
-func TestFlowsWithoutPanel(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	stocked(t, f)
-	r := f.get("/flows")
-	for _, want := range []string{
-		`format=card`,
-		`<a href="/flows" aria-current="page">Flows</a>`,
-		`<a href="/flows?panel=1">Yard</a>`,
-	} {
-		if !strings.Contains(r.body, want) {
-			t.Errorf("/flows lacks %s", want)
-		}
-	}
-	for _, not := range []string{"panel-svg", `id="panel"`, "off the line:", "format=seq", "shell wide"} {
-		if strings.Contains(r.body, not) {
-			t.Errorf("/flows has %q, the panel's", not)
 		}
 	}
 }
@@ -385,36 +327,6 @@ func TestFlowsCallMatchesFlowsPage(t *testing.T) {
 		}
 		if !reflect.DeepEqual(rows(served.Elsewhere), ids(depot.Elsewhere)) {
 			t.Errorf("%s elsewhere = %v, page has %v", depot.Name, rows(served.Elsewhere), ids(depot.Elsewhere))
-		}
-	}
-}
-
-// The Yard page takes the whole window: a wide shell, no right column,
-// each depot as wide as its widest list needs, side by side where there
-// is room.
-func TestYardPageIsWide(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	stocked(t, f)
-	r := f.get("/flows?panel=1")
-	if r.status != 200 {
-		t.Fatalf("status %d: %s", r.status, r.body)
-	}
-	if !strings.Contains(r.body, `<div class="shell wide"`) {
-		t.Error("the Yard page is not wide")
-	}
-	if strings.Contains(r.body, "<aside") {
-		t.Error("the Yard page keeps its right column")
-	}
-	css, err := os.ReadFile("assets/yard.css")
-	must(t, err)
-	for _, want := range []string{
-		".shell.wide { grid-template-columns: var(--sidebar-width) minmax(0, 1fr); }",
-		"#panel { display: flex; flex-wrap: wrap; column-gap: var(--gap); }",
-		"#panel > .item { flex: 1 1 max-content; max-width: 100%; min-width: 0; }",
-	} {
-		if !strings.Contains(string(css), want) {
-			t.Errorf("the stylesheet lacks %s", want)
 		}
 	}
 }
