@@ -40,12 +40,12 @@ A group's config keys that a file bounds (`kind`, `model`, `effort`, `args`), th
 |---|---|---|
 | `harness_error` | `internal/dispatch/harness.go:HarnessErrorKey` | the reason of the `session_harness_error` raised in the current idle spell |
 | `harness_dialog` | `internal/dispatch/harness_dialog.go:HarnessDialogKey` | the kind of the `session_harness_dialog` raised in the current idle spell |
-| `harness_login`, `harness_login_ask` | `internal/store/crew.go:HarnessLoginKey` | the line of the harness's login screen the agent sits at, and the ask of a login the yard leads for it |
-| `harness_retries`, `harness_retry_at` | `internal/dispatch/harness.go:harnessRetries` | how often the yard prompted the agent again, and when its pane is next looked at |
-| `harness_reset_at`, `harness_reset_window`, `harness_reset_model`, `harness_prompted` | `internal/dispatch/harness.go:harnessResetAt` | the wait for a usage limit's window to reset: when it is asked about again, the window, the model that waits and what was typed at the reset |
-| `harness_fallback_model`, `harness_fallback_return_at` | `internal/dispatch/harness.go:harnessFallbackModel` | the fallback model a crew member runs on while its own model's window is used up, and when it goes back |
-| `snooze_until`, `snooze_count` | `internal/store/routing.go:SnoozeUntil` | when a snooze the agent asked for ends, and how many it took in a row |
-| `trust_accepted`, `key_accepted`, `onboarding_accepted_<n>` | `internal/dispatch/dispatch.go:TrustAccepted` | that the yard answered the folder-trust dialog, the API-key dialog and the nth onboarding screen |
+| `harness_login`, `harness_login_ask` | `internal/store/crew.go:HarnessLoginKey`, `internal/store/crew.go:HarnessLoginAskKey` | the line of the harness's login screen the agent sits at, and the ask of a login the yard leads for it |
+| `harness_retries`, `harness_retry_at` | `internal/dispatch/harness.go:harnessRetries`, `internal/dispatch/harness.go:harnessRetryAt` | how often the yard prompted the agent again, and when its pane is next looked at |
+| `harness_reset_at`, `harness_reset_window`, `harness_reset_model`, `harness_prompted` | `internal/dispatch/harness.go:harnessResetAt`, `internal/dispatch/harness.go:harnessResetWindow`, `internal/dispatch/harness.go:harnessResetModel`, `internal/dispatch/harness.go:harnessPrompted` | the wait for a usage limit's window to reset: when it is asked about again, the window, the model that waits and what was typed at the reset |
+| `harness_fallback_model`, `harness_fallback_return_at` | `internal/dispatch/harness.go:harnessFallbackModel`, `internal/dispatch/harness.go:harnessFallbackReturnAt` | the fallback model a crew member runs on while its own model's window is used up, and when it goes back |
+| `snooze_until`, `snooze_count` | `internal/store/routing.go:SnoozeUntil`, `internal/store/routing.go:SnoozeCount` | when a snooze the agent asked for ends, and how many it took in a row |
+| `trust_accepted`, `key_accepted`, `onboarding_accepted_<n>` | `internal/dispatch/dispatch.go:TrustAccepted`, `internal/dispatch/dispatch.go:KeyAccepted`, `internal/dispatch/dispatch.go:OnboardingAccepted` | that the yard answered the folder-trust dialog, the API-key dialog and the nth onboarding screen |
 
 ## Rules
 

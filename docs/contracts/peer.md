@@ -25,8 +25,10 @@ An HTTP protocol between two yards, each on its own build.
   question may add `refused`, the messages it got and did not take with the
   reason, and `wait`, to have the answer held until there is something to hand
   over. A pairing is three more requests, `POST /peers/pair/hello`, `reveal`
-  and `confirm` (`internal/pairing/pairing.go:PathHello`), which a yard that is
-  no peer yet makes to one that opened a pairing. Their bytes are
+  and `confirm` (`internal/pairing/pairing.go:PathHello`,
+  `internal/pairing/pairing.go:PathReveal`,
+  `internal/pairing/pairing.go:PathConfirm`), which a yard that is no peer yet
+  makes to one that opened a pairing. Their bytes are
   [peers.md, The requests](../peers.md#the-requests).
 - **The signature and the seal.** Each request and each answer carries an
   HTTP Message Signature (RFC 9421) of the sender's ed25519 key, and each body

@@ -439,10 +439,18 @@ backticks: the path from the repository root, a colon and the symbol, as
 the file declares at its top level, or `Type.Method` for a method, as
 `internal/store/flows.go:Store.PutFlow`. The path is always whole, never a
 bare file name. Code inside a declaration, such as a line in the middle of a
-function, is cited by the declaration. A line number is no citation, because
-it moves with every edit above it and nothing goes red when it does. A
-sentence that names the symbol in backticks keeps the name, and the citation
-follows in parentheses.
+function, is cited by the declaration. A line in a comment that no declaration
+holds, such as the package comment, is cited by the declaration that does what
+the comment says. A line in the doc comment of a const or var group is cited by
+the group's first name. A line number is no citation, because it moves with
+every edit above it and nothing goes red when it does. A sentence that names
+the symbol in backticks keeps the name, and the citation follows in
+parentheses. A sentence or table row that cites several declared names, such as
+the consts that hold two keys, gives each its own citation, in the same
+parentheses or cell and separated by commas, as
+(`internal/store/crew.go:HarnessLoginKey`,
+`internal/store/crew.go:HarnessLoginAskKey`). A name with no citation of its
+own can be renamed or moved, and nothing goes red.
 
 The check of rule 8 reads each page and fails a citation whose file does not
 exist or does not declare the symbol. It also fails a line number on any page
