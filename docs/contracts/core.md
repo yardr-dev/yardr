@@ -2,12 +2,15 @@
 
 This page is the norm for what the core is and what may import what. It
 states the rule that puts a file inside or outside the core, the core's
-types, the split of `store.API`, the layers of `internal/` and the import
-rules. The Rules table names the check of each rule. `TestImportRules` and
+types, the split of `store.API`, the layers of `internal/`, the import
+rules and the line ceilings of the packages that hold core code. The Rules
+table names the check of each rule. `TestImportRules` and
 `TestLayersMatchCode` in `arch_test.go` (package main, at the repository
-root) hold the code to the import rules and the layers. The page and its
-checks change together, so a new import that breaks the rules fails the
-gate. The contracts at the core's edge each have a page beside this one,
+root) hold the code to the import rules and the layers, and
+`TestCorePackagesKeepUnderTheirCeilings` in `ceilings_test.go` holds each
+package to its ceiling. The page and its checks change together, so a new
+import that breaks the rules, or a package that outgrows its ceiling, fails
+the gate. The contracts at the core's edge each have a page beside this one,
 listed under The contracts, with a Rules table of the same form.
 
 ## What is core
@@ -266,6 +269,45 @@ make the two import each other, while source itself imports only
 The rules cover `internal/` only; `contrib/` and the packs are outside
 them, as is moving any code, which the split beads do.
 
+## Line ceilings
+
+The import rules stop a cycle and not a package's growth, and rule 3 caps
+one file, so a package can still grow by adding files. So each package that
+holds core code has a ceiling in non-test Go lines, counted over the whole
+package. Its lines are every non-test `.go` file in its directory, not its
+subdirectories, with each line counted as `wc -l` counts it. The table has a
+row for each package under `internal/` where What is core puts some lines on
+the core side. Its measured cell says how many lines the package held, and
+at which commit, when the ceiling was set.
+
+| package | ceiling | measured |
+|---|---:|---|
+| `internal/store` | 107,416 | 101,416 lines at 606fd3bf5 |
+| `internal/dispatch` | 20,181 | 18,381 lines at 606fd3bf5 |
+| `internal/rpc` | 7,545 | 7,045 lines at 606fd3bf5 |
+| `internal/server` | 5,910 | 5,410 lines at 606fd3bf5 |
+| `internal/runner` | 8,679 | 8,179 lines at 606fd3bf5 |
+| `internal/hooks` | 4,264 | 3,764 lines at 606fd3bf5 |
+| `internal/yards` | 1,749 | 1,249 lines at 606fd3bf5 |
+| `internal/notify` | 889 | 389 lines at 606fd3bf5 |
+
+A ceiling is a budget for the whole package, core and how-and-what alike,
+and not a ceiling of the core lines in it, so it falls as how-and-what moves
+out. A ceiling is first set at the package's lines plus a room of 6,000 for
+`internal/store`, 1,800 for `internal/dispatch` and 500 for any other
+package. New core work makes room by moving how-and-what out first; a
+ceiling is lowered to the package's count by a bead of its own after a move
+has landed, and raised by nobody but a bead that says why on a card to the
+operator.
+
+`TestCorePackagesKeepUnderTheirCeilings` fails when a package holds more
+lines than its ceiling, and says the package, its count and its ceiling. It
+fails when a row names a directory where no package stands, and when this
+page names a package as core and the table has no row for it. The page names
+a package as core by a file's path in the list of what is core, and by the
+owning package of a type in Core types. A package under its ceiling by any
+amount passes, and the test never raises, lowers or rewrites a ceiling.
+
 ## The contracts
 
 A contract is a form that crosses between the core and the how-and-what:
@@ -312,6 +354,7 @@ author and its reviewer read the test for that.
 | 2 | The Layers section names every `internal` package in its layer, and its counts are true. | `TestLayersMatchCode` |
 | 3 | A non-test Go file over 1,000 lines has a row in the `filesizes` table and may not grow past the row's ceiling. | `gate:filesizes` |
 | 4 | A page in `docs/contracts/` holds each of its rules to a check that exists. | `TestContractPagesNameTheirChecks` |
+| 5 | A package with a row in Line ceilings holds no more non-test Go lines than its ceiling, each row names a package that exists, and each package this page names as core has a row. | `TestCorePackagesKeepUnderTheirCeilings` |
 
-The line ceilings of the core's packages and the list of what the core may
-not name (design 3.4) join this table later, each with its check.
+The list of what the core may not name (design 3.4) joins this table later,
+with its check.

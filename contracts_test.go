@@ -167,10 +167,20 @@ func contractProblems(page string, tests map[string]bool, gate string) []string 
 // rulesTable returns the cells of each row of a page's Rules table, or the
 // one problem that keeps it from reading them: the page has no ## Rules
 // section or has two, or the section does not hold exactly one table with the
-// header | # | rule | check | and a row. The section runs to the next heading
-// of level one or two, and what stands in a code fence, a heading or a table
-// shown as an example, is no part of the page's structure.
+// header | # | rule | check | and a row.
 func rulesTable(page string) (rows [][]string, problem string) {
+	return sectionTable(page, "Rules", []string{"#", "rule", "check"})
+}
+
+// sectionTable returns the cells of each row of the table in a page's
+// ## <heading> section, or the one problem that keeps it from reading them:
+// the page has no such section or has two, or the section does not hold
+// exactly one table with the header cols and a row. The section runs to the
+// next heading of level one or two, and what stands in a code fence, a
+// heading or a table shown as an example, is no part of the page's structure.
+// The Rules tables and core.md's own tables (Core types, Line ceilings) are
+// read with it, so that a page's tables are one form.
+func sectionTable(page, heading string, cols []string) (rows [][]string, problem string) {
 	var section []string
 	var sections int
 	fenced, in := false, false
@@ -184,7 +194,7 @@ func rulesTable(page string) (rows [][]string, problem string) {
 			continue
 		}
 		if strings.HasPrefix(line, "# ") || strings.HasPrefix(line, "## ") {
-			in = line == "## Rules"
+			in = line == "## "+heading
 			if in {
 				sections++
 			}
@@ -196,9 +206,9 @@ func rulesTable(page string) (rows [][]string, problem string) {
 	}
 	switch {
 	case sections == 0:
-		return nil, "has no ## Rules section"
+		return nil, "has no ## " + heading + " section"
 	case sections > 1:
-		return nil, "has " + strconv.Itoa(sections) + " ## Rules sections, want one"
+		return nil, "has " + strconv.Itoa(sections) + " ## " + heading + " sections, want one"
 	}
 
 	// The table is the run of lines that start with a pipe: its header, its
@@ -219,23 +229,23 @@ func rulesTable(page string) (rows [][]string, problem string) {
 		}
 		switch state {
 		case before:
-			if !slices.Equal(tableCells(line), []string{"#", "rule", "check"}) {
-				return nil, "the Rules table's header is " + line + ", want | # | rule | check |"
+			if !slices.Equal(tableCells(line), cols) {
+				return nil, "the " + heading + " table's header is " + line + ", want | " + strings.Join(cols, " | ") + " |"
 			}
 			state = header
 		case header:
 			if !separatorRow.MatchString(line) {
-				return nil, "the Rules table's header is not followed by a separator row of dashes"
+				return nil, "the " + heading + " table's header is not followed by a separator row of dashes"
 			}
 			state = body
 		case body:
 			rows = append(rows, tableCells(line))
 		case after:
-			return nil, "## Rules holds a second table, want one"
+			return nil, "## " + heading + " holds a second table, want one"
 		}
 	}
 	if len(rows) == 0 {
-		return nil, "## Rules holds no table row"
+		return nil, "## " + heading + " holds no table row"
 	}
 	return rows, ""
 }
