@@ -90,9 +90,11 @@ func Unified(old, new string) string { return unified(old, new) }
 // Updated is what an update's event says it changed.
 func Updated(data map[string]any) string { return updated(data) }
 
-// ClosedToday are the beads that closed on now's date, the newest first,
-// at most ten.
-func ClosedToday(beads []store.Bead, now time.Time) []HomeClosed { return closedToday(beads, now) }
+// ClosedToday are the beads that closed on now's date, the newest first, at
+// most ten, and how many closed in all.
+func ClosedToday(beads []store.Bead, now time.Time) ([]HomeClosed, int) {
+	return closedToday(beads, now)
+}
 
 // LandedSince are the beads that landed in the depot in the day before
 // now, the newest first.

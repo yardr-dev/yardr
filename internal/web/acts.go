@@ -76,7 +76,7 @@ func (s *Server) openBeadAsks(ctx context.Context, id string) ([]store.BeadAsk, 
 	return out, nil
 }
 
-// handleBeadPost takes the bead page's forms, and the needs rows' own:
+// handleBeadPost takes the bead page's forms, and the overview's card's own:
 // an ask's answer, or a move to the next stage. It is registered only on a
 // view that acts (ActAs, or UseJWT for JWT mode): without either the mux
 // answers 405 itself, as on every other route. A write answered, the page

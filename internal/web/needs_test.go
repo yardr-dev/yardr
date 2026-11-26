@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"reflect"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -13,20 +16,20 @@ import (
 	"yardr.dev/yardr/internal/web"
 )
 
-// answerSection is the home page's answer part: the answer line and the
-// needs rows, without the counts and the feed after it.
+// answerSection is the overview's head and card: the stage from its answer to
+// its feed, without the feed after it.
 func answerSection(t *testing.T, text string) string {
 	t.Helper()
-	_, s, _ := strings.Cut(squash(text), `<p class="answer">`)
-	s, _, _ = strings.Cut(s, `</section>`)
+	_, s, _ := strings.Cut(squash(stageOf(t, text)), `<article class="wv-page" data-kind="overview">`)
+	s, _, _ = strings.Cut(s, `<section class="wv-block"`)
 	if s == "" {
 		t.Fatal("the page has no answer line")
 	}
 	return s
 }
 
-// shortID is a bead id as the needs rows show it.
-func shortID(id string) string { return web.Waiting{Bead: id}.ShortID() }
+// shortID is a bead id as the depot's rows show it.
+func shortID(id string) string { return web.DepotWait{Bead: id}.ShortID() }
 
 // sameReason reports whether two reasons say the same in the JSON: kind,
 // text and note. The struct itself is not comparable, since an ask carries
@@ -35,8 +38,9 @@ func sameReason(a, b web.Reason) bool {
 	return a.Kind == b.Kind && a.Text == b.Text && a.Note == b.Note
 }
 
-// The top of / answers whether anything needs the person: nothing, one need,
-// or needs with the faults counted apart. One waiting bead counts once.
+// The top of / answers whether anything waits for the person, and its subline
+// splits the count into what they decide and what is held. One waiting bead
+// counts once, and a bead with a fault and an ask stands as a fault.
 func TestHomeAnswer(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -63,22 +67,28 @@ func TestHomeAnswer(t *testing.T) {
 		must(t, err)
 		return b
 	}
+	// answer and subline are the stage's one large line and the sentence
+	// under it, as the page says them.
+	answer := func(t *testing.T, f *fixture) (head, sub string) {
+		t.Helper()
+		s := answerSection(t, f.get("/").body)
+		m := regexp.MustCompile(`<h1 class="([^"]*)">([^<]*)</h1><p class="wv-answer__sub"[^>]*>(.*?)</p>`).FindStringSubmatch(s)
+		if m == nil {
+			t.Fatalf("the stage has no answer and subline: %s", s)
+		}
+		return m[1] + "|" + m[2], tagsRe.ReplaceAllString(m[3], "")
+	}
 
 	t.Run("nothing waits", func(t *testing.T) {
 		f := setup(t)
 		_, err := f.st.CreateBead(ctx, store.NewBead{Title: "at work", Stage: "new", Depot: "home"}, "me")
 		must(t, err)
-		s := answerSection(t, f.get("/").body)
-		if !strings.HasPrefix(s, "Nothing needs you.</p>") {
-			t.Errorf("the answer is %q, want nothing-needs-you", s)
+		head, sub := answer(t, f)
+		if head != "wv-answer wv-answer--clear|Nothing needs you." || !strings.HasPrefix(sub, "All clear. The rest of depot runs: ") {
+			t.Errorf("the answer is %q under %q, want nothing-needs-you, clear, with the yard's numbers", head, sub)
 		}
-		if !strings.Contains(s, `<p class="faint">All clear.</p>`) {
-			t.Error("with nothing waiting the page does not say the yard is clear")
-		}
-		for _, not := range []string{"<li>", "All waiting"} {
-			if strings.Contains(s, not) {
-				t.Errorf("the answer names %q, and nothing waits", not)
-			}
+		if s := answerSection(t, f.get("/").body); strings.Contains(s, "wv-ask") || strings.Contains(s, "to decide") {
+			t.Errorf("with nothing waiting the stage still shows a card or a count:\n%s", s)
 		}
 		if h := homeJSON(t, f, "/"); len(h.Attention) != 0 {
 			t.Errorf("attention %+v, want none", h.Attention)
@@ -87,51 +97,38 @@ func TestHomeAnswer(t *testing.T) {
 
 	t.Run("one parked", func(t *testing.T) {
 		f := setup(t)
-		b := parked(t, f, "which colour")
-		s := answerSection(t, f.get("/").body)
-		if !strings.HasPrefix(s, "1 needs you.</p>") {
-			t.Errorf("the answer is %q, want one need and no fault", s)
-		}
-		want := `<a href="/beads/` + b.ID + `"><span class="stage">decide</span><span class="separator" aria-hidden="true">·</span>` +
-			`<span class="entry-title">which colour</span><span class="separator" aria-hidden="true">·</span>` +
-			`<span class="label">` + shortID(b.ID) + `</span><span class="faint">`
-		if !strings.Contains(s, want) {
-			t.Errorf("the row lacks %q", want)
-		}
-		for _, not := range []string{"dot", "held", "All waiting"} {
-			if strings.Contains(s, not) {
-				t.Errorf("the parked row has %q", not)
-			}
+		parked(t, f, "which colour")
+		head, sub := answer(t, f)
+		if head != "wv-answer|1 waits for you" || !strings.HasPrefix(sub, "1 to decide. The rest of depot runs: ") {
+			t.Errorf("the answer is %q under %q, want one to decide", head, sub)
 		}
 	})
 
 	t.Run("one fault", func(t *testing.T) {
 		f := setup(t)
-		b := held(t, f, "a door")
-		s := answerSection(t, f.get("/").body)
-		if !strings.HasPrefix(s, "1 needs you. 1 fault.</p>") {
-			t.Errorf("the answer is %q, want one need and one fault", s)
-		}
-		want := `<a href="/beads/` + b.ID + `"><span class="dot held"></span><span class="held">held</span><span class="separator" aria-hidden="true">·</span>` +
-			`<span class="entry-title">a door</span><span class="separator" aria-hidden="true">·</span>` +
-			`<span class="label">` + shortID(b.ID) + `</span><span class="faint">`
-		if !strings.Contains(s, want) {
-			t.Errorf("the row lacks %q", want)
+		held(t, f, "a door")
+		head, sub := answer(t, f)
+		if head != "wv-answer|1 waits for you" || !strings.HasPrefix(sub, "1 held. The rest of depot runs: ") {
+			t.Errorf("the answer is %q under %q, want one held", head, sub)
 		}
 	})
 
 	t.Run("two wait, one fault", func(t *testing.T) {
 		f := setup(t)
-		parked(t, f, "which colour")
+		pb := parked(t, f, "which colour")
 		hb := held(t, f, "a door")
-		pb := f.byTitle()["which colour"]
-		s := answerSection(t, f.get("/").body)
-		if !strings.HasPrefix(s, "2 need you. 1 fault.</p>") {
-			t.Errorf("the answer is %q, want two needs and one fault", s)
+		head, sub := answer(t, f)
+		if head != "wv-answer|2 wait for you" || !strings.HasPrefix(sub, "1 to decide, 1 held, both in the list. The rest of depot runs: ") {
+			t.Errorf("the answer is %q under %q, want one to decide and one held", head, sub)
 		}
-		// Faults first: the held row stands before the parked one.
-		if !strings.Contains(s, hb.ID) || strings.Index(s, hb.ID) > strings.Index(s, pb.ID) {
-			t.Error("the held row does not stand before the parked one")
+		// Faults and the rest stand in the list, newest first: both rows.
+		waits := section2(t, listSections(t, f.get("/").body), "Waits for you")
+		var got []string
+		for _, r := range waits.rows {
+			got = append(got, r.href)
+		}
+		if len(got) != 2 || !slices.Contains(got, "/beads/"+hb.ID) || !slices.Contains(got, "/beads/"+pb.ID) {
+			t.Errorf("Waits for you holds %v, want the held and the parked bead", got)
 		}
 	})
 
@@ -140,31 +137,27 @@ func TestHomeAnswer(t *testing.T) {
 		held(t, f, "a door")
 		held(t, f, "a window")
 		parked(t, f, "which colour")
-		s := answerSection(t, f.get("/").body)
-		if !strings.HasPrefix(s, "3 need you. 2 faults.</p>") {
-			t.Errorf("the answer is %q, want three needs and two faults", s)
+		head, sub := answer(t, f)
+		if head != "wv-answer|3 wait for you" || !strings.HasPrefix(sub, "1 to decide, 2 held, both in the list. ") {
+			t.Errorf("the answer is %q under %q, want one to decide and two held", head, sub)
 		}
 	})
 }
 
-// The answer line in every count, without a yard.
+// The answer line in every count, without a yard: how many wait, in the words
+// the rail's badge says them in.
 func TestAnswer(t *testing.T) {
 	t.Parallel()
-	fault := web.Waiting{Bead: "a", Why: []web.Reason{{Kind: "held", Text: "held by me"}}}
-	parked := web.Waiting{Bead: "b", Stage: "decide", Why: []web.Reason{{Kind: "manual", Text: "waits"}}}
-	stranded := web.Waiting{Bead: "c", Why: []web.Reason{{Kind: "stranded", Text: "stranded"}}}
+	wait := web.Waiting{Bead: "a", Why: []web.Reason{{Kind: "held", Text: "held by me"}}}
 	for _, c := range []struct {
 		name string
 		attn []web.Waiting
 		want string
 	}{
 		{"none", nil, "Nothing needs you."},
-		{"one parked", []web.Waiting{parked}, "1 needs you."},
-		{"one stranded", []web.Waiting{stranded}, "1 needs you."},
-		{"one fault", []web.Waiting{fault}, "1 needs you. 1 fault."},
-		{"two, one fault", []web.Waiting{fault, parked}, "2 need you. 1 fault."},
-		{"three, two faults", []web.Waiting{fault, fault, parked}, "3 need you. 2 faults."},
-		{"two parked", []web.Waiting{parked, parked}, "2 need you."},
+		{"one", []web.Waiting{wait}, "1 waits for you"},
+		{"two", []web.Waiting{wait, wait}, "2 wait for you"},
+		{"eleven", slices.Repeat([]web.Waiting{wait}, 11), "11 wait for you"},
 	} {
 		if got := (web.Home{Attention: c.attn}).Answer(); got != c.want {
 			t.Errorf("%s: answer %q, want %q", c.name, got, c.want)
@@ -172,82 +165,84 @@ func TestAnswer(t *testing.T) {
 	}
 }
 
-// The page names five waiting beads; past five the rest are one tap away on
-// /line. The JSON names them all either way.
-func TestHomeNeedsOverflow(t *testing.T) {
+// The subline's parts, each left out at zero: the first sentence splits what
+// waits into what is decided and what is held and says both stand in the list;
+// the second gives the rest of the yard, its numbers linked where a page lists
+// them, and is left out with every number of it.
+func TestSubline(t *testing.T) {
+	t.Parallel()
+	ask := web.Waiting{Bead: "a", Why: []web.Reason{{Kind: "ask", Text: "which?"}}}
+	parked := web.Waiting{Bead: "b", Why: []web.Reason{{Kind: "manual", Text: "waits"}}}
+	fault := web.Waiting{Bead: "c", Why: []web.Reason{{Kind: "held", Text: "held by me"}}}
+	faultAsked := web.Waiting{Bead: "d", Why: []web.Reason{{Kind: "held", Text: "held by me"}, {Kind: "ask", Text: "which?"}}}
+	depots := []web.HomeDepot{{Open: 30, Working: 3, Transit: 12}, {Open: 4, Working: 1, Transit: 8}}
+	for _, c := range []struct {
+		name  string
+		home  web.Home
+		first string
+		rest  []web.SublinePart
+	}{
+		{"nothing at all", web.Home{Yard: "kestrel"}, "All clear.", nil},
+		{"only to decide", web.Home{Yard: "kestrel", Attention: []web.Waiting{ask, parked}}, "2 to decide.", nil},
+		{"only held", web.Home{Yard: "kestrel", Attention: []web.Waiting{fault}}, "1 held.", nil},
+		{"both", web.Home{Yard: "kestrel", Attention: []web.Waiting{ask, fault, fault}}, "1 to decide, 2 held, both in the list.", nil},
+		{"a fault that is asked stands once, as a fault", web.Home{Yard: "kestrel", Attention: []web.Waiting{faultAsked}}, "1 held.", nil},
+		{"the yard's numbers", web.Home{Yard: "kestrel", Depots: depots, ClosedCount: 5, Late: 1}, "All clear.", []web.SublinePart{
+			{Text: "4 moving", Href: "/sessions"}, {Text: "34 open", Href: "/flows"}, {Text: "5 closed today", Href: "/beads?all=1"},
+			{Text: "20 arriving"}, {Text: "1 late", Href: "/line"}}},
+		{"late only when something is", web.Home{Yard: "kestrel", Depots: depots}, "All clear.", []web.SublinePart{
+			{Text: "4 moving", Href: "/sessions"}, {Text: "34 open", Href: "/flows"}, {Text: "20 arriving"}}},
+		{"nothing moving, nothing arriving", web.Home{Yard: "kestrel", Depots: []web.HomeDepot{{Open: 2}}, ClosedCount: 1}, "All clear.", []web.SublinePart{
+			{Text: "2 open", Href: "/flows"}, {Text: "1 closed today", Href: "/beads?all=1"}}},
+	} {
+		got := c.home.Subline()
+		if got.First != c.first || !reflect.DeepEqual(got.Rest, c.rest) {
+			t.Errorf("%s: subline %+v, want %q and %+v", c.name, got, c.first, c.rest)
+		}
+		if wantIntro := map[bool]string{true: "The rest of kestrel runs:"}[len(c.rest) > 0]; got.Intro != wantIntro {
+			t.Errorf("%s: intro %q, want %q", c.name, got.Intro, wantIntro)
+		}
+	}
+}
+
+// The list holds every wait, so the page has no cut to five and no row that
+// carries the rest elsewhere: seven waits are seven rows of the list, said once
+// in the answer, and the stage lists none of them. The JSON names them all.
+func TestHomeNamesEveryWait(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	yard := func(t *testing.T, n int) *fixture {
-		t.Helper()
-		f := newFixture(t)
-		must(t, f.st.PutDepot(ctx, store.Depot{Name: "home", Base: "origin/main"}, "me"))
-		var beads []*store.Bead
-		for range n {
-			b, err := f.st.CreateBead(ctx, store.NewBead{Title: "wait", Stage: "new", Depot: "home"}, "me")
-			must(t, err)
-			beads = append(beads, b)
-		}
-		// Held in order, so the last held changed last and stands first.
-		for _, b := range beads {
-			_, err := f.st.SetHold(ctx, b.ID, true, store.Expect{}, "me")
-			must(t, err)
-		}
-		return f
+	f := newFixture(t)
+	must(t, f.st.PutDepot(ctx, store.Depot{Name: "home", Base: "origin/main"}, "me"))
+	var beads []*store.Bead
+	for range 7 {
+		b, err := f.st.CreateBead(ctx, store.NewBead{Title: "wait", Stage: "new", Depot: "home"}, "me")
+		must(t, err)
+		beads = append(beads, b)
 	}
-
-	t.Run("five fit", func(t *testing.T) {
-		f := yard(t, 5)
-		s := answerSection(t, f.get("/").body)
-		if !strings.HasPrefix(s, "5 need you. 5 faults.</p>") {
-			t.Errorf("the answer is %q", s)
+	for _, b := range beads {
+		_, err := f.st.SetHold(ctx, b.ID, true, store.Expect{}, "me")
+		must(t, err)
+	}
+	body := f.get("/").body
+	s := answerSection(t, body)
+	if !strings.Contains(s, `<h1 class="wv-answer">7 wait for you</h1>`) || !strings.Contains(s, "7 held.") {
+		t.Errorf("the answer is not seven held:\n%s", s)
+	}
+	for _, gone := range []string{"All waiting", `<ul class="lines needs">`, `<li><a href="/beads/`} {
+		if strings.Contains(squash(stageOf(t, body)), gone) {
+			t.Errorf("the stage keeps %q, which the list's rows replaced", gone)
 		}
-		if n := strings.Count(s, `<li><a href="/beads/`); n != 5 {
-			t.Errorf("the page names %d waits, want five", n)
-		}
-		if strings.Contains(s, "All waiting") {
-			t.Error("five waits fit, and the page still overflows")
-		}
-	})
-
-	t.Run("past five", func(t *testing.T) {
-		f := yard(t, 7)
-		s := answerSection(t, f.get("/").body)
-		if !strings.HasPrefix(s, "7 need you. 7 faults.</p>") {
-			t.Errorf("the answer is %q", s)
-		}
-		// The five named are the five that changed last, newest first;
-		// the two first held are behind the overflow row.
-		h := homeJSON(t, f, "/")
-		if len(h.Attention) != 7 {
-			t.Fatalf("attention names %d waits, want all seven", len(h.Attention))
-		}
-		var ids []string
-		for _, w := range h.Attention {
-			ids = append(ids, w.Bead)
-		}
-		rows := strings.Split(s, `<li><a href="/beads/`)
-		if len(rows) != 6 {
-			t.Fatalf("the answer holds %d bead rows, want five", len(rows)-1)
-		}
-		for i := range 5 {
-			if id, _, _ := strings.Cut(rows[i+1], `"`); id != ids[i] {
-				t.Errorf("row %d names %s, want %s, the line's order", i, id, ids[i])
-			}
-		}
-		for _, id := range ids[5:] {
-			if strings.Contains(s, id) {
-				t.Errorf("the page names %s, past the five", id)
-			}
-		}
-		if want := `<li><a class="label" href="/line">All waiting 7 ›</a></li>`; !strings.Contains(s, want) {
-			t.Errorf("the page lacks %q", want)
-		}
-		// The JSON is unchanged: attention names every wait, not the five
-		// the page shows.
-		if l := lineJSON(t, f); len(l.Waits) != 7 {
-			t.Errorf("/line waits %d, want all seven", len(l.Waits))
-		}
-	})
+	}
+	waits := section2(t, listSections(t, body), "Waits for you")
+	if waits.count != "7" || len(waits.rows) != 7 {
+		t.Errorf("Waits for you: %q with %d rows, want all seven", waits.count, len(waits.rows))
+	}
+	if h := homeJSON(t, f, "/"); len(h.Attention) != 7 {
+		t.Errorf("attention names %d waits, want all seven", len(h.Attention))
+	}
+	if l := lineJSON(t, f); len(l.Waits) != 7 {
+		t.Errorf("/line waits %d, want all seven", len(l.Waits))
+	}
 }
 
 // A held row whose bead's events hold a gave_up for that hold names the
@@ -286,17 +281,20 @@ func TestHomeNeedsGaveUp(t *testing.T) {
 		}
 	}
 
-	text := squash(f.get("/line").body)
-	s := answerSection(t, f.get("/").body)
-	if !strings.HasPrefix(s, "1 needs you. 1 fault.</p>") {
-		t.Errorf("the answer is %q: the bead counts once, as a fault", s)
-	}
-	if want := `<span class="dot held"></span><span class="held">gave up</span><span class="separator" aria-hidden="true">·</span>` +
-		`<span class="entry-title">the github pack</span>`; !strings.Contains(s, want) {
-		t.Errorf("the row lacks %q", want)
-	}
-	if want := `<p class="why held">gave up after 3 failures in review</p>`; !strings.Contains(text, want) {
-		t.Errorf("the column lacks %q", want)
+	// The list's row says it in red, on / and on /line, and the bead counts
+	// once, as a fault.
+	for _, path := range []string{"/", "/line"} {
+		body := f.get(path).body
+		if sub := answerSection(t, body); !strings.Contains(sub, "1 waits for you") || !strings.Contains(sub, "1 held.") {
+			t.Errorf("%s: the answer is %q: the bead counts once, as a fault", path, sub)
+		}
+		row := section2(t, listSections(t, body), "Waits for you").rows
+		if len(row) != 1 || len(row[0].lines) == 0 || row[0].lines[0] != "gave up after 3 failures in review" {
+			t.Errorf("%s: the wait's row is %+v, want the give-up as its first line", path, row)
+		}
+		if !strings.Contains(listOf(t, body), `<span class="wv-fault">gave up after 3 failures in review</span>`) {
+			t.Errorf("%s: the give-up is not in red", path)
+		}
 	}
 
 	// A hold lifted and given again, with no new gave_up, is plain again.
@@ -308,8 +306,8 @@ func TestHomeNeedsGaveUp(t *testing.T) {
 		!sameReason(got[0].Why[0], web.Reason{Kind: "held", Text: "held by me"}) {
 		t.Errorf("held again %+v, want a plain hold", got)
 	}
-	if s := answerSection(t, f.get("/").body); !strings.Contains(s, `<span class="held">held</span>`) {
-		t.Error("the row no longer says held")
+	if row := section2(t, listSections(t, f.get("/").body), "Waits for you").rows; len(row) != 1 || row[0].lines[0] != "held by me" {
+		t.Errorf("the row no longer says held by me: %+v", row)
 	}
 }
 
@@ -349,50 +347,40 @@ func TestHomeNeedsGaveUpText(t *testing.T) {
 	}
 }
 
-// A row's first words: what happened for a bead something stops, the stage
-// for one that only waits its turn.
-func TestWaitingLead(t *testing.T) {
+// Whether a wait is a fault: something stops the bead (a hold, a prompt nobody
+// answers, a stage its flow lacks), and not a stage that is a person's by
+// design or a question put to them.
+func TestWaitingFault(t *testing.T) {
 	t.Parallel()
 	held := web.Reason{Kind: "held", Text: "held by me"}
-	gaveUp := web.Reason{Kind: "held", Text: "gave up after 3 failures in new", GaveUp: true}
 	blocked := web.Reason{Kind: "blocked", Text: "its session waits on a prompt: x"}
 	stranded := web.Reason{Kind: "stranded", Text: "stranded in limbo"}
 	manual := web.Reason{Kind: "manual", Text: "waits for decisions in decide"}
+	ask := web.Reason{Kind: "ask", Text: "which?"}
 	for _, c := range []struct {
 		name  string
 		why   []web.Reason
-		lead  string
 		fault bool
 	}{
-		{"held", []web.Reason{held}, "held", true},
-		{"gave up", []web.Reason{gaveUp}, "gave up", true},
-		{"blocked", []web.Reason{blocked}, "blocked", true},
-		{"stranded", []web.Reason{stranded}, "stranded", false},
-		{"manual", []web.Reason{manual}, "decide", false},
-		{"held and manual", []web.Reason{held, manual}, "held", true},
-		{"manual and held", []web.Reason{manual, held}, "held", true},
-		{"stranded and manual", []web.Reason{stranded, manual}, "stranded", false},
-		{"none", nil, "decide", false},
+		{"held", []web.Reason{held}, true},
+		{"blocked", []web.Reason{blocked}, true},
+		{"stranded", []web.Reason{stranded}, true},
+		{"manual", []web.Reason{manual}, false},
+		{"ask", []web.Reason{ask}, false},
+		{"held and manual", []web.Reason{held, manual}, true},
+		{"manual and held", []web.Reason{manual, held}, true},
+		{"held and asked", []web.Reason{held, ask}, true},
+		{"none", nil, false},
 	} {
-		w := web.Waiting{Bead: "home-x", Stage: "decide", Why: c.why}
-		if got := w.Lead(); got != c.lead {
-			t.Errorf("%s: lead %q, want %q", c.name, got, c.lead)
-		}
-		if got := w.Fault(); got != c.fault {
+		if got := (web.Waiting{Bead: "home-x", Stage: "decide", Why: c.why}).Fault(); got != c.fault {
 			t.Errorf("%s: fault %v, want %v", c.name, got, c.fault)
 		}
 	}
-	if got := (web.Waiting{Bead: "home-x1y2"}).ShortID(); got != "x1y2" {
-		t.Errorf("short id %q, want x1y2", got)
-	}
-	if got := (web.Waiting{Bead: "nobreak"}).ShortID(); got != "nobreak" {
-		t.Errorf("short id %q, want the whole id", got)
-	}
 }
 
-// A weighty mapping card's home row shows the weight first and the decline
-// path with the terminal command instead of the pick buttons, as its bead's
-// page does. The options still read as a list, and the words stay with
+// A weighty mapping card, on the overview, shows the weight first and the
+// decline path with the terminal command instead of the pick buttons, as its
+// bead's page does. The options still read as rows, and the words stay with
 // Later and Decline, riding them as the reason.
 func TestHomeNeedsWeightyMapping(t *testing.T) {
 	t.Parallel()
@@ -401,21 +389,21 @@ func TestHomeNeedsWeightyMapping(t *testing.T) {
 	ask := strconv.FormatUint(seq, 10)
 	s := answerSection(t, f.get("/").body)
 	for _, want := range []string{
-		`<p class="weighty">WEIGHTY · as-user: lets calls or words count as a person&#39;s: a pick says which user U777 in talk is, and a delivery from them is then heard as that user&#39;s</p>`,
+		`<p class="wv-ask__weight">WEIGHTY · as-user: lets calls or words count as a person&#39;s: a pick says which user U777 in talk is, and a delivery from them is then heard as that user&#39;s</p>`,
 		`This card is weighty and this window has no gate. Approve it in footplate, or in a terminal on the yard's machine:`,
 		`Approve it with <code>yardr bead answer ` + b.ID + ` ` + ask + ` &lt;n&gt;</code>`,
-		`<li><span>1. ada</span>`,
-		`<li><span>2. mckean</span>`,
+		`<span class="wv-opt__n">1</span><span class="wv-opt__b"><span class="wv-opt__t">ada</span>`,
+		`<span class="wv-opt__n">2</span><span class="wv-opt__b"><span class="wv-opt__t">mckean</span>`,
 		`hx-preserve="true" name="words"`,
-		`<button type="submit" name="action" value="later">Later</button>`,
-		`<button type="submit" name="action" value="decline" title="Say no to all options. The asker finds another way.">Decline</button>`,
+		`<button class="wv-btn" type="submit" name="action" value="later">Later</button>`,
+		`<button class="wv-btn" type="submit" name="action" value="decline" title="Say no to all options. The asker finds another way.">Decline</button>`,
 	} {
 		if !strings.Contains(s, want) {
-			t.Errorf("the row lacks %q:\n%s", want, s)
+			t.Errorf("the card lacks %q:\n%s", want, s)
 		}
 	}
 	if strings.Contains(s, `name="option"`) {
-		t.Errorf("the weighty row offers its picks:\n%s", s)
+		t.Errorf("the weighty card offers its picks:\n%s", s)
 	}
 	// A writing pick posted straight at the handler is still the yard's
 	// to refuse, and the ask stays open; decline with words still posts.
@@ -435,28 +423,28 @@ func TestHomeNeedsWeightyMapping(t *testing.T) {
 	}
 }
 
-// A weighty secret card's home row shows the weight with what the ask is
-// for, the decline path with the terminal command as its bead's page does,
-// and Later and Decline: a secret row offers no giving.
+// A weighty secret card, on the overview, shows the weight with what the ask
+// is for, the decline path with the terminal command as its bead's page does,
+// and Later and Decline: a secret card offers no giving.
 func TestHomeNeedsWeightySecret(t *testing.T) {
 	t.Parallel()
 	f, b, seq := secretActYard(t)
 	s := answerSection(t, f.get("/").body)
 	for _, want := range []string{
-		`<p class="weighty">WEIGHTY · credential: gives a credential or an address to the yard: CRM_TOKEN, for the source crm (https://crm.example.com)</p>`,
+		`<p class="wv-ask__weight">WEIGHTY · credential: gives a credential or an address to the yard: CRM_TOKEN, for the source crm (https://crm.example.com)</p>`,
 		`a secret: CRM_TOKEN, for the source crm (https://crm.example.com)`,
 		`This card is weighty and this window has no gate. Approve it in footplate, or in a terminal on the yard's machine:`,
 		`Give it with <code>yardr bead answer ` + b.ID + ` ` + strconv.FormatUint(seq, 10) + ` --secret</code>`,
-		`<button type="submit" name="action" value="later">Later</button>`,
-		`<button type="submit" name="action" value="decline" title="Say no to all options. The asker finds another way.">Decline</button>`,
+		`<button class="wv-btn" type="submit" name="action" value="later">Later</button>`,
+		`<button class="wv-btn" type="submit" name="action" value="decline" title="Say no to all options. The asker finds another way.">Decline</button>`,
 	} {
 		if !strings.Contains(s, want) {
-			t.Errorf("the row lacks %q:\n%s", want, s)
+			t.Errorf("the card lacks %q:\n%s", want, s)
 		}
 	}
 	for _, foreign := range []string{`name="option"`, `type="password"`, `value="give"`} {
 		if strings.Contains(s, foreign) {
-			t.Errorf("the secret row shows %q:\n%s", foreign, s)
+			t.Errorf("the secret card shows %q:\n%s", foreign, s)
 		}
 	}
 }

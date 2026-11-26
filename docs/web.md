@@ -418,7 +418,7 @@ the talk page ([Talk](#talk)) then holds the user's conversation with a crew
 member or another user,
 live, with the form that sends it mail as them through the socket's `Mail`
 ([api.md](api.md#mail)), as that user. An ask to the user answers with
-buttons, on the needs rows and on its bead's page, through the socket's
+buttons, on the overview's card and on its bead's page, through the socket's
 `AnswerAsk`, `DeferAsk` and `DeclineAsk`. On its bead's page a weighty
 card shows its weight first, one line a class, and since the page has no
 gate to put before it, the card offers no control the yard would refuse
@@ -429,13 +429,12 @@ names the terminal command instead, where the card is given or picked,
 with Later and Decline staying as ever. In a hosted window the bead's
 page is the exception for a secret ask: it gives there under a fresh
 sign-in, and for a mapping ask: an operator picks there under a fresh
-sign-in ([One bead](#one-bead)). The needs rows and the line's
-waits follow the page: a weighty card shows its weight first there too,
+sign-in ([One bead](#one-bead)). The overview's card follows the page: a weighty card shows its weight first there too,
 a mapping card offers its picks to an operator in a hosted window as
 its bead's page does and names the pick's terminal command instead
 everywhere else, and the words stay with Later and Decline. A strong card — trust
-or code in its weight — is the exception on a hosted yard: the needs rows
-and the line's waits approve it as its bead's page does ([One
+or code in its weight — is the exception on a hosted yard: the overview's
+card approves it as its bead's page does ([One
 bead](#one-bead)). A giving or a writing pick posted straight at the
 handler is still the yard's to refuse, in its own words, with nothing
 written. A bead in a stage that waits for
@@ -546,7 +545,7 @@ cookie; a POST with one is a write without a cookie.
 
 Reads are not guarded, as before. A request without the cookie reads as on a
 view with no `--as`: it acts as no one, so it is drawn no form
-(`form-action 'none'`), the needs rows list nothing addressed to the user, a
+(`form-action 'none'`), the overview's card stands without its answer row, a
 mail's file is not served to it, and the talk page says that the view acts,
 and for which browsers it does ([Talk](#talk)).
 
@@ -746,13 +745,13 @@ origin; the test allows those and only those ([One bead](#one-bead)).
 
 | path | page | JSON |
 |---|---|---|
-| `/` | Home: the overview — the answer line with one row per wait, then the Running, Yard and Closed rows — above the feed of what happened, newest first and live | `Home` |
+| `/` | Home, the overview ([The overview](#the-overview)): the answer (`3 wait for you`) with its subline of numbers, the one ask that stands whole, and the feed of what happened by the hour, newest first and live | `Home` |
 | `/?before=<seq>` | an older page of the feed: the 50 entries under that seq, without the overview | `Home` |
 | `/talk` | on a view that acts, for a browser that holds its cookie: the user's conversation with a crew member or another user, live, and the form that sends it mail as them; without a user, that the view does not act, or that this browser has not opened its token URL ([Talk](#talk)) | `Talk` |
 | `/talk?with=<member>` | the conversation with that member or user; without `?with=` the yardmaster's, else the first member's | `Talk` |
 | `/talk?with=<member>&before=<seq>` | an older page of the conversation: the 50 letters under that seq, a snapshot | `Talk` |
 | `/events` | the yard's events as they happen, as server-sent events ([The stream](#the-stream)) | `?format=json` |
-| `/line` | what waits for a person, and the line in numbers, live; Decide's list with the beads running late under what runs ([The line](#the-line)). `/line?home=1`, which was the line's home mode, answers as `/line` | `Line` |
+| `/line` | the overview again, live, as its page reads itself at every event; Decide's list adds the beads running late under what runs ([The line](#the-line)). `/line?home=1`, which was the line's home mode, answers as `/line` | `Line` |
 | `/flows` | per depot, the flows that govern it: each stage a section with its group and the open beads in it as cards, which move as the beads do, and a stage with none folded to its head line ([Flows](#flows)) | `Flows` |
 | `/flows?panel=1` | answers as `/flows`: the yard panel is the Lines list beside the stage now ([The window](#the-window)) | `Flows` |
 | `/beads` | the open beads, the newest change first ([Beads](#beads)) | `Beads` |
@@ -791,7 +790,8 @@ previews, the talk page's newest letters and the depot, group, route,
 peer, edge and quota lists are live, and `/flows` moves its cards
 ([Live pages](#live-pages)). The overview above the feed is a snapshot:
 reload the page to see it change; the rail and the list beside it follow
-the yard on a live page.
+the yard on a live page, and `/line`, which reads itself again whole, is
+live in its stage too.
 
 Home as JSON:
 
@@ -853,57 +853,38 @@ Home as JSON:
 - `error`, on a depot, is why its flows could not be read (a checkout git
   cannot read). The depot's beads are then all in `elsewhere`, and the other
   depots still show.
-- On the page the depots are one row to the flows: `Yard N · working M ·
-  held H` to `/flows`, shown only when N is not zero, with
-  `working` and `held` shown only when they are not zero. N, M and H sum
-  the depots' `open`, `working` and `held` above. The page prints no zero.
+- On the page the depots' counts are the subline's `open` (to `/flows`),
+  `moving` (to `/sessions`) and `arriving` ([The overview](#the-overview)):
+  N, M and A sum the depots' `open`, `working` and the beads of each past
+  their flow's first stage. The page prints no zero.
 
 - `attention` are the open beads that wait for a person: everything
   something stops (held, blocked on a prompt, stranded), the beads with
   an open ask to the operator — to the view's user, on a view that
   acts; a crew member's journal is one, where the yard asks how to log
   its harness in — and the parked beads past their flow's first whose
-  every manual wait the reader has not answered, in the line's order,
-  faults first. A bead parked where it starts (a backlog) is on `/line`
+  every manual wait the reader has not answered, in the line's order. A
+  bead parked where it starts (a backlog) is on `/line`
   only, unless an ask names the reader in particular, as is a parked
   bead whose every manual wait the reader answered (answered, declined
   or put aside an ask to them; one its asker took back is no answer):
   their answer is in, and `/line` says whose move it is now.
-- On the page they stand under the answer line: `Nothing needs you.`
-  with `All clear.` under it when none waits, else `N need you.` with
-  the faults counted apart (`2 need you. 1 fault.`). Each wait is one
-  row, a link to its bead: plain words first (`held`, `gave up`,
-  `blocked`, `stranded`, or the stage for a parked bead), the title,
-  the bead's short id small at the row's end, and how long it has
-  waited; a fault carries a red dot. An asked bead stands once: its
-  fault first when it has one, then the question where the title stands,
-  the full bead id and age, and optionally the bead's first `topic:` label
-  small. A recommendation appears once in the labelled
-  detail below the row, a weighty card's weight first. On a view that acts
-  the oldest ask answers under the row, with its options as buttons
-  ([Acting as a user](#acting-as-a-user)); a weighty mapping card offers
-  its picks there to an operator in a hosted window, as on its bead's
-  page, and names the pick's terminal command instead everywhere else;
-  otherwise the row only links to the bead. On a phone an asked row gives the
-  question the row's first line whole, ending in an ellipsis, and the
-  bead id, optional topic and age stand under it, so the question
-  never gets less room than the metadata. The reasons, the titles and
-  the questions render in the proportional face; ids and ages stay
-  monospace. Past five the rest stand behind `All waiting N`, to
-  `/line`. The JSON names every wait either way.
+- On the page they are the list's `Waits for you`, every one of them, and
+  the stage names none: the answer counts them and the card stands the
+  first asked one ([The overview](#the-overview)). The JSON names every
+  wait.
 - `running` are the sessions running now, the oldest first: the rows of
-  `/sessions` without the claims of manual groups, which run nothing.
-- On the page they are one row: `Running N · oldest 3h` to `/sessions`,
-  shown only when N is not zero; the age is how long the oldest has run.
+  `/sessions` without the claims of manual groups, which run nothing. The
+  page names none of them: the list's Running section does.
 - `closed` are the beads that closed today, the newest first, at most ten.
-- On the page they are one row: `Closed today N` to `/beads?all=1`, shown
-  only when N is not zero. The titles stay in the JSON.
+  The page says how many closed today in all, with `closed today` in the
+  subline, to `/beads?all=1`. The titles stay in the JSON.
 
 - `events` is the feed, newest first: at most 50 entries, one per event
   ([The feed](#the-feed) says what each field holds).
-- On the page they are ten one-line rows at most, the kept events, each
-  title in the proportional face, with `All activity` to `/?all=1`
-  behind them. The JSON names every entry either way.
+- On the page they are the ten kept events at most, by the hour, with
+  `All activity` to `/?all=1` in the feed's head. The JSON names every
+  entry either way.
 - `head` is the yard's newest seq when the page was read. The first page
   holds everything up to it, so `/events?after=<head>` continues the page
   with no gap and no duplicate.
@@ -1184,13 +1165,83 @@ Errors keep the form: a 404, a 501 or a 500 is the error page inside the
 shell for a browser and `{"error": "..."}` for a JSON client (an unbuilt
 page: `{"page": ..., "built": false}`).
 
+## The overview
+
+`/` and `/line` are one stage, the first of the window's six kinds (`data-kind="overview"`):
+the answer, the one ask that stands whole, and the feed. A page of a stage kind draws its
+own head, so the shell's heading is not above it (`Page.Kind`); a page of no kind yet keeps
+the shell's. The data is `Home` on `/` and `Line` on `/line` as JSON; the stage is drawn
+from the same overview on both (`templates/overview.html`).
+
+- **The answer** is the page's one large line, in the words the rail's badge says them:
+  `3 wait for you`, `1 waits for you`, or `Nothing needs you.` (with no dot before it). It
+  counts what the list's `Waits for you` holds.
+- **The subline** is two sentences of numbers under it, each part left out at zero. The
+  first splits the answer: `N to decide` is every wait that is no fault (an ask, or a
+  parked wait past its flow's first stage) and `M held` the faults (held, gave up, blocked,
+  stranded), with `both in the list` where both stand; a wait with a fault and an ask
+  stands once, as a fault. Where nothing waits it says `All clear.` The second begins `The
+  rest of <yard> runs:` and gives `N moving` (open beads a session that is no manual
+  group's has claimed, to `/sessions`), `N open` (to `/flows`), `N closed today` (every
+  bead closed today, to `/beads?all=1`), `N arriving` (open beads of a depot past their
+  flow's first stage, a bead no flow governs among them; plain text, since no page lists
+  them) and `N late` (to `/line`, only when something is late); a sentence with none of
+  its parts is left out. Its links leave the mode, so they swap the whole list.
+- **The card** is the oldest open ask of the first wait that carries one, in the list's
+  order, whole ([The ask card](#the-ask-card)): the answer row where the view acts,
+  read-only where it does not. Every other asked wait is a row of the list, a tap from its
+  bead's page. A yard with no asked wait has no card.
+- **What happened** is the feed by the hour ([The feed](#the-feed)): the ten kept events,
+  `All activity` to `/?all=1`, and an older page loading as it scrolls (`?before=`,
+  `Older`), with its empties (`Nothing for you.`, `Nothing has happened yet.`, `Nothing
+  older.`). An older page is the feed alone, without the answer and the card.
+
+`/` is a snapshot except for its feed and its list: its feed takes each kept event's entry
+on its top (`sse-swap`, `afterbegin`), and its leaf says `hx-swap="none"`, which refreshes
+the rail and the list alone ([Live pages](#live-pages)). `/line` reads its own address
+again at every event and puts the stage in place, the card's words kept (`hx-preserve` on
+its words field, [The ask card](#the-ask-card)); its list adds `Late`, which home's leaves
+out, and both lists' Running rows say how late a running bead is.
+
+### The ask card
+
+One card, top to bottom, as `templates/ask.html` draws it for the overview and for a bead's
+page alike (`wv-ask`, an `article` with the id `ask-<bead>-<ask>`). A slot a card does not
+have is not drawn.
+
+| slot | holds |
+|---|---|
+| head | `<asker> asks you`, and `ask N · <age> ago`, the ask's number being the one `yardr bead answer` names |
+| weight | one line a class, `WEIGHTY · <class>: <line>`, in rust, before the question |
+| question | the question |
+| about | away from the bead's page: the bead's id as a link, its title, `in <stage>` and its first `topic:` label where it has one. On its page the page is that line |
+| held messages | `Held messages · N`, each payload as text in a file block |
+| says, context | `<asker> says:` on a run or setup card, then the context lines |
+| options | numbered rows, each with its consequence, the recommendation under its own row as `recommended: <why>`. Where the view acts and a pick would not be refused, the rows are the pick buttons (the recommended one titled `Answer: n · <label>`); otherwise they are rows to read |
+| blocks | a secret's, run's, setup's and mapping's lines of text and its command: the same sentences as on its bead's page |
+| about the beads | `About:` the beads the ask concerns, each with its stage |
+| answer row | a run card's value fields and `Approve` (or `Approve in <yard>`), the words field with `Send` (`Answer` where there are no options), a secret's fields and `Give in <yard>`, `Ask about this` to `/talk?with=<asker>`, `Later` and `Decline` |
+| setup approval | a second form: the preset radios, the host and site fields, the account fields, the candidate field and `Approve` |
+
+The gate rules stand as the card's comment gives them: a weighty card draws no control the
+yard would refuse for want of its person's word, and where the window holds no gate the
+card names footplate and the terminal command instead. The form posts to the bead's own
+handler, with the bead's revision, the asked seq and the CSRF value where the view acts.
+On its bead's page it answers in place (`hx-post`, the address kept); away from it, and
+without script, it posts and loads the bead it lands on, which is where the answer is.
+
+The words field has an id (`words-<bead>-<ask>`) and `hx-preserve="true"`, so a read of the
+page again, which `/line` and a bead's page make at every event, leaves what is typed in
+it. The form around it is not kept: it carries the bead's revision as of the read, and a
+form kept past the next event would post a stale one, refused again at every retry.
+
 ## The line
 
-`/line` is what waits for a person, and under it the line in numbers, as a
-page of its own. Home lists the waits at the top of its centre, Decide's
-list holds them as `Waits for you` and the rail's badge counts them
-([The window](#the-window)); the line's numbers are this page's. `/line?home=1`,
-which was the home page's column, answers as `/line`. As JSON (`/line`):
+`/line` is what waits for a person, and under it the line in numbers, as JSON, and
+the overview ([The overview](#the-overview)) as a page: Decide's list holds the waits as
+`Waits for you` and the rail's badge counts them ([The window](#the-window)), and the
+line's numbers are the subline's. `/line?home=1`, which was the home page's column,
+answers as `/line`. As JSON (`/line`):
 
 ```json
 {
@@ -1229,9 +1280,9 @@ every reason (`why`) that holds for it:
 
 - A bead whose only reason is `manual` is in `parked`, every other one in
   `waits`: nothing stops a parked bead, it sits in a stage that is a
-  person's by design (a backlog, a decision). `/line` lists the parked
-  under what waits, in a part headed "Parked" with their count; "Nothing
-  waits for you." shows when both are empty. A parked bead that is also
+  person's by design (a backlog, a decision). Decide's list holds the
+  waits and, folded under them, the parked that stand outside them;
+  "Nothing waits for you." shows there when both are empty. A parked bead that is also
   held or stranded is in `waits`, with its `manual` reason too, as is an
   asked bead, with its question after its fault.
 - A hold after repeated failures still waits once: the bead stands in
@@ -1251,10 +1302,10 @@ every reason (`why`) that holds for it:
   and the line shows the rest.
 
 `late` are the open beads running past their usual time, the newest
-change first: `/line`'s own rows under the waits, in a part headed
-"Late" with their count. A late bead needs nothing yet, so they stand
-apart from the waits and the rail's count. Only the `/line` page reads
-them, and Decide's list there shows them in a section of their own. Each
+change first. A late bead needs nothing yet, so they stand apart from
+the waits and the rail's count. The overview's two pages read them, for
+the subline's `late` and the Running rows, and Decide's list on `/line`
+shows them in a section of their own. Each
 row carries the bead's estimate: `late` is always set, `eta` beside it
 when there is anything to say beyond the mark
 ([Estimates](#estimates-the-eta-and-the-late-mark)).
@@ -1263,9 +1314,8 @@ Under them, the line in numbers, summed over the depots: `open` beads,
 those an agent's or a command's session has claimed (`working`), those on
 hold (`held`), the `sessions` running, and the open beads per stage
 (`stages`, in the order of the flows, a stage with none left out) and per
-depot (`depots`). On the page only what is not zero is shown, and `Nothing
-is open.` stands in their place when nothing is; `Open per depot` names
-only the depots with an open bead, as `Open per stage` already did.
+depot (`depots`). On the page they are the subline's, Lines' list head
+(the open beads per stage) and the depots' rows (per depot).
 
 ### Manual claims
 
@@ -1274,7 +1324,7 @@ store keeps the claim as a running session with the runner `manual` until
 a person moves the bead on. To the view that is no work in progress:
 
 - it does not count in `working` (Home, `/line`) or in `sessions`
-  (`/line`);
+  (`/line`), and so not in the subline's `moving`;
 - `/sessions` lists it under `manual`, apart from the running sessions,
   with the state `claimed`;
 - its bead is `parked` on `/line`, as is an unclaimed bead in a stage
@@ -1301,7 +1351,10 @@ a page's leaf listens for. These hang on the stream:
   every event and puts the stage, the rail and the list's head and rows in
   place (`hx-trigger="sse:message"`; [The window](#swaps)). A bead that is
   held shows on `/line` with its reason as soon as the event arrives, and
-  goes when it is unheld;
+  goes when it is unheld. The ask card on `/line` is put in place with the
+  rest, and what is typed in its words field is kept: that field, and not
+  the form around it, has an id and `hx-preserve`, so the read leaves the
+  words and the form takes the bead's fresh revision;
 - `/`'s leaf refreshes the rail and the list alone, since its overview is a
   snapshot, and its feed takes each kept event's fragment on top
   ([The stream](#the-stream));
@@ -1324,13 +1377,20 @@ The server limits them too, far above that ([The stream](#the-stream)).
 ## The feed
 
 Home shows what happened in the yard, one line per event, the newest on
-top: what happened, the bead, its title and when. It keeps ten lines,
-what a person wants on a phone, and `All activity` carries the rest to
-the full feed: `?all=1` renders the latest 50 entries as the feed always
-did, and the link under them (`Older`) is the next page, which htmx
-follows by itself when it scrolls into view, so scrolling down goes back
-in time. Without scripts they are plain links. The JSON keeps every
-entry either way.
+top and by the hour: the head of an hour (`14:00`, with the day before it
+for another day's: `Nov 25 14:00`), then each entry of it as a time, what
+happened, the bead by its title as a link with its id, and under it what was
+said with it, which stands as letters, as every note does. It keeps ten
+lines, what a person wants on a phone, and `All activity`, in the feed's
+head, carries the rest to the full feed: `?all=1` renders the latest 50
+entries as the feed always did, and the link under them (`Older`) is the
+next page, which htmx follows by itself when it scrolls into view, so
+scrolling down goes back in time. Without scripts they are plain links. The
+JSON keeps every entry either way. A fragment the stream brings carries the
+head of its entry's hour, which the stream cannot know the page shows
+already, and the script (`yard.js`) drops a head that repeats the one above
+it, a page of older entries' first head among them. A landing's line has
+no note under it, since its words name the commit already.
 
 Home keeps a hold and its lifting; a session blocked on a prompt and its
 return; a failure (a builder that gave up, a harness error, a session
@@ -1751,14 +1811,14 @@ values wait in the yard's memory for that return alone, for at most
 fifteen minutes, and no error
 shows one back. The return gives the secret the sign-in witnessed, and
 its answer records the fresh sign-in. A second secret ask inside the
-window gives at once. The needs rows on Home, the waits on `/line`, and a
-member's hosted page draw no field for a secret ask. A member gives their
+window gives at once. The overview's card, and a
+member's hosted page, draw no field for a secret ask. A member gives their
 own login code from a paired device. A self-hosted yard's page also draws
 no field: there the card names footplate and the terminal command, and
 either door still gives it.
 
 On a hosted yard the operator can pick a mapping ask from its bead's
-page and from the needs rows and the waits on `/line`, though it weighs
+page and from the overview's card, though it weighs
 as-user and is never strong: the card draws its options as buttons, and
 every numbered pick — one that writes a user's identity and one that
 writes none alike — starts the same re-authentication unless the fresh
@@ -1774,21 +1834,21 @@ pick: there the card names footplate and the terminal command, and
 either door still picks it.
 
 The card is the same wherever it stands, and a weighty run or setup
-card approves the same way from the needs rows on Home and from the
-waits on `/line` as on its bead's page, for an operator, and for a
+card approves the same way from the overview's card
+as on its bead's page, for an operator, and for a
 member only on their own pairing or their own address card, as above.
 The button reads `Approve in <yard>`, beside the fields
 the card asks for (the values in the clear of a run card; a setup's
 presets, the account typed unseen and the candidate), and posts to the
 bead's own handler, so the sign-in and the approval are the bead page's
 own. The person lands on the bead's page afterwards, as after any answer
-given from a row: it shows the card answered and what the approval did,
+given from the overview: it shows the card answered and what the approval did,
 or the yard's reason when it refused. Where the view holds no gateway, or the
 yard is not hosted, a weighty card shows no button anywhere and names
 footplate and the terminal command, as any weighty card does. A routine run or setup card
 approves on its bead's page alone. A mapping card is picked in the web
 only in a hosted window, by an operator under a fresh sign-in, on its
-bead's page and from the needs rows and the waits on `/line` as a
+bead's page and from the overview's card as a
 weighty run or setup card is approved there; everywhere else it shows
 its options as a list, and is picked in footplate or at a terminal.
 A credential card taken alone as a run or
@@ -2335,7 +2395,8 @@ So:
 **What it carries.** `?format=` chooses; the feed's entries without it.
 
 - By default the `data` is the entry of [the feed](#the-feed) as an HTML
-  fragment, the page's own markup (`templates/entry.html`). The shell
+  fragment, the page's own markup (`templates/entry.html`) after the head of
+  its hour, which the page drops where it repeats the one above it. The shell
   names the stream (`sse-connect="/events?after=<head>"`) and htmx puts
   each fragment on top of Home's feed ([Live pages](#live-pages)). An
   event the feed leaves out is sent as its `id` with no `data`: no message
@@ -2529,7 +2590,7 @@ The yard's chip, its name's first two letters, heads the rail and opens `/`; Set
 
 | address | mode | the row it opens |
 |---|---|---|
-| `/`, `/line` | Decide | none |
+| `/`, `/line` | Decide | none (the overview, [The overview](#the-overview)) |
 | `/beads/<id>`, its file pages | Decide | the bead's first row of the list, where it stands in one |
 | `/flows`, `/depots`, `/beads`, `/sessions`, `/previews`, `/deps` | Lines | the place's own row |
 | `/depots/<name>` | Lines | the depot's section, whose title is a link |
@@ -2541,7 +2602,7 @@ The yard's chip, its name's first two letters, heads the rail and opens `/`; Set
 
 ### What each list holds
 
-- **Decide**: `Waits for you` (everything something stops, held, given up, blocked or stranded, every open ask, and the parked beads past their flow's first stage that the reader has not answered, as [the line](#the-line) counts them; its count is the head's and the badge's), `Parked` (folded: the beads parked where they start, and those the reader answered), `Running` (the sessions an agent or a command runs, the oldest first, with `waits on your answer` where the bead's ask waits, and the late line on `/line`) and `Depots` (each with its flows and their counts, and a rust dot where an ask waits). `/line` adds `Late` after Running. A wait row has three lines: an ask by its question, the bead and its title, and who asked; a fault by the bead's title, the fault in red and the note that came with it, a fault that is also asked standing once with the question where the note would; a parked bead by its title, its id and stage, and the reason. The age ends the row, in rust for an ask.
+- **Decide**: `Waits for you` (everything something stops, held, given up, blocked or stranded, every open ask, and the parked beads past their flow's first stage that the reader has not answered, as [the line](#the-line) counts them; its count is the head's and the badge's), `Parked` (folded: the beads parked where they start, and those the reader answered), `Running` (the sessions an agent or a command runs, the oldest first, with `waits on your answer` where the bead's ask waits, and the late line on `/` and `/line`) and `Depots` (each with its flows and their counts, and a rust dot where an ask waits). `/line` adds `Late` after Running, which home leaves out and the subline's `N late` is the way in to. A wait row has three lines: an ask by its question, the bead and its title, and who asked; a fault by the bead's title, the fault in red and the note that came with it, a fault that is also asked standing once with the question where the note would; a parked bead by its title, its id and stage, and the reason. The age ends the row, in rust for an ask.
 - **Lines**: its head says how many depots and open beads, and under it the open count per stage; then the six places no depot or flow opens (`Flows`, `Depots`, `Beads`, `Sessions`, `Previews`, `Deps`), then every depot as a section that opens its page, its flows as rows with their open beads per stage or `none open`, and a rust dot where an ask waits in the flow.
 - **Crew**: `Crew`, each member with its agent, its state (`working`, `idle` or `blocked` with how long it has been up, `stopped` or `failed`, then `disabled`, `restart asked` with its reason and its own unread count) and `unread mail` in rust where the viewer has mail from it; and `People`, the other users, where the view acts. Only a page that stands in Crew reads the crew and the users for it.
 - **Settings**: the pages by name, each with its blurb: Config, Groups, Routes, Peers and Telemetry for the operator, Limits, and on a view behind an auth gateway Pair device. Depots and Deps are Lines' rows.
@@ -2550,7 +2611,7 @@ The list is built from what the shell has read for the page already, the overvie
 
 ### The stage
 
-`<main id="stage">` holds the phone's top bar, the page's leaf where it is live, the page's heading and the page's own content: one column of 760 px at most, centred, with a 24 px gutter, and it starts 44 px down. The list and the stage scroll apart, each inside itself; the document does not. On load the list scrolls the open row to its middle, as far as its ends allow, in a browser that has `scroll-initial-target`, and opens at its top in one that has not. Wide text that must not wrap (a stage file, `.text.file`) scrolls sideways inside its block.
+`<main id="stage">` holds the phone's top bar, the page's leaf where it is live, the page's heading and the page's own content (a page of a stage kind, `Page.Kind`, draws its own head in place of the shell's heading, as [the overview](#the-overview) does): one column of 760 px at most, centred, with a 24 px gutter, and it starts 44 px down. The list and the stage scroll apart, each inside itself; the document does not. On load the list scrolls the open row to its middle, as far as its ends allow, in a browser that has `scroll-initial-target`, and opens at its top in one that has not. Wide text that must not wrap (a stage file, `.text.file`) scrolls sideways inside its block.
 
 ### Swaps
 
@@ -2575,7 +2636,7 @@ Nothing needs script to be read or used: every tile, row and link is a plain lin
   ```
 
   A snapshot page has none: a depot, a flow's list, a pack file, `/config`, `/delegations/<id>`, `/telemetry`, an older page of the feed or the talk page. Two pages follow the yard in fragments instead. `/` takes each kept event's entry on top of its feed, and its overview stays a snapshot, so its leaf says `hx-swap="none"` and refreshes the rail and the list alone. `/flows` moves a card out of the stage it left and into the one it entered (`format=card`) and has no leaf.
-- A form posts to its own action with `hx-post` and `hx-push-url="false"` and puts the page's answer in the stage. The composer's form has an id that names the conversation and the newest letter the user wrote, and `hx-preserve="true"`, so a read of the page again leaves what is typed, while the form a send brings and another conversation's are new and start empty. A card's words field is kept the same way, and not the form around it: its revision is the bead's as of the read, and a form kept past the next event would post a stale one, refused again at every retry.
+- A form on the page it posts for posts to its own action with `hx-post` and `hx-push-url="false"` and puts the page's answer in the stage. The composer's form has an id that names the conversation and the newest letter the user wrote, and `hx-preserve="true"`, so a read of the page again leaves what is typed, while the form a send brings and another conversation's are new and start empty. A card's words field (`words-<bead>-<ask>`) is kept the same way, and not the form around it: its revision is the bead's as of the read, and a form kept past the next event would post a stale one, refused again at every retry. The overview's card posts without `hx-post`: boosted by the shell, it loads the bead it lands on and pushes that address, where on the bead's own page it answers in place.
 - The two infinite-scroll links, older mail and an older page of the feed, push no address and swap no rail (`hx-push-url="false"`, `hx-select-oob="unset"`).
 - A click that the server answers with an error page is loaded as a link without script is, by `yard.js`: htmx swaps no 4xx or 5xx, so the click would do nothing.
 
@@ -2613,8 +2674,9 @@ anywhere else.
 | `--late` | `#e8a33d` | status: running past its usual time; the design has no warning colour, so this keeps the nearest amber |
 | `--done` | faint | status: done |
 | `--mono` | | | the main face: `"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace` |
-| `--sans` | | | human words — home's answer, reasons and titles — and longer prose: `"IBM Plex Sans", system-ui, sans-serif` |
-| `--text`, `--small`, `--large` | | | 14px, 11px (labels), 20px (names and figures; on home the answer line alone) |
+| `--sans` | | | human words — the overview's answer, reasons and titles — and longer prose: `"IBM Plex Sans", system-ui, sans-serif` |
+| `--text`, `--small`, `--large` | | | 14px, 11px (labels), 20px (names and figures) |
+| `--wv-answer`, `--wv-title` | | | the stage's two large roles: the overview's answer, 600 32/38px (26/32 on a phone), and a page's title, 600 26/32px (22/28) |
 | `--gap` | | | 16px, the one spacing unit |
 | `--label-spacing` | | | 0.14em, for uppercase labels |
 | `--wv-rail`, `--wv-list`, `--wv-measure`, `--wv-bar` | | | the window's measures: 64px, 340px, 760px and 64px (the phone's bar) |
@@ -2631,8 +2693,8 @@ Rules the stylesheet holds to, and a test checks the second:
 
 - Small uppercase labels with wide letter-spacing (`.label`) name things;
   values are in the plain face.
-- Weight: one large line per screen (`.answer` on home, `--large`);
-  human words (titles, reasons, the answer) in `--sans`, machine words
+- Weight: one large line per screen (`.wv-answer` on the overview,
+  `--wv-answer`); human words (titles, reasons, the answer) in `--sans`, machine words
   (ids, counts, times, stages) monospace; every row and feed line one
   line, ending in an ellipsis.
 - Corners are square in the pages' bodies (`border-radius: 0`). The
@@ -2643,14 +2705,15 @@ Rules the stylesheet holds to, and a test checks the second:
   segments keep the canvas's; the Beads filters' chips are pills.
 - Words come from the yard: line, landed, held, waits for you.
 
-Classes a page builds from: `.item` (one entry of the centre feed, with a
-hairline under it), `.item-head`, `.label`, `.panel`, `.figures` and
-`.rows` (name and number pairs), `.lines` (one line per row, as the home
-page's overview shows them), `.answer` (home's answer line, the screen's
-one large line), `.feed` and `.entry` (the feed and one event
-of it, with `.entry-head`, `.entry-what`, `.entry-title`, `.entry-note`),
-`.wait` (a bead that waits, with `.wait-title` and `.why`; dimmed inside
-`.parked`), `.card` (one bead in a list, the `card`
+The overview's parts are the stage kind's own (`wv-page`, `.wv-answer` with
+`.wv-answer__sub`, `.wv-block` and `.wv-sh`, `.wv-feed` with `.wv-hour` and
+`.wv-entry`, and the ask card's `.wv-ask*`, `.wv-opt*`, `.wv-field` and
+`.wv-btn`), in the design system's names for the roles, and the kit's measures.
+
+Classes the other pages build from: `.item` (one entry of a page, with a
+hairline under it), `.item-head`, `.label`, `.figures` (name and number
+pairs), `.entry-head`, `.entry-title`, `.entry-note` (a bead's notes and
+history), `.card` (one bead in a list, the `card`
 template, with `.card-head`, `.card-title`, and `.arrived` for one the
 stream brought), `.cards` (a list of them), `.column` and `.stage` (a flow
 and one stage of it, with `.quiet` for one folded to its head line), `.peers` (the crew to talk to), `.talk-head` (the conversation's head), `.letter` (one mail

@@ -102,11 +102,13 @@ func tinyReading() *store.PackReading {
 			{Kind: "file", Name: "roles/a.md", Action: "create", FileNewSHA: hexSum(text), Text: text, Diff: "--- was\n+++ is\n@@ -0,0 +1,1 @@\n+role\n"}}}}
 }
 
-// preBlocks are the text blocks a file page draws, as a browser reads them:
-// the change where the file is a changed one, then the text.
+// preBlocks are the text blocks a file page or a card draws, as a browser reads
+// them: the change where the file is a changed one, then the text. The page's
+// own are `text file` blocks and the card's the stage kinds' file blocks
+// (templates/ask.html).
 func preBlocks(body string) []string {
 	var out []string
-	for _, m := range regexp.MustCompile(`(?s)<pre class="text file">(.*?)</pre>`).FindAllStringSubmatch(body, -1) {
+	for _, m := range regexp.MustCompile(`(?s)<pre class="(?:text file|wv-text wv-file)">(.*?)</pre>`).FindAllStringSubmatch(body, -1) {
 		out = append(out, html.UnescapeString(m[1]))
 	}
 	return out
@@ -318,7 +320,7 @@ func TestPackFilePages(t *testing.T) {
 	hasBidi := func(s string) bool {
 		return strings.ContainsFunc(s, func(r rune) bool { return unicode.Is(unicode.Bidi_Control, r) })
 	}
-	weightLine := regexp.MustCompile(`<p class="weighty">(.*?)</p>`)
+	weightLine := regexp.MustCompile(`<p class="wv-ask__weight">(.*?)</p>`)
 	for _, surface := range approveSurfaces {
 		body := y.surfaceBody(surface.path(b.ID), jo)
 		// The notes below the card are the bead's log, an ask's among

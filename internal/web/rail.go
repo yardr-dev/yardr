@@ -139,16 +139,3 @@ func chipLetters(yard string) string {
 	}
 	return string(r)
 }
-
-// yardSlot is the yard's chip shade on an ask card: FNV-1a over its name, as
-// footplate's slot hashes it (theme.rs), so the same yard is the same rust on
-// both. The web view is dark in every case, so the slot is into the dark set
-// alone (yard-300 through yard-500), whose letters are the dark ink.
-func yardSlot(yard string) int {
-	h := uint64(0xcbf29ce484222325)
-	for i := 0; i < len(yard); i++ {
-		h ^= uint64(yard[i])
-		h *= 0x100000001b3
-	}
-	return int(h % 3)
-}

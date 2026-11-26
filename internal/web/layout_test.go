@@ -50,9 +50,8 @@ func TestWindowFillsTheWindow(t *testing.T) {
 	for _, want := range []string{
 		// Running text keeps a measure of about 90 characters.
 		".text, .entry-note { max-width: 90ch; }",
-		// A list's rows keep their one line.
-		".entry-line .entry-what { display: flex; align-items: baseline; gap: 6px; margin-top: 0; overflow: hidden; white-space: nowrap; }",
-		".needs li > a { display: flex; align-items: baseline; gap: 6px; width: 100%; min-width: 0; box-sizing: border-box; overflow: hidden; white-space: nowrap; font-family: var(--sans); }",
+		// A feed line keeps its one line.
+		".wv-entry__body p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
 	} {
 		if !strings.Contains(css, want) {
 			t.Errorf("the stylesheet lacks %s", want)
@@ -106,63 +105,45 @@ func TestListAndStageScrollApart(t *testing.T) {
 	}
 }
 
-// Home's weight: the answer is the only large line, human words (the
-// answer, reasons, titles) render in the proportional face and machine
-// words (ids, counts, times, stages) stay monospace, and every row runs
-// one line with an ellipsis. What the pixels do is the bead's screenshot.
+// The overview's weight: the answer is the only large line, in the kit's role
+// for it; the page's words are the proportional face and its machine words
+// (ids, times, commands) stay monospace; a feed line runs one line with an
+// ellipsis on a desktop. What the pixels do is the bead's screenshot.
 func TestHomeWeight(t *testing.T) {
 	t.Parallel()
-	answer := cssRule(t, ".answer")
-	for _, want := range []string{"font-family: var(--sans);", "font-size: var(--large);"} {
-		if !strings.Contains(answer, want) {
-			t.Errorf(".answer lacks %s: %s", want, answer)
+	css := string(readAsset(t, "yard.css"))
+	for _, want := range []string{"--wv-answer: 600 32px/38px var(--sans);", "--wv-answer: 600 26px/32px var(--sans);"} {
+		if !strings.Contains(css, want) {
+			t.Errorf("the stylesheet lacks the answer's role %s", want)
 		}
 	}
-	needs := cssRule(t, ".needs li > a")
-	if !strings.Contains(needs, "font-family: var(--sans);") {
-		t.Errorf("a needs row's words are not sans: %s", needs)
+	if answer := cssRule(t, ".wv-answer"); !strings.Contains(answer, "font: var(--wv-answer);") {
+		t.Errorf("the answer is not in its role: %s", answer)
 	}
-	machine := cssRule(t, ".needs .label, .needs .faint")
-	if !strings.Contains(machine, "font-family: var(--mono);") {
-		t.Errorf("a needs row's id and age are not monospace: %s", machine)
+	// A dot stands before the answer where something waits, and none where
+	// nothing does.
+	if dot := cssRule(t, ".wv-answer::before"); !strings.Contains(dot, "background: var(--accent);") {
+		t.Errorf("the answer's dot is not the accent's: %s", dot)
 	}
-	stage := cssRule(t, ".needs .stage")
-	if !strings.Contains(stage, "font-family: var(--mono);") {
-		t.Errorf("a parked row's stage is not monospace: %s", stage)
+	if clear := cssRule(t, ".wv-answer--clear::before"); !strings.Contains(clear, "display: none;") {
+		t.Errorf("a clear answer keeps its dot: %s", clear)
 	}
-	rows := cssRule(t, ".lines li")
+	if page := cssRule(t, ".wv-page"); !strings.Contains(page, "font: 400 14px/20px var(--sans);") {
+		t.Errorf("the overview's words are not sans: %s", page)
+	}
+	for _, selector := range []string{".wv-id", ".wv-entry__at", ".wv-hour"} {
+		if rule := cssRule(t, selector); !strings.Contains(rule, "var(--mono)") {
+			t.Errorf("%s is not monospace: %s", selector, rule)
+		}
+	}
+	line := cssRule(t, ".wv-entry__body p")
 	for _, want := range []string{"overflow: hidden;", "text-overflow: ellipsis;", "white-space: nowrap;"} {
-		if !strings.Contains(rows, want) {
-			t.Errorf(".lines li lacks %s: %s", want, rows)
-		}
-	}
-	line := cssRule(t, ".entry-line .entry-title")
-	for _, want := range []string{"font-family: var(--sans);", "text-overflow: ellipsis;", "flex: 1 1 0;", "min-width: 10ch;"} {
 		if !strings.Contains(line, want) {
-			t.Errorf(".entry-line .entry-title lacks %s: %s", want, line)
+			t.Errorf(".wv-entry__body p lacks %s: %s", want, line)
 		}
-	}
-	// A crowded row shrinks the title first, but never past its floor:
-	// without one the title vanishes instead of ending in an ellipsis,
-	// and past it the what shrinks with it.
-	needsTitle := cssRule(t, ".needs .entry-title")
-	for _, want := range []string{"flex: 1 1 0;", "min-width: 10ch;"} {
-		if !strings.Contains(needsTitle, want) {
-			t.Errorf(".needs .entry-title lacks %s: %s", want, needsTitle)
-		}
-	}
-	title := cssRule(t, ".wait .wait-title")
-	if !strings.Contains(title, "font-family: var(--sans);") {
-		t.Errorf("a wait's title is not sans: %s", title)
-	}
-	why := cssRule(t, ".wait .why")
-	if !strings.Contains(why, "font-family: var(--sans);") {
-		t.Errorf("a wait's reason is not sans: %s", why)
 	}
 	// No new face: every font-family names a token.
-	css, err := os.ReadFile("assets/yard.css")
-	must(t, err)
-	for _, m := range regexp.MustCompile(`(?m)font-family:\s*([^;]+);`).FindAllStringSubmatch(string(css), -1) {
+	for _, m := range regexp.MustCompile(`(?m)font-family:\s*([^;]+);`).FindAllStringSubmatch(css, -1) {
 		if m[1] != "var(--sans)" && m[1] != "var(--mono)" {
 			t.Errorf("a face outside the tokens: font-family: %s", m[1])
 		}
@@ -317,86 +298,73 @@ func TestPhoneWindow(t *testing.T) {
 	}
 }
 
-// On a phone a feed row takes two lines: the verb in full and the bead on
-// the first, the time at its right, the title below ending in an
-// ellipsis. At 700 px and wider the row is one line, as today. What the
-// pixels do is the bead's screenshots.
+// On a phone a feed line wraps, its title in full, where on a desktop it is one
+// line ending in an ellipsis; a stage's hour heads and entries keep their
+// measures. What the pixels do is the bead's screenshots.
 func TestFeedRowOnPhone(t *testing.T) {
 	t.Parallel()
-	css, err := os.ReadFile("assets/yard.css")
-	must(t, err)
-	text := string(css)
-	phone := mediaCSS(t, text, "max-width: 699px")
+	text := string(readAsset(t, "yard.css"))
+	phone := mediaCSS(t, text, "max-width: 899px")
 	for _, want := range []string{
-		".entry-line .entry-what { flex-wrap: wrap; gap: 3px; font-size: var(--small); }",
-		".entry-line .entry-what > :first-child { flex: 1 1 0; max-width: max-content; letter-spacing: -0.06em; }",
-		".entry-line .separator { display: none; }",
-		".entry-line .label { order: 1; margin-left: auto; }",
-		".entry-line .entry-title { order: 2; flex: 1 1 100%; font-size: var(--text); }",
+		".wv-entry { gap: 10px; }",
+		".wv-entry__body p { white-space: normal; }",
 	} {
 		if !strings.Contains(phone, want) {
 			t.Errorf("the phone rules lack %s", want)
 		}
 	}
-	// The title still ends in an ellipsis, on its own line now.
-	title := cssRule(t, ".entry-line .entry-title")
-	for _, want := range []string{"overflow: hidden;", "text-overflow: ellipsis;"} {
-		if !strings.Contains(title, want) {
-			t.Errorf(".entry-line .entry-title lacks %s: %s", want, title)
-		}
+	// The phone's rule comes after the desktop's: at the same specificity the
+	// later one wins, so the line would stay cut on a phone otherwise.
+	if wide, narrow := strings.Index(text, ".wv-entry__body p { white-space: nowrap;"), strings.Index(text, ".wv-entry__body p { white-space: normal; }"); wide < 0 || narrow < wide {
+		t.Error("the phone's feed line must come after the wide one")
 	}
-	// The wide row is one line, as today.
-	wide := cssRule(t, ".entry-line .entry-what")
-	for _, want := range []string{"display: flex;", "white-space: nowrap;"} {
-		if !strings.Contains(wide, want) {
-			t.Errorf(".entry-line .entry-what lacks %s: %s", want, wide)
-		}
+	// The empty sentence shows only where it is first, so an entry the stream
+	// brings hides it.
+	none := cssRule(t, ".wv-feed__none:not(:first-child)")
+	if !strings.Contains(none, "display: none;") {
+		t.Errorf("an entry does not hide the empty sentence: %s", none)
 	}
 }
 
-// On a phone an ask's row gives the question the row's first line whole,
-// ending in an ellipsis, and the bead and age stand under it.
-// At 1100 px and wider the row is one line, as today. What the pixels do is
-// the bead's screenshot.
+// On a phone the ask card's targets are 48 px, its field fills its row and the
+// buttons share the next, and its age drops under its head's words. On a
+// desktop the answer row is one line of a field and buttons. What the pixels do
+// is the bead's screenshot.
 func TestAskRowOnPhone(t *testing.T) {
 	t.Parallel()
-	css, err := os.ReadFile("assets/yard.css")
-	must(t, err)
-	text := string(css)
-	phone := mediaCSS(t, text, "max-width: 699px")
+	text := string(readAsset(t, "yard.css"))
+	phone := mediaCSS(t, text, "max-width: 899px")
 	for _, want := range []string{
-		".needs a.ask { display: flex; flex-wrap: wrap; }",
-		".needs a.ask .ask-q { order: -1; flex: 1 1 100%; }",
-		".needs a.ask > .separator { display: none; }",
+		".wv-field, .wv-btn { height: 48px; line-height: 46px; }",
+		".wv-ask__row .wv-field { flex-basis: 100%; }",
+		".wv-ask__row .wv-btn { flex: 1; padding: 0 8px; }",
+		".wv-ask__age { flex-basis: 100%; margin: 0; padding-left: 18px; }",
+		".wv-opt { padding: 10px 12px; }",
 	} {
 		if !strings.Contains(phone, want) {
 			t.Errorf("the phone rules lack %s", want)
 		}
 	}
-	// The phone row comes after the wide row's: at the same specificity the
-	// later rule wins, so the wide grid would stand on a phone otherwise.
-	if grid, flex := strings.Index(text, ".needs a.ask { display: grid;"), strings.Index(text, ".needs a.ask { display: flex;"); grid < 0 || flex < grid {
-		t.Error("the phone row must come after the wide row's")
-	}
-	// The question still ends in an ellipsis, on its own line now.
-	q := cssRule(t, ".needs .entry-title")
-	for _, want := range []string{"overflow: hidden;", "text-overflow: ellipsis;", "white-space: nowrap;"} {
-		if !strings.Contains(q, want) {
-			t.Errorf(".needs .entry-title lacks %s: %s", want, q)
+	row := cssRule(t, ".wv-ask__row")
+	for _, want := range []string{"display: flex;", "flex-wrap: wrap;"} {
+		if !strings.Contains(row, want) {
+			t.Errorf(".wv-ask__row lacks %s: %s", want, row)
 		}
 	}
-	// The wide row is one grid line, as today.
-	wide := cssRule(t, ".needs a.ask")
-	for _, want := range []string{"display: grid;", "grid-template-columns: minmax(0, 1fr) auto auto;"} {
-		if !strings.Contains(wide, want) {
-			t.Errorf(".needs a.ask lacks %s: %s", want, wide)
+	// A field is as big as a phone's, which would enlarge the page on focus
+	// otherwise, and the card's controls name the stylesheet's colours: a
+	// button takes none of the browser's own.
+	if field := cssRule(t, ".wv-field"); !strings.Contains(field, "font: 400 14px/20px var(--sans);") || !strings.Contains(field, "color: var(--ink);") {
+		t.Errorf(".wv-field is not in the page's face and ink: %s", field)
+	}
+	for _, selector := range []string{".wv-btn", ".wv-opt"} {
+		if rule := cssRule(t, selector); !strings.Contains(rule, "color: var(--ink);") {
+			t.Errorf("%s takes the browser's colour: %s", selector, rule)
 		}
 	}
-	meta := cssRule(t, ".needs .ask-meta")
-	for _, want := range []string{"display: flex;", "white-space: nowrap;"} {
-		if !strings.Contains(meta, want) {
-			t.Errorf(".needs .ask-meta lacks %s: %s", want, meta)
-		}
+	// An option that cannot be picked is a row to read, with no pointer.
+	if rule := cssRule(t, "div.wv-opt"); !strings.Contains(rule, "cursor: default;") {
+		t.Errorf("an option row that is no button has a pointer: %s", rule)
 	}
 }
 

@@ -9,29 +9,32 @@ import (
 )
 
 // AskCard is one open ask as the ask partial renders it: the bead page's
-// ask and a wait's ask reason read as one card in all three places. The
-// bead page builds it from its stored ask, Home and the column from their
-// reason; the partial never sees which.
+// ask and a wait's ask reason read as one card in both places. The bead
+// page builds it from its stored ask, the overview from the wait's reason;
+// the partial never sees which.
 type AskCard struct {
 	Bead string
 	Ask  uint64
-	// OnBead is whether the card stands on its bead's page: it then opens
-	// with the ask line and answers with the page's full form, giving and
-	// approving where the gate allows. Away from it the card opens with
-	// the head and answers with the row's form, which offers no giving and
-	// approves a weighty card alone (Approve).
+	// OnBead is whether the card stands on its bead's page: the page is
+	// then the card's about line, and the card answers with the page's full
+	// form, giving and approving where the gate allows. Away from it the
+	// card names its bead and answers with the overview's form, which offers
+	// no giving and approves a weighty card alone (Approve).
 	OnBead bool
-	// Yard is the yard's name, Shade its chip shade (yardSlot): the head's
-	// dot stands in the yard's colour, a number and never inline style.
-	Yard  string
-	Shade int
-	// Topic is the bead's topic without its prefix, "" where it has none:
-	// the head then reads Everything else, as footplate's does.
-	Topic string
+	// Yard is the yard's name, for the sentences that say where an approval
+	// or a giving lands.
+	Yard string
+	// Title, Stage and Topic are the bead's own, for the about line a card
+	// away from its bead's page names it by: Topic is the bead's topic
+	// without its prefix, "" where it has none, which the line then leaves
+	// out.
+	Title, Stage string
+	Topic        string
 	// Weight is the card's weight, each class with the yard's line as
 	// letters (lettered), absent on a routine card.
 	Weight []store.AskWeight
-	// Question is the question; Age how long it waits, asked beside it.
+	// Question is the question; Age how long it waits, which the head says
+	// beside the ask's number.
 	Question string
 	Age      string
 	// Asker is who asked; Talk is the conversation with them
@@ -91,6 +94,24 @@ type AskCard struct {
 	Give bool
 }
 
+// optionRow is one option as the card draws its row: its number, its label and
+// what choosing it does, and whether it is the recommended one.
+type optionRow struct {
+	N                  int
+	Label, Consequence string
+	Rec                bool
+}
+
+// OptionRows are the card's options as its rows, numbered from 1 as the
+// answer names them.
+func (c AskCard) OptionRows() []optionRow {
+	out := make([]optionRow, len(c.Options))
+	for i, o := range c.Options {
+		out[i] = optionRow{N: i + 1, Label: o.Label, Consequence: o.Consequence, Rec: c.Recommend == i+1}
+	}
+	return out
+}
+
 // cardSecret is what a secret ask asks for, in the yard's words, with the
 // names its giving takes values for.
 type cardSecret struct {
@@ -144,13 +165,12 @@ type cardSetup struct {
 	Site string
 }
 
-// cardSite is where a card stands: the yard for its head and sentences,
+// cardSite is where a card stands: the yard for its sentences,
 // whether the window holds the gate a weighty card is approved under, whether
 // the view acts as an operator, who alone may open the files behind a
 // summary card, and the crew and users the viewing user may write to one of.
 type cardSite struct {
 	Yard     string
-	Shade    int
 	Gate     bool
 	Operator bool
 	Crew     []store.CrewMember
@@ -207,13 +227,13 @@ func lettered(weight []store.AskWeight) []store.AskWeight {
 	return out
 }
 
-// cardSite reads where the request's cards stand: the yard's name and chip
-// shade, whether the window holds the gate, and the crew and users for the
-// Ask about this link. The link stands only where the view acts, so a view
+// cardSite reads where the request's cards stand: the yard's name, whether
+// the window holds the gate, and the crew and users for the Ask about this
+// link. The link stands only where the view acts, so a view
 // that acts as no user reads no crew and no users.
 func (s *Server) cardSite(ctx context.Context) (cardSite, error) {
 	yard := s.yardName(ctx)
-	site := cardSite{Yard: yard, Shade: yardSlot(yard), Gate: s.holdsGate(ctx), Operator: s.isOperator(ctx)}
+	site := cardSite{Yard: yard, Gate: s.holdsGate(ctx), Operator: s.isOperator(ctx)}
 	if s.acting(ctx) == "" {
 		return site, nil
 	}
@@ -242,7 +262,7 @@ func (c cardSite) talkTo(as, asker string) string {
 func (p BeadPage) Card(a store.BeadAsk) AskCard {
 	out := AskCard{
 		Bead: p.Bead.ID, Ask: a.Ask, OnBead: true,
-		Yard: p.site.Yard, Shade: p.site.Shade,
+		Yard:   p.site.Yard,
 		Weight: lettered(a.Weight), Question: a.Question, Age: age(time.Since(a.Since)),
 		Asker: a.Asker, Talk: p.site.talkTo(p.As, a.Asker),
 		Context: a.Context, Options: a.Options, Recommend: a.Recommend, Why: a.Why,
@@ -280,14 +300,14 @@ func (p BeadPage) Card(a store.BeadAsk) AskCard {
 }
 
 // Card is the wait's ask reason as the ask partial renders it: away from
-// its bead's page, so with the head, and with the row's form, which offers
-// no giving and approves a weighty card alone. The form posts to the bead's
-// handler, so the approval goes through the gate the bead page's does, and
-// the viewer lands on the bead page as after any answer from a row.
+// its bead's page, so with the about line, and with the overview's form, which
+// offers no giving and approves a weighty card alone. The form posts to the
+// bead's handler, so the approval goes through the gate the bead page's does,
+// and the page's answer takes the stage.
 func (w Waiting) Card(r Reason) AskCard {
 	out := AskCard{
 		Bead: w.Bead, Ask: r.Ask,
-		Yard: w.site.Yard, Shade: w.site.Shade, Topic: w.Topic,
+		Yard: w.site.Yard, Title: w.Title, Stage: w.Stage, Topic: w.Topic,
 		Weight: lettered(r.Weight), Question: r.Text, Age: age(time.Since(r.Since)),
 		Asker: r.Asker, Talk: w.site.talkTo(w.As, r.Asker),
 		Context: r.Context, Options: r.Options, Recommend: r.Recommend, Why: r.RecommendWhy,
@@ -312,7 +332,7 @@ func (w Waiting) Card(r Reason) AskCard {
 }
 
 // FirstCard is the wait's oldest open ask as the ask partial renders it,
-// nil when the bead carries no ask.
+// nil when the bead carries no ask: the card the overview stands whole.
 func (w Waiting) FirstCard() *AskCard {
 	if r := w.FirstAsk(); r != nil {
 		c := w.Card(*r)

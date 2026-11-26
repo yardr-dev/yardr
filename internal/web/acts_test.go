@@ -174,33 +174,33 @@ func TestBeadAskButtons(t *testing.T) {
 	f, _ := talkFixture(t, "jo")
 	b, seq := actYard(t, f, pickAsk())
 	r := f.get("/beads/" + b.ID)
-	for _, want := range []string{
+	for _, want := range append([]string{
 		`<h3 class="label">asks for jo</h3>`,
-		`<p class="ask-line">` + b.ID + ` · ask ` + strconv.FormatUint(seq, 10) + `</p>`,
-		`<div class="ask-question"><p>Move the links now?</p><span class="asked">asked `,
-		`<p class="ask-asker">asked by yardmaster</p>`,
+		`<p class="wv-ask__head"><span class="wv-dot wv-dot--wait"></span><span>yardmaster asks you</span><span class="wv-ask__age">ask ` + strconv.FormatUint(seq, 10) + ` · `,
+		`<h2 class="wv-ask__q">Move the links now?</h2>`,
 		"The links file declares the new source.",
-		`<li><span>1. Move them now</span><span class="faint"> — all links point at the new source tonight</span><span class="recommended">recommended: the test passed</span></li>`,
-		`<li><span>2. After Friday</span>`,
-		`<form class="need-answer" method="post" action="/beads/` + b.ID + `" hx-post="/beads/` + b.ID + `" hx-push-url="false">`,
+		`<p class="wv-rec">recommended: the test passed</p>`,
+		`<form class="wv-ask__form" method="post" action="/beads/` + b.ID + `" hx-post="/beads/` + b.ID + `" hx-push-url="false">`,
 		`<input type="hidden" name="rev" value="`,
 		`<input type="hidden" name="ask" value="` + strconv.FormatUint(seq, 10) + `">`,
-		`<button type="submit" name="option" value="1">Answer: 1 · Move them now</button>`,
-		`<button type="submit" name="option" value="2">After Friday</button>`,
-		`<button type="submit" name="action" value="send">Send</button>`,
-		// The yard's own last pick, the shape a card stored before
-		// yardr-17bj keeps: a plain button, since the recommendation is
+		// The options are the pick buttons, the recommended one marked, and
+		// the yard's own last pick, the shape a card stored before
+		// yardr-17bj keeps, a plain one, since the recommendation is
 		// another option's.
-		`<button type="submit" name="option" value="3">You decide</button>`,
-		`<button type="submit" name="action" value="later">Later</button>`,
-		`<button type="submit" name="action" value="decline" title="Say no to all options. The asker finds another way.">Decline</button>`,
-	} {
+		sendButton,
+		laterButton,
+		declineButton,
+	}, pickOptions...) {
 		if !strings.Contains(r.body, want) {
 			t.Errorf("the page lacks %q:\n%s", want, r.body)
 		}
 	}
+	// The bead's page is the card's about line: the card names no bead.
+	if strings.Contains(r.body, `class="wv-ask__about"`) {
+		t.Errorf("the card on its bead's page names its bead again:\n%s", r.body)
+	}
 	// A routine card carries no weight and no decline path.
-	for _, foreign := range []string{`class="weighty"`, "WEIGHTY", "no gate", "Recommends", "Recommended:"} {
+	for _, foreign := range []string{`class="wv-ask__weight"`, "WEIGHTY", "no gate", "Recommends", "Recommended:"} {
 		if strings.Contains(r.body, foreign) {
 			t.Errorf("the routine card shows %q:\n%s", foreign, r.body)
 		}
@@ -242,7 +242,7 @@ func TestBeadAskButtons(t *testing.T) {
 		_, err := f4.st.PutCrew(context.Background(), store.CrewMember{Name: "yardmaster", Runner: "herdr"}, "jo")
 		return err
 	}())
-	if r := f4.get("/beads/" + b4.ID); !strings.Contains(r.body, `<a class="ask-about" href="/talk?with=yardmaster">Ask about this</a>`) {
+	if r := f4.get("/beads/" + b4.ID); !strings.Contains(r.body, `<a class="wv-btn" href="/talk?with=yardmaster">Ask about this</a>`) {
 		t.Errorf("the card to a crew member's asker lacks Ask about this:\n%s", r.body)
 	}
 	// And where the asker is another user, but not where the asker is the
@@ -259,7 +259,7 @@ func TestBeadAskButtons(t *testing.T) {
 	if _, err := f5.st.AddAsk(ctx5, b5.ID, ask, "kay"); err != nil {
 		t.Fatal(err)
 	}
-	if r := f5.get("/beads/" + b5.ID); !strings.Contains(r.body, `<a class="ask-about" href="/talk?with=kay">Ask about this</a>`) {
+	if r := f5.get("/beads/" + b5.ID); !strings.Contains(r.body, `<a class="wv-btn" href="/talk?with=kay">Ask about this</a>`) {
 		t.Errorf("the card to another user's asker lacks Ask about this:\n%s", r.body)
 	}
 	b6, err := f5.st.CreateBead(ctx5, store.NewBead{Title: "a window", Stage: "new", Depot: "home"}, "jo")
@@ -274,10 +274,10 @@ func TestBeadAskButtons(t *testing.T) {
 	f2, _ := talkFixture(t, "jo")
 	b2, _ := actYard(t, f2, store.Ask{Question: "What should it say?", Context: []string{"the sign."}})
 	r = f2.get("/beads/" + b2.ID)
-	if !strings.Contains(r.body, `<button type="submit" name="action" value="answer">Answer</button>`) {
+	if !strings.Contains(r.body, `<button class="wv-btn" type="submit" name="action" value="answer">Answer</button>`) {
 		t.Errorf("the words ask has no Answer:\n%s", r.body)
 	}
-	for _, foreign := range []string{`class="weighty"`, "WEIGHTY", "no gate"} {
+	for _, foreign := range []string{`class="wv-ask__weight"`, "WEIGHTY", "no gate"} {
 		if strings.Contains(r.body, foreign) {
 			t.Errorf("the routine card shows %q:\n%s", foreign, r.body)
 		}
@@ -319,7 +319,7 @@ func TestBeadAskVisibleWithBrokenFlow(t *testing.T) {
 		"flow is unavailable",
 		"Move the links now?",
 		`<input type="hidden" name="ask" value="` + strconv.FormatUint(seq, 10) + `">`,
-		`<button type="submit" name="option" value="1">Answer: 1 · Move them now</button>`,
+		pickOptions[0],
 	} {
 		if !strings.Contains(r.body, want) {
 			t.Errorf("the bead page lacks %q:\n%s", want, r.body)
@@ -728,8 +728,8 @@ func TestBeadPostPlainFormCarriesOwnOrigin(t *testing.T) {
 	}
 }
 
-// The needs rows answer where the view acts: home's oldest ask under its
-// row, /line's every ask under its reason. Without --as neither answers.
+// The overview's card answers where the view acts, on home and on /line alike.
+// Without --as it has no answer row.
 func TestNeedsAnswerButtons(t *testing.T) {
 	t.Parallel()
 	f, _ := talkFixture(t, "jo")
@@ -744,20 +744,20 @@ func TestNeedsAnswerButtons(t *testing.T) {
 	must(t, err)
 	r := f.get("/")
 	for _, want := range []string{
-		`<form class="need-answer" method="post" action="/beads/` + b.ID + `">`,
+		`<form class="wv-ask__form" method="post" action="/beads/` + b.ID + `">`,
 		`<input type="hidden" name="ask" value="` + strconv.FormatUint(seq, 10) + `">`,
-		`<button type="submit" name="option" value="1">Answer: 1 · Move them now</button>`,
-		`<button type="submit" name="action" value="send">Send</button>`,
+		pickOptions[0],
+		sendButton,
 	} {
 		if !strings.Contains(r.body, want) {
 			t.Errorf("home lacks %q:\n%s", want, r.body)
 		}
 	}
 	line := f.get("/line")
-	if !strings.Contains(line.body, `<form class="need-answer"`) {
+	if !strings.Contains(line.body, `<form class="wv-ask__form"`) {
 		t.Errorf("/line answers nothing:\n%s", line.body)
 	}
-	if !strings.Contains(line.body, `<button type="submit" name="action" value="send">Send</button>`) {
+	if !strings.Contains(line.body, `<button class="wv-btn" type="submit" name="action" value="send">Send</button>`) {
 		t.Errorf("/line has no Send button:\n%s", line.body)
 	}
 	// yardmaster is no crew member and no user here, so neither row links
@@ -772,7 +772,7 @@ func TestNeedsAnswerButtons(t *testing.T) {
 		return err
 	}())
 	for _, target := range []string{"/", "/line"} {
-		if r := f.get(target); !strings.Contains(r.body, `<a class="ask-about" href="/talk?with=yardmaster">Ask about this</a>`) {
+		if r := f.get(target); !strings.Contains(r.body, `<a class="wv-btn" href="/talk?with=yardmaster">Ask about this</a>`) {
 			t.Errorf("%s lacks Ask about this to the crew asker's conversation:\n%s", target, r.body)
 		}
 	}
@@ -815,7 +815,7 @@ func TestBeadSecretWeightyCard(t *testing.T) {
 	r := f.get("/beads/" + b.ID)
 	for _, want := range []string{
 		`<h3 class="label">asks for mckean</h3>`,
-		`<p class="weighty">WEIGHTY · credential: gives a credential or an address to the yard: CRM_TOKEN, for the source crm (https://crm.example.com)</p>`,
+		`<p class="wv-ask__weight">WEIGHTY · credential: gives a credential or an address to the yard: CRM_TOKEN, for the source crm (https://crm.example.com)</p>`,
 		`a secret: CRM_TOKEN, for the source crm (https://crm.example.com)`,
 		// What the value reaches, in the lines the terminal's card has.
 		`lands in: the source&#39;s env_file, or sources/crm.env in the yard&#39;s home when it has none`,
@@ -823,8 +823,8 @@ func TestBeadSecretWeightyCard(t *testing.T) {
 		`not reached: thread commands (yardr reply, thread open, thread state), which read the speaker&#39;s own file; a crew member&#39;s is given with --for-crew`,
 		`This card is weighty and this window has no gate. Approve it in footplate, or in a terminal on the yard's machine:`,
 		`Give it with <code>yardr bead answer ` + b.ID + ` ` + strconv.FormatUint(seq, 10) + ` --secret</code>`,
-		`<button type="submit" name="action" value="later">Later</button>`,
-		`<button type="submit" name="action" value="decline" title="Say no to all options. The asker finds another way.">Decline</button>`,
+		`<button class="wv-btn" type="submit" name="action" value="later">Later</button>`,
+		`<button class="wv-btn" type="submit" name="action" value="decline" title="Say no to all options. The asker finds another way.">Decline</button>`,
 	} {
 		if !strings.Contains(r.body, want) {
 			t.Errorf("the page lacks %q:\n%s", want, r.body)
@@ -915,11 +915,11 @@ func TestBeadSecretLoginGiveIsRefusedAsWeighty(t *testing.T) {
 	r := f.get("/beads/" + b.ID)
 	for _, want := range []string{
 		`a secret: INPUT, for the waiting login claude-a1b2c3d4`,
-		`<p class="weighty">WEIGHTY · credential:`,
+		`<p class="wv-ask__weight">WEIGHTY · credential:`,
 		`This card is weighty and this window has no gate.`,
 		`Give it with <code>yardr bead answer ` + b.ID + ` ` + strconv.FormatUint(seq, 10) + ` --secret</code>`,
-		`<button type="submit" name="action" value="later">Later</button>`,
-		`<button type="submit" name="action" value="decline" title="Say no to all options. The asker finds another way.">Decline</button>`,
+		`<button class="wv-btn" type="submit" name="action" value="later">Later</button>`,
+		`<button class="wv-btn" type="submit" name="action" value="decline" title="Say no to all options. The asker finds another way.">Decline</button>`,
 	} {
 		if !strings.Contains(r.body, want) {
 			t.Errorf("the page lacks %q:\n%s", want, r.body)
@@ -969,17 +969,17 @@ func TestBeadMappingWeightyCard(t *testing.T) {
 	}
 	for _, want := range []string{
 		`<h3 class="label">asks for mckean</h3>`,
-		`<p class="weighty">WEIGHTY · as-user: lets calls or words count as a person&#39;s: a pick says which user U777 in talk is, and a delivery from them is then heard as that user&#39;s</p>`,
+		`<p class="wv-ask__weight">WEIGHTY · as-user: lets calls or words count as a person&#39;s: a pick says which user U777 in talk is, and a delivery from them is then heard as that user&#39;s</p>`,
 		`A message reached talk from U777 in channel C1. Who is this?`,
-		`<h4 class="label">Held messages · 1</h4>`,
-		`<pre class="text held-payload">held-body-marker</pre>`,
-		`<li><span>1. ada</span>`,
-		`<li><span>2. mckean</span>`,
+		`<h3 class="wv-ask__label">Held messages · 1</h3>`,
+		`<pre class="wv-text wv-file">held-body-marker</pre>`,
+		`<span class="wv-opt__n">1</span><span class="wv-opt__b"><span class="wv-opt__t">ada</span>`,
+		`<span class="wv-opt__n">2</span><span class="wv-opt__b"><span class="wv-opt__t">mckean</span>`,
 		`This card is weighty and this window has no gate. Approve it in footplate, or in a terminal on the yard's machine:`,
 		`Approve it with <code>yardr bead answer ` + b.ID + ` ` + ask + ` &lt;n&gt;</code>`,
 		`hx-preserve="true" name="words"`,
-		`<button type="submit" name="action" value="later">Later</button>`,
-		`<button type="submit" name="action" value="decline" title="Say no to all options. The asker finds another way.">Decline</button>`,
+		`<button class="wv-btn" type="submit" name="action" value="later">Later</button>`,
+		`<button class="wv-btn" type="submit" name="action" value="decline" title="Say no to all options. The asker finds another way.">Decline</button>`,
 	} {
 		if !strings.Contains(r.body, want) {
 			t.Errorf("the page lacks %q:\n%s", want, r.body)

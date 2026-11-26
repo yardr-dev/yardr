@@ -1,0 +1,52 @@
+{{- /* The overview, the stage of / and of /line: the answer with the numbers
+       of the yard under it, the one ask that stands whole, and the feed of
+       what happened by the hour. /line is the same stage; its list has the
+       Late section, which is all it adds. The answer and the subline are
+       Home's (Answer, Subline): this only sets them out. Only the first page
+       of the feed has them; an older page of it is the feed alone. */}}
+{{define "content"}}
+{{- with .Overview}}
+<article class="wv-page" data-kind="{{$.Kind}}">
+  {{- if not .Before}}
+  <header>
+    {{- /* The answer: how many wait for the person, or that nothing does,
+           with no dot then. Its subline gives the numbers in two sentences,
+           each part left out at zero: the first splits the answer into what
+           the person decides and what is held, the second gives the rest of
+           the yard. The links leave Decide, so they swap the whole list: the
+           new mode's list starts at its top. */}}
+    <h1 class="wv-answer{{if not .Attention}} wv-answer--clear{{end}}">{{.Answer}}</h1>
+    {{- $sub := .Subline}}
+    <p class="wv-answer__sub" hx-select-oob="#rail:outerHTML,#drawer:outerHTML,#list:outerHTML">{{$sub.First}}{{with $sub.Rest}} {{$sub.Intro}} {{range $i, $p := .}}{{if $i}}, {{end}}{{if $p.Href}}<a href="{{$p.Href}}">{{$p.Text}}</a>{{else}}{{$p.Text}}{{end}}{{end}}.{{end}}</p>
+  </header>
+  {{- /* One card, whole: the oldest ask of the first asked wait of the list.
+         The others open on their beads' pages, a tap from their rows. */}}
+  {{- with .Card}}{{template "ask" .}}{{end}}
+  {{- end}}
+  {{- /* The feed, newest first: the kept lines, or the full page behind
+         ?all=1. What listens to the stream for its own fragments says
+         hx-target="this": the shell's target is the stage, which an element
+         that swaps what the stream sends would otherwise inherit. On the
+         first page of home the shell's stream continues it after the page's
+         head: each kept event's entry goes on top. /line and an older page
+         are snapshots of it, /line read again whole. The empty sentence
+         stands last and shows only where it is first. */}}
+  <section class="wv-block" aria-label="What happened">
+    <h2 class="wv-sh"><span>What happened</span>{{if .MoreActivity}}<a class="wv-sh__count" href="/?all=1">All activity</a>{{end}}</h2>
+    <ol class="wv-feed" id="feed"{{if .Follow}} sse-swap="message" hx-target="this" hx-swap="afterbegin"{{end}}>
+      {{- range .FeedRows}}
+      {{- if .Head}}{{template "hour" .Entry}}{{end}}
+      {{- template "entry" .Entry}}
+      {{- end}}
+      <li class="wv-feed__none">{{if .Before}}Nothing older.{{else if .Events}}Nothing for you.{{else}}Nothing has happened yet.{{end}}</li>
+      {{- if and .All .Older}}
+      {{- /* The next page: a link, which htmx follows by itself once it
+             scrolls into view, putting that page's entries in the link's
+             place. */}}
+      <li class="wv-older" hx-get="/?all=1&amp;before={{.Older}}" hx-trigger="intersect once" hx-select="#feed > *" hx-target="this" hx-swap="outerHTML" hx-push-url="false" hx-select-oob="unset"><a href="/?all=1&amp;before={{.Older}}">Older</a></li>
+      {{- end}}
+    </ol>
+  </section>
+</article>
+{{- end}}
+{{end}}

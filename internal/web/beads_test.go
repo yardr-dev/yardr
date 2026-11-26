@@ -1554,18 +1554,28 @@ func TestBeadsReadsTheYardOnce(t *testing.T) {
 	if strings.Contains(r.body, "<aside") {
 		t.Errorf("/beads keeps a column the window has no place for: %s", r.body)
 	}
-	text := squash(whole)
-	for _, want := range []string{
-		`<h3 class="label">Parked · 3</h3>`,
-		`<p class="why held">its session waits on a prompt: door-new</p>`,
-		`<p class="why held">held by me</p>`,
-		`<dt>open</dt><dd>5</dd>`,
-	} {
-		if !strings.Contains(text, want) {
-			t.Errorf("the line lacks %s: %s", want, text)
+	// The line's list holds the five that wait, each with its reason, and its
+	// subline the open beads.
+	waits := listRowsOf(t, f, "/line", "Waits for you")
+	if len(waits) != 5 {
+		t.Errorf("the line's list holds %+v, want the five that wait", waits)
+	}
+	reasons := map[string]bool{}
+	for _, r := range waits {
+		reasons[reasonLine(r)] = true
+		if len(r.lines) > 0 {
+			reasons[r.lines[0]] = true
 		}
 	}
-	// Home has no aside: the line's numbers and panels are the line page's.
+	for _, want := range []string{"its session waits on a prompt: door-new", "held by me"} {
+		if !reasons[want] {
+			t.Errorf("the line's list lacks %q: %+v", want, waits)
+		}
+	}
+	if sub := squash(stageOf(t, whole)); !strings.Contains(sub, `<a href="/flows">5 open</a>`) {
+		t.Errorf("the line's subline lacks the 5 open beads: %s", sub)
+	}
+	// Home has no aside: the line's numbers are its subline's.
 	homeText := squash(stageOf(t, home))
 	for _, not := range []string{`<dt>open</dt>`, `Parked · 3`, `<article class="wait">`, "<aside"} {
 		if strings.Contains(homeText, not) {
@@ -1576,6 +1586,7 @@ func TestBeadsReadsTheYardOnce(t *testing.T) {
 		t.Errorf("Decide's list holds %+v, want the five that wait", waits)
 	}
 	var list web.Beads
+	st.reset()
 	f.getJSON("/beads", &list)
 	if want := []string{"a thought", "a shed", "a door", "which wood", "which size", "which colour"}; !reflect.DeepEqual(titles(cards(list.Beads)), want) {
 		t.Errorf("beads %v, want %v", titles(cards(list.Beads)), want)

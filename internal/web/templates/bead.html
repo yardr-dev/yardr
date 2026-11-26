@@ -76,9 +76,7 @@
   <section class="item">
     <h3 class="label">asks for {{$p.As}}</h3>
     {{- range .Asks}}
-    <article class="note">
-      {{template "ask" ($p.Card .)}}
-    </article>
+    {{template "ask" ($p.Card .)}}
     {{- end}}
   </section>
   {{- end}}

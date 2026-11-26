@@ -1,7 +1,20 @@
-{{- /* One event of the feed, one line: what happened, the bead, its title
-       and when. On the home page, and alone as an event of the stream. */ -}}
+{{- /* One event of the feed, one entry: the time, what happened, the bead by
+       its title as a link with its id, and what was said with it under. A
+       landing's note says the commit its line says already. A note is
+       someone's words, so it stands as letters, as everywhere a note is
+       drawn: no control character or mark of direction reaches the page. The overview's
+       feed and the stream's fragments share it. The head of an hour stands
+       before the first entry of it, on the page and before a fragment alike,
+       and the script drops a head that repeats the one above it (yard.js). */ -}}
+{{define "hour"}}<li class="wv-hour" data-hour="{{.HourKey}}">{{.HourLabel}}</li>{{end}}
 {{define "entry"}}
-<article class="item entry entry-line" id="e{{.Seq}}">
-  <p class="entry-what"><span{{if .Tone}} class="{{.Tone}}"{{end}}>{{.Text}}</span>{{if .Bead}}<a class="bead" href="/beads/{{.Bead}}">{{.Bead}}</a>{{end}}{{if .Title}}<span class="separator" aria-hidden="true">·</span><span class="entry-title">{{.Title}}</span>{{end}}<span class="separator" aria-hidden="true">·</span><time class="label" datetime="{{.At.UTC.Format "2006-01-02T15:04:05Z"}}">{{.Clock}}</time></p>
-</article>
+<li class="wv-entry{{with .Tone}} wv-entry--{{.}}{{end}}" id="e{{.Seq}}">
+  <time class="wv-entry__at" datetime="{{.At.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{.Clock}}">{{.Minute}}</time>
+  <div class="wv-entry__body">
+    <p><span class="wv-entry__what">{{.Text}}</span>{{if .Bead}}<a class="wv-entry__title" href="/beads/{{.Bead}}">{{if .Title}}{{.Title}}{{else}}{{.Bead}}{{end}}</a>{{if .Title}}<span class="wv-id">{{.Bead}}</span>{{end}}{{end}}</p>
+    {{- if and .Note (ne .Tone "landed")}}
+    <p class="wv-entry__note">{{noteLetters .Note}}</p>
+    {{- end}}
+  </div>
+</li>
 {{end}}

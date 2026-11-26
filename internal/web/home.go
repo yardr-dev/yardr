@@ -14,8 +14,9 @@ import (
 	"yardr.dev/yardr/internal/store"
 )
 
-// Home is the yard's home page: the overview (what waits for a person, what
-// runs now, the depots, what closed today) above the feed of what happened.
+// Home is the yard's home page: the overview (what waits for a person, the
+// numbers of the yard, the one ask that stands whole) above the feed of what
+// happened. /line draws the same overview as its stage.
 type Home struct {
 	Yard string `json:"yard"`
 	// As is the user the view acts as, "" when it does not act: an asked
@@ -40,6 +41,19 @@ type Home struct {
 	// Kept are the feed's entries that stand on home, newest first: set
 	// unless All. HTML-only, as All is.
 	Kept []Entry `json:"-"`
+	// Follow says the feed takes each kept event's entry on its top: the first
+	// page of home does, an older page and /line do not. HTML-only, as All is.
+	Follow bool `json:"-"`
+	// Card is the oldest open ask of the first wait that carries one, in the
+	// order of Attention: the one card the overview stands whole, nil where
+	// no wait is asked. Every other asked wait opens on its bead's page.
+	// HTML-only: the JSON names every wait's reasons.
+	Card *AskCard `json:"-"`
+	// ClosedCount counts every bead that closed today, where Closed names ten
+	// at most, and Late the open beads running past their usual time: the
+	// numbers of the subline. HTML-only.
+	ClosedCount int `json:"-"`
+	Late        int `json:"-"`
 	// yard is what the counts were made from, for the line, which counts
 	// the same beads and sessions.
 	yard *yard
@@ -107,6 +121,10 @@ type HomeDepot struct {
 	Working int        `json:"working"`
 	Held    int        `json:"held"`
 	Flows   []HomeFlow `json:"flows"`
+	// Transit counts the depot's open beads past their flow's first stage,
+	// those no flow governs and those off their flow among them: what the
+	// overview's subline calls arriving. HTML-only.
+	Transit int `json:"-"`
 	// Elsewhere counts the open beads in a stage their depot's flow lacks: a
 	// bead pinned to another flow, or one a changed flow left behind.
 	Elsewhere []StageCount `json:"elsewhere,omitempty"`
@@ -187,6 +205,11 @@ func (s *Server) overview(ctx context.Context, y *yard) (*Home, error) {
 				if !count(hr.Elsewhere, b.Stage) {
 					hr.Elsewhere = append(hr.Elsewhere, StageCount{Stage: b.Stage, Open: 1})
 				}
+			}
+			// Where a flow's beads start is its first stage; the rest of the
+			// open beads are on their way.
+			if i < 0 || len(hr.Flows[i].Stages) == 0 || hr.Flows[i].Stages[0].Stage != b.Stage {
+				hr.Transit++
 			}
 		}
 		slices.SortFunc(hr.Elsewhere, func(a, b StageCount) int {
@@ -270,52 +293,18 @@ func attention(ov *Home, l *Line) []Waiting {
 	return out
 }
 
-// needsShown is how many waiting beads the home page names before the "All
-// waiting N" row carries the rest to /line: five, as decided on yardr-8y0f.
-// The JSON names them all either way.
-const needsShown = 5
-
-// Shown are the waiting beads the home page names: the first needsShown of
-// Attention, in the line's order, faults first. The rest are one tap away
-// behind "All waiting N".
-func (h Home) Shown() []Waiting { return h.Attention[:min(len(h.Attention), needsShown)] }
-
-// Extra is how many waiting beads hide behind "All waiting N": none when the
-// list fits.
-func (h Home) Extra() int { return len(h.Attention) - len(h.Shown()) }
-
-// Answer is the home page's first line: whether anything needs the person,
-// with the faults counted apart. One waiting bead counts once, whether its
-// reason is a plain hold or a give-up.
+// Answer is the overview's one large line: how many wait for the person, in
+// the words the rail's badge and the list's head say them in, or that nothing
+// needs them. The faults are counted apart in the subline.
 func (h Home) Answer() string {
-	n := len(h.Attention)
-	if n == 0 {
-		return "Nothing needs you."
+	if n := len(h.Attention); n > 0 {
+		return waitWords(n)
 	}
-	faults := 0
-	for _, w := range h.Attention {
-		if w.Fault() {
-			faults++
-		}
-	}
-	out := fmt.Sprintf("%d need you.", n)
-	if n == 1 {
-		out = "1 needs you."
-	}
-	if faults > 0 {
-		out += fmt.Sprintf(" %d fault", faults)
-		if faults != 1 {
-			out += "s"
-		}
-		out += "."
-	}
-	return out
+	return "Nothing needs you."
 }
 
-// YardOpen, YardWorking and YardHeld count the yard's open beads: all of
-// them, those an agent's or a command's session has claimed, and those
-// held. The home page's Yard row names them and links them to the panel;
-// the per-depot counts they are summed from stay in the JSON.
+// YardOpen counts the yard's open beads: what the subline's `open` names and
+// links to the flows. The per-depot counts it is summed from stay in the JSON.
 func (h Home) YardOpen() int {
 	n := 0
 	for _, d := range h.Depots {
@@ -324,8 +313,8 @@ func (h Home) YardOpen() int {
 	return n
 }
 
-// YardWorking counts the yard's open beads an agent's or a command's
-// session has claimed: the Yard row's working count.
+// YardWorking counts the yard's open beads an agent's or a command's session
+// has claimed: the subline's `moving`.
 func (h Home) YardWorking() int {
 	n := 0
 	for _, d := range h.Depots {
@@ -334,23 +323,80 @@ func (h Home) YardWorking() int {
 	return n
 }
 
-// YardHeld counts the yard's open beads on hold: the Yard row's held count.
-func (h Home) YardHeld() int {
+// YardArriving counts the yard's open beads that are past their flow's first
+// stage: the subline's `arriving`, which no page lists but the depots' pages
+// count per depot as in transit.
+func (h Home) YardArriving() int {
 	n := 0
 	for _, d := range h.Depots {
-		n += d.Held
+		n += d.Transit
 	}
 	return n
 }
 
-// OldestAge is how long the oldest running session has run: what the home
-// page's Running row names beside its count. Running holds the oldest
-// first, so it is the first row's age; empty when nothing runs.
-func (h Home) OldestAge() string {
-	if len(h.Running) == 0 {
-		return ""
+// SublinePart is one number of the subline's second sentence: its words, and
+// where it links, "" for a number no page lists.
+type SublinePart struct{ Text, Href string }
+
+// Subline is the sentences under the overview's answer, the numbers the right
+// column used to give (docs/web.md, The overview): the first splits the
+// answer's count into what the person decides and what is held, and the second
+// gives the rest of the yard. Each number is left out at zero, and a sentence
+// with none of its own is left out with them.
+type Subline struct {
+	// First is "1 to decide, 2 held, both in the list." with the parts that
+	// stand, or "All clear." where nothing waits.
+	First string
+	// Intro opens the second sentence, which Rest completes; both are empty
+	// where every number of the second is zero.
+	Intro string
+	Rest  []SublinePart
+}
+
+// Subline is the home page's: faults are the waits something stops (held, gave
+// up, blocked, stranded), everything else that waits is to decide, and a wait
+// with both stands once, as a fault.
+func (h Home) Subline() Subline {
+	var out Subline
+	held := 0
+	for _, w := range h.Attention {
+		if w.Fault() {
+			held++
+		}
 	}
-	return h.Running[0].Age
+	var first []string
+	if n := len(h.Attention) - held; n > 0 {
+		first = append(first, fmt.Sprintf("%d to decide", n))
+	}
+	if held > 0 {
+		first = append(first, fmt.Sprintf("%d held", held))
+	}
+	switch len(first) {
+	case 0:
+		out.First = "All clear."
+	case 2:
+		out.First = strings.Join(first, ", ") + ", both in the list."
+	default:
+		out.First = first[0] + "."
+	}
+	for _, p := range []struct {
+		n          int
+		words, ref string
+	}{
+		{h.YardWorking(), "moving", "/sessions"},
+		{h.YardOpen(), "open", "/flows"},
+		{h.ClosedCount, "closed today", "/beads?all=1"},
+		{h.YardArriving(), "arriving", ""},
+		{h.Late, "late", "/line"},
+	} {
+		if p.n > 0 {
+			out.Rest = append(out.Rest, SublinePart{Text: fmt.Sprintf("%d %s", p.n, p.words), Href: p.ref})
+		}
+	}
+	if len(out.Rest) > 0 {
+		out.Intro = "The rest of " + h.Yard + " runs:"
+	}
+	return out
 }
 
 // feedShown is how many kept events home's feed names before "All
@@ -364,16 +410,38 @@ func (h Home) FeedLines() []Entry { return h.Kept[:min(len(h.Kept), feedShown)] 
 
 // MoreActivity reports whether entries hide behind "All activity": the
 // filter or the cap left some of the page out.
-func (h Home) MoreActivity() bool { return len(h.FeedLines()) < len(h.Events) }
+func (h Home) MoreActivity() bool { return !h.All && len(h.FeedLines()) < len(h.Events) }
+
+// FeedRow is one entry of the feed as the page draws it: Head says it opens an
+// hour, which its head stands above.
+type FeedRow struct {
+	Entry
+	Head bool
+}
+
+// FeedRows are the entries the page names, newest first: every one of the page
+// behind ?all=1, else the lines home keeps. An entry opens an hour where the
+// one above it is of another.
+func (h Home) FeedRows() []FeedRow {
+	entries := h.FeedLines()
+	if h.All {
+		entries = h.Events
+	}
+	out := make([]FeedRow, len(entries))
+	for i, e := range entries {
+		out[i] = FeedRow{Entry: e, Head: i == 0 || entries[i-1].HourKey() != e.HourKey()}
+	}
+	return out
+}
 
 // closedShown is how many beads that closed today the home page names.
 const closedShown = 10
 
 // closedToday are the beads of beads that closed on now's date, the newest
-// first, at most closedShown. The date is this machine's, as the pages show
-// times; the store keeps close times in UTC, so they are read back in the
-// clock's zone before the date is taken.
-func closedToday(beads []store.Bead, now time.Time) []HomeClosed {
+// first, at most closedShown, and how many closed in all. The date is this
+// machine's, as the pages show times; the store keeps close times in UTC, so
+// they are read back in the clock's zone before the date is taken.
+func closedToday(beads []store.Bead, now time.Time) (shown []HomeClosed, total int) {
 	out := []HomeClosed{}
 	loc := now.Location()
 	y, m, d := now.In(loc).Date()
@@ -390,7 +458,59 @@ func closedToday(beads []store.Bead, now time.Time) []HomeClosed {
 	slices.SortStableFunc(out, func(a, b HomeClosed) int {
 		return cmp.Or(b.ClosedAt.Compare(a.ClosedAt), cmp.Compare(a.ID, b.ID))
 	})
-	return out[:min(len(out), closedShown)]
+	return out[:min(len(out), closedShown)], len(out)
+}
+
+// readHome reads what the overview stands on, for / and for /line, whose stage
+// it is too: the feed's page first, so a bead the feed shows created is never
+// missing from the counts beside it, then the yard, the line with the beads
+// running late, what waits for the person (and the one card of it that stands
+// whole) and what closed today. before is the feed page asked for, all the
+// ?all=1 of it.
+func (s *Server) readHome(ctx context.Context, before uint64, all bool) (*Home, *Line, error) {
+	feed, err := s.feed(ctx, before)
+	if err != nil {
+		return nil, nil, err
+	}
+	ov, err := s.overview(ctx, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	ov.Feed = *feed
+	// ?all=1, new on home after the /beads convention: the full page, and
+	// an unfiltered stream. Else the feed keeps the kept lines, and the
+	// first page's stream carries them.
+	ov.All = all
+	if !ov.All {
+		ov.Kept = s.keptHome(ctx, feed)
+	}
+	l, err := s.line(ctx, ov)
+	if err != nil {
+		return nil, nil, err
+	}
+	// The beads running past their usual time: the subline counts them and
+	// the Running rows of the list say how late, on every page of the
+	// overview; /line lists them in a section of their own.
+	if l.Late, err = s.lateRows(ctx, ov.yard); err != nil {
+		return nil, nil, err
+	}
+	ov.Late = len(l.Late)
+	ov.Attention = append(ov.Attention, attention(ov, l)...)
+	// The first asked wait's oldest ask stands whole on the stage; the cards
+	// of the others open on their beads' pages.
+	for _, w := range ov.Attention {
+		if c := w.FirstCard(); c != nil {
+			ov.Card = c
+			break
+		}
+	}
+	// What closed today: every closed bead, as /beads?all=1 lists them.
+	closed, err := s.st.ListBeads(ctx, store.BeadFilter{All: true, Viewer: s.acting(ctx)})
+	if err != nil {
+		return nil, nil, err
+	}
+	ov.Closed, ov.ClosedCount = closedToday(closed, time.Now())
+	return ov, l, nil
 }
 
 func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
@@ -403,57 +523,31 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	// The feed first: the line is read after it, so a bead the feed shows
-	// created is never missing from the counts beside it.
-	feed, err := s.feed(r.Context(), before)
+	ov, l, err := s.readHome(r.Context(), before, all(r))
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	ov, err := s.overview(r.Context(), nil)
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	ov.Feed = *feed
-	// ?all=1, new on home after the /beads convention: the full page, and
-	// an unfiltered stream. Else the feed keeps the kept lines, and the
-	// first page's stream carries them.
-	ov.All = all(r)
-	if !ov.All {
-		ov.Kept = s.keptHome(r.Context(), feed)
-	}
-	l, err := s.line(r.Context(), ov)
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	ov.Attention = append(ov.Attention, attention(ov, l)...)
-	// What runs now: the live sessions but the manual groups' claims.
+	// What runs now: the live sessions but the manual groups' claims. The
+	// page names none of them, the JSON does.
 	rd := s.newReader(nil)
 	for _, sess := range ov.yard.sessions {
 		if row, manual := sessionRow(r.Context(), rd, sess); !manual {
 			ov.Running = append(ov.Running, row)
 		}
 	}
-	// What closed today: every closed bead, as /beads?all=1 lists them.
-	all, err := s.st.ListBeads(r.Context(), store.BeadFilter{All: true, Viewer: s.acting(r.Context())})
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	ov.Closed = closedToday(all, time.Now())
 	// The first page of the feed follows the yard: each kept event's entry
 	// goes on its top, and the overview stays as it was read, so the leaf
 	// refreshes the rail and the list alone. An older page is a snapshot.
 	stream, live := "", ""
 	if before == 0 {
 		live = liveNone
+		ov.Follow = true
 		if !ov.All {
 			stream = "home"
 		}
 	}
-	s.respond(w, r, Page{Template: "home", Title: "Home", Data: ov, line: l, ov: ov, head: feed.Head, stream: stream, live: live})
+	s.respond(w, r, Page{Template: "overview", Kind: "overview", Title: "Decide", Data: ov, line: l, ov: ov, head: ov.Feed.Head, stream: stream, live: live})
 }
 
 // Unbuilt is the Data of a bar page no child of the train has built yet.

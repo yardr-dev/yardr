@@ -3,26 +3,90 @@ package web_test
 import (
 	"context"
 	"fmt"
+	"html"
 	"net/http/httptest"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
 	"yardr.dev/yardr/internal/web"
 )
 
-// feedSection is the feed part of a home page: its entries, without the
-// overview above them.
-func feedSection(t *testing.T, text string) string {
+// feedBlock is the feed's block of a page, squashed: its head, with All
+// activity where the page has it, and the entries under it.
+func feedBlock(t *testing.T, text string) string {
 	t.Helper()
-	_, s, _ := strings.Cut(squash(text), `<section class="feed"`)
+	_, s, _ := strings.Cut(squash(stageOf(t, text)), `<section class="wv-block" aria-label="What happened">`)
 	s, _, _ = strings.Cut(s, `</section>`)
 	if s == "" {
 		t.Fatal("the page has no feed")
 	}
 	return s
+}
+
+// feedSection is the feed part of a home page: its entries and the heads of
+// their hours, without the overview above them.
+func feedSection(t *testing.T, text string) string {
+	t.Helper()
+	_, s, _ := strings.Cut(feedBlock(t, text), `<ol class="wv-feed" id="feed"`)
+	s, _, _ = strings.Cut(s, `</ol>`)
+	if s == "" {
+		t.Fatal("the page has no feed")
+	}
+	return s
+}
+
+// feedEntry is one entry of the feed as the page says it: its tone, what
+// happened, the bead it is of, with the bead's title as the link says it, and
+// the note under it.
+type feedEntry struct{ seq, tone, what, bead, title, note string }
+
+var (
+	entryToneRE  = regexp.MustCompile(`^(?: wv-entry--([a-z]+))?" id="e(\d+)">`)
+	entryWhatRE  = regexp.MustCompile(`<span class="wv-entry__what">(.*?)</span>`)
+	entryTitleRE = regexp.MustCompile(`<a class="wv-entry__title" href="/beads/([^"]*)">(.*?)</a>`)
+	entryNoteRE  = regexp.MustCompile(`<p class="wv-entry__note">(.*?)</p>`)
+)
+
+// feedEntries are the entries of the feed of a page, newest first.
+func feedEntries(t *testing.T, text string) []feedEntry {
+	t.Helper()
+	var out []feedEntry
+	for _, chunk := range strings.Split(feedSection(t, text), `<li class="wv-entry`)[1:] {
+		chunk, _, _ = strings.Cut(chunk, `</li>`)
+		var e feedEntry
+		if m := entryToneRE.FindStringSubmatch(chunk); m != nil {
+			e.tone, e.seq = m[1], m[2]
+		} else {
+			t.Fatalf("an entry that is none: %s", chunk)
+		}
+		if m := entryWhatRE.FindStringSubmatch(chunk); m != nil {
+			e.what = html.UnescapeString(m[1])
+		}
+		if m := entryTitleRE.FindStringSubmatch(chunk); m != nil {
+			e.bead, e.title = m[1], html.UnescapeString(m[2])
+		}
+		if m := entryNoteRE.FindStringSubmatch(chunk); m != nil {
+			e.note = html.UnescapeString(m[1])
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// said is what the entries say of what happened, each as its tone and its
+// words: "held|held", "|noted".
+func said(entries []feedEntry) []string {
+	var out []string
+	for _, e := range entries {
+		out = append(out, e.tone+"|"+e.what)
+	}
+	return out
 }
 
 // ownedFixture serves a yard the test can log any event kind on, as
@@ -98,55 +162,60 @@ func TestHomeFeedKeeps(t *testing.T) {
 	_, err = f.st.AdvanceNote(ctx, b.ID, "merged", "assembly: merged 70dabcd", store.Expect{}, "assembly")
 	must(t, err)
 
-	s := feedSection(t, f.get("/").body)
+	entries := feedEntries(t, f.get("/").body)
+	got := said(entries)
 	for _, want := range []string{
-		`<span class="held">held</span>`,
-		`<span>no longer held</span>`,
-		`<span>session blocked</span>`,
-		`<span>session unblocked</span>`,
-		`<span>gave up</span>`,
-		`<span>crew gave up</span>`,
-		`<span class="held">harness stopped on an error: at capacity</span>`,
-		`<span class="held">session ended: failed</span>`,
-		`<span>noted</span>`,
-		`<span class="landed">landed in merged at 70dabcd</span>`,
-		`<a class="item older label" href="/?all=1">All activity ›</a>`,
+		"held|held",
+		"|no longer held",
+		"|session blocked",
+		"|session unblocked",
+		"|gave up",
+		"|crew gave up",
+		"held|harness stopped on an error: at capacity",
+		"held|session ended: failed",
+		"|noted",
+		"landed|landed in merged at 70dabcd",
 	} {
-		if !strings.Contains(s, want) {
-			t.Errorf("the feed lacks %q", want)
+		if !slices.Contains(got, want) {
+			t.Errorf("the feed lacks %q: %q", want, got)
 		}
+	}
+	if block := feedBlock(t, f.get("/").body); !strings.Contains(block, `<a class="wv-sh__count" href="/?all=1">All activity</a>`) {
+		t.Errorf("the feed's head lacks All activity: %s", block)
 	}
 	for _, not := range []string{
-		`<span>created</span>`,
-		`claimed by`,
-		`session started`,
-		`<span>updated</span>`,
-		`dep added`,
-		`subscribed`,
-		`workspace removed`,
-		`daemon replaced`,
-		`server replaced`,
-		`crew started`,
-		`crew stopped`,
-		`crew rotation asked`,
-		`crew status`,
-		`session prompted`,
-		`session idle`,
-		`session stalled`,
-		`move refused`,
-		`<span>mail`,
-		`moved from new to review (done)`,
+		"created",
+		"claimed by",
+		"session started",
+		"updated",
+		"dep added",
+		"subscribed",
+		"workspace removed",
+		"daemon replaced",
+		"server replaced",
+		"crew started",
+		"crew stopped",
+		"crew rotation asked",
+		"crew status",
+		"session prompted",
+		"session idle",
+		"session stalled",
+		"move refused",
+		"mail",
+		"moved from new to review (done)",
 		// The landing's move, hidden beside it.
-		`moved from review to merged`,
-		`>Older<`,
-		// One line each: no note stands under a row.
-		`entry-note`,
+		"moved from review to merged",
 	} {
-		if strings.Contains(s, not) {
-			t.Errorf("the feed has %q", not)
+		for _, e := range entries {
+			if e.what == not || (len(not) > 6 && strings.Contains(e.what, not)) {
+				t.Errorf("the feed has %q", not)
+			}
 		}
 	}
-	if n := strings.Count(s, "<article"); n != 10 {
+	if strings.Contains(feedSection(t, f.get("/").body), ">Older<") {
+		t.Error("the feed names an older page, and All activity is there instead")
+	}
+	if n := len(entries); n != 10 {
 		t.Errorf("the feed shows %d entries, want the 10 kept", n)
 	}
 	// The stream the page hangs its feed on carries the kept entries.
@@ -226,33 +295,36 @@ func TestHomeFeedMoves(t *testing.T) {
 	must(t, own.LogEvent(ctx, b.ID, "timer", "yard",
 		map[string]any{"by": "yard", "to": "me", "text": "timer: stand up"}))
 
-	s := feedSection(t, f.get("/").body)
+	entries := feedEntries(t, f.get("/").body)
+	got := said(entries)
 	for _, want := range []string{
-		`<span>moved from new to decide</span>`,
-		`<span>moved from decide to new</span>`,
-		`<span>moved from review to new (changes)</span>`,
-		`<span>moved from approved to new (failed)</span>`,
-		`<span class="landed">landed in merged</span>`,
-		`<span>released, to be routed again</span>`,
-		`<span>closed: dropped</span>`,
-		`<span>reopened</span>`,
-		`<span>timer of yard for me</span>`,
+		"|moved from new to decide",
+		"|moved from decide to new",
+		"|moved from review to new (changes)",
+		"|moved from approved to new (failed)",
+		"landed|landed in merged",
+		"|released, to be routed again",
+		"|closed: dropped",
+		"|reopened",
+		"|timer of yard for me",
 	} {
-		if !strings.Contains(s, want) {
-			t.Errorf("the feed lacks %q", want)
+		if !slices.Contains(got, want) {
+			t.Errorf("the feed lacks %q: %q", want, got)
 		}
 	}
 	for _, not := range []string{
-		`moved from new to review (done)`,
-		`moved from review to approved (done)`,
-		`moved from approved to merged`,
-		`<span>created</span>`,
+		"moved from new to review (done)",
+		"moved from review to approved (done)",
+		"moved from approved to merged",
+		"created",
 	} {
-		if strings.Contains(s, not) {
-			t.Errorf("the feed has %q", not)
+		for _, e := range entries {
+			if e.what == not {
+				t.Errorf("the feed has %q", not)
+			}
 		}
 	}
-	if n := strings.Count(s, "<article"); n != 9 {
+	if n := len(entries); n != 9 {
 		t.Errorf("the feed shows %d entries, want the 9 kept", n)
 	}
 }
@@ -269,10 +341,10 @@ func TestHomeFeedTen(t *testing.T) {
 		must(t, f.st.AddNote(ctx, b.ID, fmt.Sprint("remark ", i), "me"))
 	}
 	s := feedSection(t, f.get("/").body)
-	if n := strings.Count(s, "<article"); n != 10 {
+	if n := len(feedEntries(t, f.get("/").body)); n != 10 {
 		t.Errorf("the feed shows %d entries, want 10", n)
 	}
-	if !strings.Contains(s, `href="/?all=1">All activity ›</a>`) {
+	if !strings.Contains(feedBlock(t, f.get("/").body), `href="/?all=1">All activity</a>`) {
 		t.Error("the feed lacks All activity behind its 10")
 	}
 	// The 10 shown are the 10 newest, each row carrying its seq as id.
@@ -291,17 +363,16 @@ func TestHomeFeedTen(t *testing.T) {
 			t.Errorf("the feed shows e%d past its 10", e.Seq)
 		}
 	}
-	all := feedSection(t, f.get("/?all=1").body)
-	if n := strings.Count(all, "<article"); n != 13 {
+	if n := len(feedEntries(t, f.get("/?all=1").body)); n != 13 {
 		t.Errorf("the full feed shows %d entries, want the 12 notes and the creation", n)
 	}
-	if strings.Contains(all, "All activity") {
+	if strings.Contains(feedBlock(t, f.get("/?all=1").body), "All activity") {
 		t.Error("the full feed names All activity, and it is there")
 	}
 
 	empty := newFixture(t)
 	s = feedSection(t, empty.get("/").body)
-	if !strings.Contains(s, "Nothing has happened yet.") || strings.Contains(s, "All activity") {
+	if !strings.Contains(s, "Nothing has happened yet.") || strings.Contains(feedBlock(t, empty.get("/").body), "All activity") {
 		t.Errorf("the empty feed says %q", s)
 	}
 }
@@ -347,13 +418,18 @@ func TestHomeStream(t *testing.T) {
 		map[string]any{"from": "review", "to": "merged"}))
 	must(t, own.LogEvent(ctx, c.ID, "closed", "assembly", map[string]any{"reason": "merged"}))
 
-	if fr := s.next(t); !strings.Contains(fr.data, `<span>noted</span>`) {
-		t.Errorf("the note came as %q, want its fragment", fr.data)
+	// A fragment is the head of its hour and the entry under it: the stream
+	// knows nothing of what the page shows, and the page drops a head that
+	// repeats the one above it.
+	hour := `<li class="wv-hour" data-hour="`
+	if fr := s.next(t); !strings.HasPrefix(fr.data, hour) || !strings.Contains(fr.data, `<span class="wv-entry__what">noted</span>`) {
+		t.Errorf("the note came as %q, want its hour's head and its fragment", fr.data)
 	}
 	if fr := s.next(t); fr.data != "" {
 		t.Errorf("the creation came as %q, want its id alone", fr.data)
 	}
-	if fr := s.next(t); !strings.Contains(fr.data, `<span class="held">held</span>`) {
+	if fr := s.next(t); !strings.HasPrefix(fr.data, hour) || !strings.Contains(fr.data, `<li class="wv-entry wv-entry--held"`) ||
+		!strings.Contains(fr.data, `<span class="wv-entry__what">held</span>`) {
 		t.Errorf("the hold came as %q, want its fragment", fr.data)
 	}
 	if fr := s.next(t); fr.data != "" {
@@ -362,7 +438,8 @@ func TestHomeStream(t *testing.T) {
 	if fr := s.next(t); fr.data != "" {
 		t.Errorf("the landing's move came as %q, want its id alone", fr.data)
 	}
-	if fr := s.next(t); !strings.Contains(fr.data, `<span class="landed">landed in merged</span>`) {
+	if fr := s.next(t); !strings.Contains(fr.data, `<li class="wv-entry wv-entry--landed"`) ||
+		!strings.Contains(fr.data, `<span class="wv-entry__what">landed in merged</span>`) {
 		t.Errorf("the landing came as %q, want its fragment", fr.data)
 	}
 	s.quiet(t)
@@ -388,11 +465,11 @@ func TestHomeFeedNotes(t *testing.T) {
 	must(t, f.st.AddNote(ctx, crew.ID, "a crew line", "yardmaster"))
 
 	s := feedSection(t, f.get("/").body)
-	if n := strings.Count(s, "<article"); n != 2 {
+	if n := len(feedEntries(t, f.get("/").body)); n != 2 {
 		t.Errorf("the feed shows %d entries, want the user and crew notes", n)
 	}
 	for _, id := range []string{user.ID, crew.ID} {
-		if !strings.Contains(s, `<a class="bead" href="/beads/`+id+`">`) {
+		if !strings.Contains(s, `<span class="wv-id">`+id+`</span>`) {
 			t.Errorf("the feed lacks the note on %s", id)
 		}
 	}
@@ -401,13 +478,18 @@ func TestHomeFeedNotes(t *testing.T) {
 			t.Errorf("the feed shows the note on %s", id)
 		}
 	}
-	if !strings.Contains(s, `href="/?all=1">All activity ›</a>`) {
+	if !strings.Contains(feedBlock(t, f.get("/").body), `href="/?all=1">All activity</a>`) {
 		t.Error("the feed names no All activity behind its two")
 	}
 
-	all := feedSection(t, f.get("/?all=1").body)
-	if n := strings.Count(all, "<span>noted</span>"); n != 4 {
-		t.Errorf("the full feed shows %d notes, want every one", n)
+	noted := 0
+	for _, e := range feedEntries(t, f.get("/?all=1").body) {
+		if e.what == "noted" {
+			noted++
+		}
+	}
+	if noted != 4 {
+		t.Errorf("the full feed shows %d notes, want every one", noted)
 	}
 	h := homeJSON(t, f, "/")
 	var kinds int
@@ -426,5 +508,48 @@ func TestHomeFeedNotes(t *testing.T) {
 		if body := f.get("/beads/" + c.id).body; !strings.Contains(body, c.note) {
 			t.Errorf("the bead's page lacks its %q", c.note)
 		}
+	}
+}
+
+// The feed is grouped by the hour: an entry opens an hour where the one above
+// it is of another, and the head says the hour, with the day before it where
+// the hour is not today's. The groups are the reader's machine's, as the pages
+// show times.
+func TestFeedByTheHour(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	today := func(h, m int) time.Time { return time.Date(now.Year(), now.Month(), now.Day(), h, m, 0, 0, time.Local) }
+	past := func(h, m int) time.Time { return time.Date(2020, 3, 4, h, m, 0, 0, time.Local) }
+	entry := func(seq uint64, at time.Time) web.Entry { return web.Entry{Seq: seq, At: at, Text: "noted"} }
+	h := web.Home{All: true, Feed: web.Feed{Events: []web.Entry{
+		entry(6, today(14, 58)), entry(5, today(14, 30)), entry(4, today(3, 7)), entry(3, past(14, 50)), entry(2, past(14, 2)), entry(1, past(9, 59)),
+	}}}
+	var heads []bool
+	for _, r := range h.FeedRows() {
+		heads = append(heads, r.Head)
+	}
+	if want := []bool{true, false, true, true, false, true}; !slices.Equal(heads, want) {
+		t.Errorf("the entries open hours %v, want %v", heads, want)
+	}
+	for _, c := range []struct {
+		at         time.Time
+		minute     string
+		label, key string
+	}{
+		{today(14, 58), "14:58", "14:00", today(14, 0).Format("2006-01-02T15")},
+		{today(3, 7), "03:07", "03:00", today(3, 0).Format("2006-01-02T15")},
+		{past(14, 50), "14:50", "Mar 4 14:00", "2020-03-04T14"},
+		{past(9, 59), "09:59", "Mar 4 09:00", "2020-03-04T09"},
+	} {
+		e := entry(1, c.at)
+		if e.Minute() != c.minute || e.HourLabel() != c.label || e.HourKey() != c.key {
+			t.Errorf("%v: minute %q, hour %q (key %q), want %q, %q (%q)", c.at, e.Minute(), e.HourLabel(), e.HourKey(), c.minute, c.label, c.key)
+		}
+	}
+	// The kept lines are the first ten of the kept entries; the full page names
+	// every entry of the page.
+	kept := web.Home{Kept: slices.Repeat([]web.Entry{entry(1, today(1, 0))}, 12)}
+	if n := len(kept.FeedRows()); n != 10 {
+		t.Errorf("the kept feed names %d entries, want 10", n)
 	}
 }

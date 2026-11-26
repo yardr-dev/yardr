@@ -314,17 +314,17 @@ func TestFeedHTML(t *testing.T) {
 	for _, want := range []string{
 		shellOpen(h.Head, "home"),
 		leafOf("/", "none"),
-		`<section class="feed" id="feed" aria-label="What happened" sse-swap="message" hx-target="this" hx-swap="afterbegin">`,
-		`<p class="item label">Just happened</p>`,
+		`<ol class="wv-feed" id="feed" sse-swap="message" hx-target="this" hx-swap="afterbegin">`,
+		`<h2 class="wv-sh"><span>What happened</span><a class="wv-sh__count" href="/?all=1">All activity</a></h2>`,
 		`Nothing for you.`,
-		`<a class="item older label" href="/?all=1">All activity ›</a>`,
-		`<li><a href="/beads?all=1">Closed today 1 ›</a></li>`,
+		`<a href="/beads?all=1">1 closed today</a>`,
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("the page lacks %q", want)
 		}
 	}
-	if n := strings.Count(text, "<article"); n != 0 {
+	entry := regexp.MustCompile(`<li class="wv-entry[" ]`)
+	if n := len(entry.FindAllString(text, -1)); n != 0 {
 		t.Errorf("the first page shows %d entries, want none of the 50 creations", n)
 	}
 	if strings.Contains(text, ">Older<") {
@@ -335,14 +335,14 @@ func TestFeedHTML(t *testing.T) {
 	for _, want := range []string{
 		shellOpen(h.Head, ""),
 		leafOf("/?all=1", "none"),
-		fmt.Sprintf(`<article class="item entry entry-line" id="e%d">`, h.Head),
-		fmt.Sprintf(`<a class="item older label" href="/?all=1&amp;before=%d" hx-get="/?all=1&amp;before=%[1]d" hx-trigger="intersect once" hx-select="#feed > *" hx-target="this" hx-swap="outerHTML" hx-push-url="false" hx-select-oob="unset">Older</a>`, h.Older),
+		fmt.Sprintf(`<li class="wv-entry" id="e%d">`, h.Head),
+		fmt.Sprintf(`<li class="wv-older" hx-get="/?all=1&amp;before=%d" hx-trigger="intersect once" hx-select="#feed > *" hx-target="this" hx-swap="outerHTML" hx-push-url="false" hx-select-oob="unset"><a href="/?all=1&amp;before=%[1]d">Older</a></li>`, h.Older),
 	} {
 		if !strings.Contains(all, want) {
 			t.Errorf("the full page lacks %q", want)
 		}
 	}
-	if n := strings.Count(all, "<article"); n != 50 {
+	if n := len(entry.FindAllString(all, -1)); n != 50 {
 		t.Errorf("the full page shows %d entries, want 50", n)
 	}
 	for _, not := range []string{"format=home", "All activity"} {
@@ -353,23 +353,23 @@ func TestFeedHTML(t *testing.T) {
 
 	old := squash(f.get(fmt.Sprintf("/?all=1&before=%d", h.Older)).body)
 	for _, want := range []string{
-		`<section class="feed" id="feed" aria-label="What happened">`,
-		`<span class="landed">landed in merged at 70dabcd</span>`,
+		`<ol class="wv-feed" id="feed">`,
+		`<li class="wv-entry wv-entry--landed" id="e`,
+		`<span class="wv-entry__what">landed in merged at 70dabcd</span>`,
 		// Unfiltered, the landing stands twice, as today.
-		`<span>moved from review to merged</span>`,
-		`<a class="bead" href="/beads/` + b.ID + `">` + b.ID + `</a>`,
-		`<span class="held">held</span>`,
-		`<span class="entry-title">a door</span>`,
-		`<time class="label" datetime="`,
+		`<span class="wv-entry__what">moved from review to merged</span>`,
+		`<span class="wv-id">` + b.ID + `</span>`,
+		`<li class="wv-entry wv-entry--held" id="e`,
+		`<a class="wv-entry__title" href="/beads/` + b.ID + `">a door</a>`,
+		`<time class="wv-entry__at" datetime="`,
 	} {
 		if !strings.Contains(old, want) {
 			t.Errorf("the older page lacks %q", want)
 		}
 	}
-	// The shell's stream is there for the right column; the feed takes
-	// nothing from it. The overview is on the first page only, and one
-	// line carries no note.
-	for _, not := range []string{"sse-swap", `>Closed today`, `<p class="answer">`, "dear diary", `>Older<`, "Just happened", `entry-note`} {
+	// The shell's stream is there for the page's own reads; the feed takes
+	// nothing from it. The overview is on the first page only.
+	for _, not := range []string{"sse-swap", "closed today", `wv-answer`, "dear diary", `>Older<`, "wv-ask"} {
 		if strings.Contains(old, not) {
 			t.Errorf("the older page, the last, has %q", not)
 		}
@@ -386,6 +386,24 @@ func TestFeedEscapes(t *testing.T) {
 	must(t, f.st.AddNote(ctx, b.ID, "<img src=x>\n\ndata: second line", "me"))
 	if body := f.get("/").body; strings.Contains(body, "<script>alert") || strings.Contains(body, "<img") {
 		t.Error("the page carries an event's text as markup")
+	}
+	// A note stands as letters, as everywhere a note is drawn: no control
+	// character or mark of direction of the writer's reaches the feed, which
+	// shows a note under its entry, and the JSON keeps it as it was written.
+	hostile := "a\x1b[31mred\u202eb\u2066c\u2028d"
+	must(t, f.st.AddNote(ctx, b.ID, hostile, "me"))
+	entries := feedEntries(t, f.get("/?all=1").body)
+	if len(entries) == 0 || entries[0].what != "noted" || entries[0].note != "a[31mredbcd" {
+		t.Errorf("the feed's note is %+v, want the writer's words as letters", entries[:min(1, len(entries))])
+	}
+	body := f.get("/?all=1").body
+	for _, mark := range []string{"\x1b", "\u202e", "\u2066", "\u2028"} {
+		if strings.Contains(body, mark) {
+			t.Errorf("the feed carries %q of a note", mark)
+		}
+	}
+	if h := homeJSON(t, f, "/?all=1"); len(h.Events) == 0 || h.Events[0].Note != "a\x1b[31mred\u202eb\u2066c\u2028d" {
+		t.Errorf("the JSON's note is %q, want it as written", h.Events[0].Note)
 	}
 	s := f.stream(t, "/events?after=0")
 	for range 2 {
@@ -585,22 +603,25 @@ func TestEventsHTML(t *testing.T) {
 	must(t, f.st.AddNote(ctx, b.ID, "two\nlines", "me"))
 
 	fr := s.next(t)
-	entry := regexp.MustCompile(`(?s)<article class="item entry entry-line" id="e\d+">.*?</article>`)
-	if fr.id != head+1 || !strings.HasPrefix(fr.data, fmt.Sprintf(`<article class="item entry entry-line" id="e%d">`, fr.id)) ||
-		!strings.Contains(fr.data, `<span>created</span>`) ||
-		!strings.Contains(fr.data, `<a class="bead" href="/beads/`+b.ID+`">`+b.ID+`</a>`) ||
-		!strings.Contains(fr.data, `<span class="entry-title">a door</span>`) {
+	entry := regexp.MustCompile(`(?s)<li class="wv-entry" id="e\d+">.*?</li>`)
+	hour, entryFrom, _ := strings.Cut(fr.data, "\n")
+	if fr.id != head+1 || !strings.HasPrefix(hour, `<li class="wv-hour" data-hour="`) ||
+		!strings.HasPrefix(entryFrom, fmt.Sprintf(`<li class="wv-entry" id="e%d">`, fr.id)) ||
+		!strings.Contains(fr.data, `<span class="wv-entry__what">created</span>`) ||
+		!strings.Contains(fr.data, `<a class="wv-entry__title" href="/beads/`+b.ID+`">a door</a><span class="wv-id">`+b.ID+`</span>`) {
 		t.Errorf("frame %d: %s", fr.id, fr.data)
 	}
-	// The fragment is the page's own markup for the entry.
-	if page := entry.FindString(f.get(fmt.Sprintf("/?all=1&before=%d", head+2)).body); page != fr.data {
-		t.Errorf("the stream's entry\n%s\nis not the page's\n%s", fr.data, page)
+	// The fragment is the head of its hour and the page's own markup for the
+	// entry.
+	if page := entry.FindString(f.get(fmt.Sprintf("/?all=1&before=%d", head+2)).body); page != entryFrom {
+		t.Errorf("the stream's entry\n%s\nis not the page's\n%s", entryFrom, page)
 	}
 	if fr := s.next(t); fr.id != head+2 || fr.data != "" {
 		t.Errorf("the journal entry came as %d with data %q, want its id alone", fr.id, fr.data)
 	}
-	if fr := s.next(t); fr.id != head+3 || !strings.Contains(fr.data, `<span>noted</span>`) {
-		t.Errorf("frame %d: %q, want the note's one line", fr.id, fr.data)
+	if fr := s.next(t); fr.id != head+3 || !strings.Contains(fr.data, `<span class="wv-entry__what">noted</span>`) ||
+		!strings.Contains(fr.data, `<p class="wv-entry__note">two`+"\n"+`lines</p>`) {
+		t.Errorf("frame %d: %q, want the note's line with its words under it", fr.id, fr.data)
 	}
 }
 

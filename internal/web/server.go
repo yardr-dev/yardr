@@ -469,6 +469,11 @@ type Page struct {
 	Status int
 	// Template is the page's file in templates/, without .html.
 	Template string
+	// Kind is the stage kind the page draws itself as (docs/web.md, The
+	// stage kinds): the page's own head and article, whose data-kind it
+	// writes. The shell draws its transitional heading above the content of a
+	// page that names none.
+	Kind string
 	// Title is the browser's title for the page; the yard's name follows it.
 	Title string
 	Data  any
@@ -509,6 +514,11 @@ type Page struct {
 	// page that is a snapshot, or follows the yard in fragments of its own.
 	live string
 }
+
+// Overview is the overview the page was drawn from, for the two pages that
+// draw it as their stage (/ and /line): the one the handler passes for the
+// shell's counts, whichever of its own data the page answers JSON with.
+func (p Page) Overview() *Home { return p.ov }
 
 // The swaps of a live page's leaf: the stage's own, which a read of the page
 // puts in place keeping the list and an open drawer, or none, for a page

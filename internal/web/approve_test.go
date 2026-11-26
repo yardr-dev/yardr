@@ -245,9 +245,9 @@ func (y *approveYard) witness() string {
 	return ""
 }
 
-// approveSurfaces are the places a card stands: its bead's page, Home's
-// needs rows and the line's waits (whose right column is the same
-// partial). Each posts the card's answers to the bead's handler.
+// approveSurfaces are the places a card stands: its bead's page and the
+// overview's two pages, home and /line. Each posts the card's answers to the
+// bead's handler.
 var approveSurfaces = []struct {
 	name string
 	path func(bead string) string
@@ -260,14 +260,14 @@ var approveSurfaces = []struct {
 const (
 	// approveButton is the button a strong card's approval stands behind,
 	// in the yard these tests name depot.
-	approveButton = `<button type="submit" name="action" value="approve">Approve in depot</button>`
+	approveButton = `<button class="wv-btn" type="submit" name="action" value="approve">Approve in depot</button>`
 	// noGateLine is what a weighty card says where its window holds no gate
 	// for it.
 	noGateLine = "This card is weighty and this window has no gate."
 	// wordsField is the field a card's words ride in, a decline's reason
 	// among them, and declineButton the button that sends the decline.
 	wordsField    = `hx-preserve="true" name="words" placeholder="Words with the answer, or why not" aria-label="Words">`
-	declineButton = `<button type="submit" name="action" value="decline" title="Say no to all options. The asker finds another way.">Decline</button>`
+	declineButton = `<button class="wv-btn" type="submit" name="action" value="decline" title="Say no to all options. The asker finds another way.">Decline</button>`
 )
 
 // surfaceBody is the page at path as the token's user reads it.
@@ -349,16 +349,15 @@ func TestWebApprovesARoutineRunCard(t *testing.T) {
 	if !strings.Contains(page.body, `value="approve"`) {
 		t.Fatalf("the routine card shows no approve control: %s", page.body)
 	}
-	// The card reads as in the other places: the ask line, the asker, the
-	// run sentence naming the yard that runs the command and the user the
-	// approval is called as, and Ask about this to the crew asker's
-	// conversation.
+	// The card reads as in the other places: the head with the asker and the
+	// ask's number, the run sentence naming the yard that runs the command
+	// and the user the approval is called as, and Ask about this to the crew
+	// asker's conversation.
 	for _, want := range []string{
-		`<p class="ask-line">` + b.ID + ` · ask ` + strconv.FormatUint(seq, 10) + `</p>`,
-		`<p class="ask-asker">asked by yardmaster</p>`,
-		`<p>in depot, when you approve, the yard runs this as jo, and nothing else:</p>`,
-		`<pre class="text file">yardr settings set max_sessions 20</pre>`,
-		`<a class="ask-about" href="/talk?with=yardmaster">Ask about this</a>`,
+		`<span>yardmaster asks you</span><span class="wv-ask__age">ask ` + strconv.FormatUint(seq, 10) + ` · `,
+		`<p class="wv-ask__text">in depot, when you approve, the yard runs this as jo, and nothing else:</p>`,
+		`<pre class="wv-text wv-file">yardr settings set max_sessions 20</pre>`,
+		`<a class="wv-btn" href="/talk?with=yardmaster">Ask about this</a>`,
 	} {
 		if !strings.Contains(page.body, want) {
 			t.Errorf("the routine card lacks %q:\n%s", want, page.body)
@@ -552,7 +551,7 @@ hook:
 	for _, s := range approveSurfaces {
 		body := y.surfaceBody(s.path(hookBead.ID), standing)
 		for _, want := range []string{
-			`<input type="text" name="value-project" placeholder="project" aria-label="project">`,
+			`<input class="wv-field" type="text" name="value-project" placeholder="project" aria-label="project">`,
 			approveButton,
 		} {
 			if !strings.Contains(body, want) {
@@ -631,8 +630,8 @@ func TestWebSecretGiveUnderAFreshSignIn(t *testing.T) {
 
 	page := y.surfaceBody("/beads/"+b.ID, tok)
 	for _, want := range []string{
-		`<input type="password" name="secret-CRM_TOKEN" placeholder="CRM_TOKEN" aria-label="CRM_TOKEN" autocomplete="off">`,
-		`<button type="submit" name="action" value="give">Give in depot</button>`,
+		`<input class="wv-field" type="password" name="secret-CRM_TOKEN" placeholder="CRM_TOKEN" aria-label="CRM_TOKEN" autocomplete="off">`,
+		`<button class="wv-btn" type="submit" name="action" value="give">Give in depot</button>`,
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the hosted bead page lacks %q:\n%s", want, page)
@@ -846,8 +845,8 @@ func TestWebGoogleYardSignInUnderAFreshSignIn(t *testing.T) {
 
 	page := y.surfaceBody("/beads/"+b.ID, tok)
 	for _, want := range []string{
-		`<input type="password" name="secret-GOOGLE_CREDENTIALS" placeholder="GOOGLE_CREDENTIALS" aria-label="GOOGLE_CREDENTIALS" autocomplete="off">`,
-		`<button type="submit" name="action" value="give">Give in depot</button>`,
+		`<input class="wv-field" type="password" name="secret-GOOGLE_CREDENTIALS" placeholder="GOOGLE_CREDENTIALS" aria-label="GOOGLE_CREDENTIALS" autocomplete="off">`,
+		`<button class="wv-btn" type="submit" name="action" value="give">Give in depot</button>`,
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the hosted bead page lacks %q:\n%s", want, page)
@@ -1085,7 +1084,7 @@ func (y *approveYard) pickForm(beadID string, seq uint64, option int, words stri
 }
 
 // A mapping card in a hosted window offers its picks to an operator, on
-// its bead's page and on the needs rows and waits alike: picking starts
+// its bead's page and on the overview's card alike: picking starts
 // the gateway re-authentication bound to the card, the return picks
 // under the fresh sign-in and records it, and a second mapping card
 // inside the window picks at once. Every numbered pick takes the
@@ -1944,29 +1943,29 @@ func TestWebApprovesAStrongSetupCard(t *testing.T) {
 	if page.status != 200 {
 		t.Fatalf("GET the bead: %d: %s", page.status, page.body)
 	}
-	if !strings.Contains(page.body, "setupmail") || !strings.Contains(page.body, "need-approve") {
+	if !strings.Contains(page.body, "setupmail") || !strings.Contains(page.body, `name="account"`) {
 		t.Fatalf("the setup card shows no approval: %s", page.body)
 	}
 	for _, want := range []string{
-		`<p class="ask-says">yardmaster says:</p>`,
-		`<p>When you approve, the yard applies the pack setupmail as jo, and nothing else:</p>`,
-		approveButton + `</form>`,
+		`<p class="wv-ask__says">yardmaster says:</p>`,
+		`<p class="wv-ask__text">When you approve, the yard applies the pack setupmail as jo, and nothing else:</p>`,
+		approveButton + `</div></form>`,
 		// On its bead's page the form answers in place.
-		`<form class="need-approve" method="post" action="/beads/` + b.ID + `" hx-post="/beads/` + b.ID + `" hx-push-url="false">`,
+		`<form class="wv-ask__form" method="post" action="/beads/` + b.ID + `" hx-post="/beads/` + b.ID + `" hx-push-url="false">`,
 	} {
-		if !strings.Contains(page.body, want) {
+		if !strings.Contains(squash(page.body), want) {
 			t.Errorf("the setup card lacks %q:\n%s", want, page.body)
 		}
 	}
 	for _, s := range approveSurfaces[1:] {
-		body := y.surfaceBody(s.path(b.ID), tok)
+		body := squash(y.surfaceBody(s.path(b.ID), tok))
 		for _, want := range []string{
-			`<form class="need-approve" method="post" action="/beads/` + b.ID + `"><input type="hidden" name="rev"`,
+			`<form class="wv-ask__form" method="post" action="/beads/` + b.ID + `"><input type="hidden" name="rev"`,
 			`<input type="radio" name="option" value="1">read</label>`,
 			`<input type="radio" name="option" value="2">drafts</label>`,
-			`<input type="password" name="secret-SETUP_ACCOUNT" placeholder="SETUP_ACCOUNT" aria-label="SETUP_ACCOUNT" autocomplete="off">`,
-			`<input type="text" name="account" placeholder="Candidate source, or type above" aria-label="Candidate source">`,
-			approveButton + `</form>`,
+			`<input class="wv-field" type="password" name="secret-SETUP_ACCOUNT" placeholder="SETUP_ACCOUNT" aria-label="SETUP_ACCOUNT" autocomplete="off">`,
+			`<input class="wv-field" type="text" name="account" placeholder="Candidate source, or type above" aria-label="Candidate source">`,
+			approveButton + `</div></form>`,
 		} {
 			if !strings.Contains(body, want) {
 				t.Errorf("%s: the setup card lacks %q:\n%s", s.name, want, body)
@@ -2043,10 +2042,10 @@ func testWebSetupCardAsksAHostAndCarriesItThroughTheSignIn(t *testing.T) {
 	b := y.bead("set up mail on a server of our own")
 	seq := y.askSetup(b.ID)
 	tok := y.token("jo@example.net")
-	const hostField = `<input type="text" name="host" placeholder="Host of a server of your own: https://{host}/v1" aria-label="Host" autocomplete="off" spellcheck="false">`
+	const hostField = `<input class="wv-field" type="text" name="host" placeholder="Host of a server of your own: https://{host}/v1" aria-label="Host" autocomplete="off" spellcheck="false">`
 	for _, s := range approveSurfaces {
 		body := y.surfaceBody(s.path(b.ID), tok)
-		at, account := strings.Index(body, hostField), strings.Index(body, `<input type="password" name="secret-SETUP_ACCOUNT"`)
+		at, account := strings.Index(body, hostField), strings.Index(body, `<input class="wv-field" type="password" name="secret-SETUP_ACCOUNT"`)
 		if at < 0 || account < 0 || at > account {
 			t.Errorf("%s: the host field stands at %d and the account's at %d, want the host's above the account's:\n%s", s.name, at, account, body)
 		}
@@ -2083,10 +2082,10 @@ func testWebSetupCardAsksASiteAndCarriesItThroughTheSignIn(t *testing.T) {
 	b := y.bead("set up mail for a site of our own")
 	seq := y.askSetup(b.ID)
 	tok := y.token("jo@example.net")
-	const siteField = `<input type="text" name="site" placeholder="Site of your own: https://setupmail.example.com/ex/{site}/v1" aria-label="Site" autocomplete="off" spellcheck="false">`
+	const siteField = `<input class="wv-field" type="text" name="site" placeholder="Site of your own: https://setupmail.example.com/ex/{site}/v1" aria-label="Site" autocomplete="off" spellcheck="false">`
 	for _, s := range approveSurfaces {
 		body := y.surfaceBody(s.path(b.ID), tok)
-		at, account := strings.Index(body, siteField), strings.Index(body, `<input type="password" name="secret-SETUP_ACCOUNT"`)
+		at, account := strings.Index(body, siteField), strings.Index(body, `<input class="wv-field" type="password" name="secret-SETUP_ACCOUNT"`)
 		if at < 0 || account < 0 || at > account {
 			t.Errorf("%s: the site field stands at %d and the account's at %d, want the site's above the account's:\n%s", s.name, at, account, body)
 		}
@@ -2117,7 +2116,7 @@ func testWebSetupCardAsksASiteAndCarriesItThroughTheSignIn(t *testing.T) {
 // what a person has in front of them to answer with.
 func answerForm(t *testing.T, body string) string {
 	t.Helper()
-	_, rest, ok := strings.Cut(body, `<form class="need-answer"`)
+	_, rest, ok := strings.Cut(body, `<form class="wv-ask__form"`)
 	if !ok {
 		t.Fatalf("the page has no answer form:\n%s", body)
 	}

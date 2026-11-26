@@ -76,6 +76,7 @@
   --wv-measure: 760px;
   --wv-bar: 64px;
   --wv-gutter: 24px;
+  --wv-answer: 600 32px/38px var(--sans);
   --wv-title: 600 26px/32px var(--sans);
 
   /* corners and motion, the design system's */
@@ -263,7 +264,7 @@ ul, ol { list-style: none; }
    is a bar of four tiles at the foot, and the yard's chip moves into the top
    bar. */
 @media (max-width: 899px) {
-  :root { --wv-gutter: 16px; --wv-title: 600 22px/28px var(--sans); }
+  :root { --wv-gutter: 16px; --wv-answer: 600 26px/32px var(--sans); --wv-title: 600 22px/28px var(--sans); }
   .wv-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
   .wv-stage { grid-row: 1; padding-top: 0; }
   .wv-stage:has(#talk) { padding-top: 0; }
@@ -289,6 +290,110 @@ ul, ol { list-style: none; }
   .wv-sect > summary { min-height: 48px; }
 }
 
+/* --- the overview, the first stage kind -------------------------------- */
+
+/* The stage of / and /line (docs/web.md, The stage kinds): the answer head,
+   the one ask that stands whole, and the feed by the hour. The kit's parts in
+   yard.css's names for its tokens. The reader's own sans face is the page's;
+   the body's mono is for ids, times and commands. */
+.wv-page { padding-bottom: 32px; font: 400 14px/20px var(--sans); }
+.wv-id { font: 400 12px/16px var(--mono); color: var(--dim); white-space: nowrap; }
+.wv-text { max-width: 80ch; font: 400 14px/20px var(--sans); white-space: pre-wrap; overflow-wrap: anywhere; }
+.wv-file { max-width: none; padding: 12px 14px; overflow-x: auto; white-space: pre; background: var(--code-ground); border-radius: var(--radius-md); font: 400 12.5px/18px var(--mono); }
+
+/* The answer head: the page's one large line, a rust dot before it where
+   something waits and none where nothing does, and under it the subline, whose
+   numbers link to what lists them. */
+.wv-answer { font: var(--wv-answer); letter-spacing: -0.01em; }
+.wv-answer::before { content: ""; display: inline-block; width: 12px; height: 12px; margin: 0 14px 4px 2px; border-radius: 50%; background: var(--accent); vertical-align: middle; }
+.wv-answer--clear::before { display: none; }
+.wv-answer__sub { margin-top: 6px; font: 400 15px/22px var(--sans); color: var(--dim); }
+.wv-answer__sub a { text-decoration: underline; text-decoration-color: var(--hairline-strong); text-underline-offset: 3px; }
+.wv-answer__sub a:hover { color: var(--ink); }
+
+/* The stage's section head: a title, a count or a link in quiet words at the
+   right, a hairline under. */
+.wv-block { margin-top: 40px; }
+.wv-sh { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 4px; padding-bottom: 10px; border-bottom: 1px solid var(--hairline); font: 600 15px/20px var(--sans); }
+.wv-sh__count { font: 400 13px/18px var(--sans); color: var(--dim); text-align: right; }
+a.wv-sh__count:hover { color: var(--ink); }
+
+/* The ask card: raised and bordered, one question with its options as rows.
+   Its slots are those of docs/web.md, The ask card; one the card does not
+   have is not drawn. */
+.wv-ask { margin-top: 24px; padding: 18px 20px 16px; background: var(--panel); border: 1px solid var(--hairline); border-radius: var(--radius-lg); }
+.wv-ask + .wv-ask { margin-top: 12px; }
+.wv-ask__head { display: flex; align-items: center; gap: 10px; font: 400 13px/18px var(--sans); color: var(--text-accent); }
+.wv-ask__head .wv-dot { flex: none; margin: 0; }
+.wv-ask__age { margin-left: auto; font: 400 12px/16px var(--mono); color: var(--faint); }
+.wv-ask__weight { margin-top: 8px; font: 400 13px/18px var(--sans); color: var(--text-accent); overflow-wrap: anywhere; }
+.wv-ask__q { margin: 8px 0 4px; font: 600 20px/26px var(--sans); overflow-wrap: anywhere; }
+.wv-ask__about { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin-bottom: 10px; font: 400 13px/18px var(--sans); color: var(--dim); }
+.wv-ask__about .wv-id { color: var(--ink); }
+.wv-ask__label, .wv-ask__says { margin-top: 10px; font: 400 13px/18px var(--sans); color: var(--dim); }
+.wv-ask .wv-file { margin-top: 8px; }
+.wv-ask__text { margin-top: 8px; color: var(--dim); overflow-wrap: anywhere; }
+.wv-ask code { font: 400 12.5px/18px var(--mono); color: var(--ink); }
+.wv-ctx { margin: 6px 0 12px; color: var(--dim); }
+.wv-ctx li { margin-bottom: 4px; padding-left: 12px; border-left: 2px solid var(--hairline-strong); overflow-wrap: anywhere; }
+.wv-opts { display: flex; flex-direction: column; gap: 6px; }
+.wv-opt { display: flex; gap: 12px; width: 100%; padding: 7px 12px; text-align: left; background: var(--ground); color: var(--ink); border: 1px solid var(--hairline-strong); border-radius: var(--radius-md); font: inherit; cursor: pointer; }
+.wv-opt:hover { border-color: var(--border-hover); }
+.wv-opt--rec { border-color: var(--border-hover); }
+/* Where the view cannot answer, or a pick would be refused, an option is a
+   row to read and no button. */
+div.wv-opt { cursor: default; }
+.wv-opt__n { flex: none; width: 14px; font: 600 14px/20px var(--mono); color: var(--dim); }
+.wv-opt__b { display: flex; flex-direction: column; min-width: 0; }
+.wv-opt__t { font: 500 15px/20px var(--sans); overflow-wrap: anywhere; }
+.wv-opt__c { font: 400 13px/18px var(--sans); color: var(--dim); overflow-wrap: anywhere; }
+.wv-rec { margin: 4px 0 2px 38px; font: 400 12px/16px var(--sans); color: var(--dim); }
+.wv-ask__row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.wv-ask__pick { display: flex; align-items: center; gap: 6px; }
+
+/* Controls: a field is sunken with a hairline, a button is bordered. The
+   field's text is as big as the phone's, which would otherwise enlarge the
+   page on focus. */
+.wv-field { flex: 1; min-width: 140px; height: 34px; padding: 0 12px; background: var(--surface-sunken); color: var(--ink); border: 1px solid var(--hairline); border-radius: var(--radius-md); font: 400 14px/20px var(--sans); }
+.wv-field::placeholder { color: var(--faint); }
+.wv-btn { height: 34px; padding: 0 14px; background: transparent; color: var(--ink); border: 1px solid var(--hairline-strong); border-radius: var(--radius-md); font: 500 13px/32px var(--sans); cursor: pointer; transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out); }
+a.wv-btn { display: inline-block; }
+.wv-btn:hover { border-color: var(--border-hover); background: var(--surface-hover); color: var(--ink); }
+
+/* The feed by the hour: the head of an hour, then its entries, each a time, what
+   happened, the bead and what was said with it. A line never wraps on a
+   desktop and ends in an ellipsis. The empty sentence shows only where it is
+   first, so an entry the stream brings hides it. */
+.wv-feed { display: flex; flex-direction: column; }
+.wv-hour { padding: 14px 0 4px; font: 500 12px/16px var(--mono); color: var(--faint); }
+.wv-entry { display: flex; gap: 16px; padding: 7px 4px; border-bottom: 1px solid var(--hairline); }
+.wv-entry__at { flex: none; width: 40px; font: 400 12px/20px var(--mono); color: var(--faint); }
+.wv-entry__body { flex: 1; min-width: 0; }
+.wv-entry__body p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wv-entry__what { margin-right: 8px; color: var(--dim); }
+.wv-entry__title { margin-right: 8px; }
+.wv-entry--wait .wv-entry__what { color: var(--text-accent); }
+.wv-entry--held .wv-entry__what { color: var(--held); }
+.wv-entry--landed .wv-entry__what, .wv-entry--landed .wv-entry__title { color: var(--faint); }
+.wv-entry__note { font: 400 13px/18px var(--sans); color: var(--dim); }
+.wv-feed__none { padding: 12px 4px; color: var(--faint); }
+.wv-feed__none:not(:first-child) { display: none; }
+.wv-older { display: block; padding: 12px 4px; font: 500 13px/18px var(--sans); color: var(--dim); }
+
+@media (max-width: 899px) {
+  .wv-page { padding-bottom: 40px; }
+  .wv-field, .wv-btn { height: 48px; line-height: 46px; }
+  .wv-btn { padding: 0 18px; }
+  .wv-opt { padding: 10px 12px; }
+  .wv-ask { padding: 16px 16px 14px; }
+  .wv-ask__head { flex-wrap: wrap; row-gap: 0; }
+  .wv-ask__age { flex-basis: 100%; margin: 0; padding-left: 18px; }
+  .wv-ask__row .wv-field { flex-basis: 100%; }
+  .wv-ask__row .wv-btn { flex: 1; padding: 0 8px; }
+  .wv-entry { gap: 10px; }
+  .wv-entry__body p { white-space: normal; }
+}
+
 /* --- what goes in the columns ------------------------------------------- */
 
 .label {
@@ -298,12 +403,8 @@ ul, ol { list-style: none; }
   text-transform: uppercase;
 }
 .faint { color: var(--faint); }
-/* A weighty card's WEIGHTY lines are the person's turn to weigh, so the
-   readable rust, never the red of a fault. */
-.weighty { color: var(--accent-hover); } /* --text-accent: rust 400, the readable step */
 .held { color: var(--held); }
 .late { color: var(--late); }
-.landed { color: var(--landed); }
 .num { font-variant-numeric: tabular-nums; }
 
 /* One entry of the stage's feed. */
@@ -312,12 +413,9 @@ ul, ol { list-style: none; }
 .item-head h2 { font-size: var(--large); overflow-wrap: anywhere; }
 .item-count { margin-left: auto; color: var(--dim); }
 .item > p { font-family: var(--sans); }
-.item .panel + .panel { margin-top: var(--gap); }
 
 /* The feed: one entry per event, the newest on top. */
 .entry-head { display: flex; justify-content: space-between; gap: 10px; }
-.entry-what { margin-top: 4px; overflow-wrap: anywhere; }
-.entry .entry-what { font-family: var(--mono); }
 .bead { color: var(--accent); }
 .entry-title { color: var(--dim); overflow-wrap: anywhere; }
 .entry-note { margin-top: 6px; padding-left: 10px; border-left: 1px solid var(--hairline-strong); color: var(--faint); font-size: var(--small); white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -325,65 +423,8 @@ ul, ol { list-style: none; }
    since the card's sentences read as plain text otherwise. It stays under
    the link states above (a:hover, a:focus-visible). */
 .opens { color: var(--dim); text-decoration: underline; text-decoration-color: var(--faint); text-underline-offset: 3px; }
-/* Said only by a feed with no entry. */
-.feed .none:not(:first-child) { display: none; }
-.older { display: block; text-align: center; }
-/* One happening per line on home: the row never wraps, the title gives
-   way first down to its floor, and past it the what shrinks with it. */
-.entry-line { padding-top: 6px; padding-bottom: 6px; }
-.entry-line .entry-what { display: flex; align-items: baseline; gap: 6px; margin-top: 0; overflow: hidden; white-space: nowrap; }
-.entry-line .entry-what > :first-child { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.entry-line .entry-title { flex: 1 1 0; min-width: 10ch; overflow: hidden; text-overflow: ellipsis; font-family: var(--sans); }
-.entry-line .bead, .entry-line .separator, .entry-line .label { flex: 0 0 auto; }
-/* On the phone the row takes two lines: the verb in full and the bead on
-   the first, the time at its right, the title below ending in an
-   ellipsis. The compact first line gives longer verbs room; the title
-   keeps its body size. The separators go so the lines break cleanly. */
-@media (max-width: 699px) {
-  .entry-line .entry-what { flex-wrap: wrap; gap: 3px; font-size: var(--small); }
-  .entry-line .entry-what > :first-child { flex: 1 1 0; max-width: max-content; letter-spacing: -0.06em; }
-  .entry-line .separator { display: none; }
-  .entry-line .label { order: 1; margin-left: auto; }
-  .entry-line .entry-title { order: 2; flex: 1 1 100%; font-size: var(--text); }
-}
 
 .flow { margin-top: var(--gap); }
-
-/* The answer: the only large line on home, in the human face. */
-.answer { font-family: var(--sans); font-size: var(--large); }
-
-/* One line per bead or session, as the home page's overview shows them.
-   Every row runs one line and ends in an ellipsis. */
-.lines { margin-top: 8px; }
-.lines li { padding: 3px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* A need's human words (the reason, the title) in the proportional face;
-   the bead id and the age stay monospace, as machine words do. */
-.needs li > a { display: flex; align-items: baseline; gap: 6px; width: 100%; min-width: 0; box-sizing: border-box; overflow: hidden; white-space: nowrap; font-family: var(--sans); }
-.needs .dot, .needs .separator, .needs .label, .needs .faint { flex: 0 0 auto; }
-.needs .label, .needs .faint { font-family: var(--mono); }
-.needs .bead { font-family: var(--mono); }
-.needs .stage { font-family: var(--mono); }
-.needs .entry-title { display: block; flex: 1 1 0; min-width: 10ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* An ask's bead, topic and age ride together after the question; the
-   recommendation is in the detail below, where it is labelled. */
-.needs .ask-meta { display: flex; align-items: baseline; gap: 6px; flex: 0 0 auto; white-space: nowrap; }
-/* An asked row's question gives way first to the bead and age. */
-.needs .entry-title.ask-q { min-width: 0; }
-/* An asked row lays out as a grid: the question takes what the bead and
-   age leave, ending in an ellipsis. The phone rules below come after it. */
-.needs a.ask { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; }
-.needs a.ask.fault { grid-template-columns: auto auto auto minmax(0, 1fr) auto auto; }
-/* On the phone the row sizes from the viewport, not its parent's width:
-   a flex row sized by percent lets its question crowd out the bead and
-   the age it shares the row with. */
-@media (max-width: 699px) {
-  .needs li > a { width: calc(100vw - 32px); }
-  /* An asked row: the question takes the first line whole, ending in an
-     ellipsis, and the bead and age stand under it. */
-  .needs a.ask { display: flex; flex-wrap: wrap; }
-  .needs a.ask .ask-q { order: -1; flex: 1 1 100%; }
-  .needs a.ask > .separator { display: none; }
-}
 
 /* A bead as a list shows it. */
 .card-head { overflow-wrap: anywhere; }
@@ -597,30 +638,6 @@ ul, ol { list-style: none; }
 #pairing input[type="text"] { padding: 8px; background: var(--panel); color: var(--ink); border: 1px solid var(--hairline-strong); font: 16px/1.5 var(--mono); }
 #pairing button { padding: 8px 16px; background: var(--panel); color: var(--dim); border: 1px solid var(--hairline-strong); font-size: var(--small); letter-spacing: var(--label-spacing); text-transform: uppercase; }
 #pairing button:hover { color: var(--accent-hover); border-color: var(--accent-hover); }
-/* An ask's answer, under a needs row, a wait's reason or its bead: the
-   options as buttons, with Later and Decline. The buttons wrap instead of
-   widening the page, and each is large enough to tap. Its text is 16px:
-   smaller, a phone enlarges the field on focus and the page with it. A
-   setup card's approval, the presets to pick and the account to type, is
-   the same row. */
-.need-answer, .need-approve { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; white-space: normal; }
-.need-answer input[type="text"], .need-answer input[type="password"], .need-approve input[type="text"], .need-approve input[type="password"] { flex: 1 1 100%; min-width: 0; padding: 8px; background: var(--panel); color: var(--ink); border: 1px solid var(--hairline-strong); font: 16px/1.5 var(--mono); }
-.need-answer button, .need-approve button { padding: 12px 16px; min-height: 44px; background: var(--panel); color: var(--dim); border: 1px solid var(--hairline-strong); overflow-wrap: anywhere; }
-.need-answer button:hover, .need-approve button:hover { color: var(--accent-hover); border-color: var(--accent-hover); }
-.need-approve label { align-self: center; }
-/* Ask about this stands in the answer row where the viewing user may
-   write to the asker: a link among the buttons, not one of them. */
-.need-answer .ask-about { align-self: center; }
-/* A needs row keeps one line for its link; the answer stands under it. */
-.needs li .need-answer, .needs li .need-approve { margin: 4px 0 8px; }
-/* An asked row's ask, under its link: the context lines, the options with
-   their consequences, and the labelled recommendation, as on the bead's
-   page. The list keeps one line per row, so the ask takes its lines back;
-   long lines wrap, and nothing widens the page. */
-.needs li .need-ask { margin: 4px 0 0; white-space: normal; }
-/* The list's one-line rule names every item under it, the options'
-   included, so the options take their lines back one by one. */
-.needs li .need-ask li { white-space: normal; }
 /* A move, on the bead's page: the note with the buttons that send it on. */
 .move-form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .move-form input[type="text"] { flex: 1 1 100%; min-width: 0; padding: 8px; background: var(--panel); color: var(--ink); border: 1px solid var(--hairline-strong); font: 16px/1.5 var(--mono); }
@@ -643,58 +660,17 @@ ul, ol { list-style: none; }
 .file-pager { max-width: 90ch; }
 .file-pager a, .file-pager span { flex: 1 1 0; min-width: max-content; text-align: center; }
 .file-pager span { color: var(--faint); border-color: var(--hairline); }
-/* An ask's options, numbered as the buttons number them. */
-.options { margin-top: 8px; }
-.options li { padding: 2px 0; overflow-wrap: anywhere; }
-/* The recommended option's mark, under its own row: the one place the
-   card names the recommendation. */
-.options .recommended { display: block; color: var(--faint); font-size: var(--small); }
-/* An ask card's head away from its bead's page, and the ask line on it:
-   small and quiet, the yard's dot in its colour. */
-.ask-head, .ask-line { color: var(--faint); font-size: var(--small); }
-/* The question is the card's largest text, with how long it waits at its
-   right. */
-.ask-question { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-top: 4px; }
-.ask-question p { font-family: var(--sans); font-size: var(--large); font-weight: 600; overflow-wrap: anywhere; }
-.ask-question .asked { flex: 0 0 auto; color: var(--faint); font-size: var(--small); white-space: nowrap; }
-/* The asker under the question, and the context lines' speaker above them
-   on a run or setup card. */
-.ask-asker, .ask-says { color: var(--faint); font-size: var(--small); }
+/* An ask line, on a summary card's file page. */
+.ask-line { color: var(--faint); font-size: var(--small); }
 .outcomes li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; padding: 3px 0; }
 code { font: inherit; color: var(--dim); overflow-wrap: anywhere; }
 
-.panel { padding: 12px; background: var(--panel); border: 1px solid var(--hairline); }
-.panel p { margin-top: 8px; font-family: var(--sans); }
 .figures { margin-top: 8px; }
-.figures div, .rows li { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; }
+.figures div { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; }
 .figures dt { color: var(--dim); }
-.rows { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--hairline-strong); }
-.rows span:first-child { overflow-wrap: anywhere; }
-.panel h3 { margin-top: 12px; }
 .figures dd { text-align: right; overflow-wrap: anywhere; }
 .item > .figures { margin-top: 8px; color: var(--dim); font-size: var(--small); }
 
-/* One bead that waits for a person, and why. */
-.wait { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--hairline-strong); }
-.wait header { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-.wait p { margin-top: 2px; overflow-wrap: anywhere; }
-.wait .wait-title { color: var(--dim); font-family: var(--sans); }
-.wait .why { font-family: var(--sans); font-size: var(--small); }
-.wait .entry-note { margin-top: 4px; }
-/* A wait's ask folds under its question: closed, the row is one line with
-   the age at the right, as the card's own question line has it; open, the
-   card says the question itself and the summary only folds it again. The
-   row is clipped away, as a repeated sender is (.letter .who), never
-   display: none, so the summary's name keeps the question and several
-   open cards are told apart by a screen reader. */
-.wait-ask > summary { cursor: pointer; margin-top: 2px; font-family: var(--sans); font-size: var(--small); }
-.wait-ask > summary .fold-closed { display: inline-flex; justify-content: space-between; align-items: baseline; gap: 10px; width: calc(100% - 1.5em); vertical-align: top; overflow-wrap: anywhere; }
-.wait-ask > summary .asked { flex: 0 0 auto; color: var(--faint); white-space: nowrap; }
-.wait-ask > summary .fold-open { display: none; color: var(--faint); }
-.wait-ask[open] > summary .fold-closed { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.wait-ask[open] > summary .fold-open { display: inline; }
-/* Parked beads wait by design: the same rows, quieter. */
-.parked { color: var(--dim); }
 .state { color: var(--dim); }
 
 .dot { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: var(--done); }

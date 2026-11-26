@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
+	"fmt"
 	"html"
 	"net/http/httptest"
 	"os"
@@ -44,6 +45,76 @@ func askOn(t *testing.T, f *fixture, id string, ask store.Ask) uint64 {
 	seq, err := f.st.AddAsk(context.Background(), id, ask, "yardmaster")
 	must(t, err)
 	return seq
+}
+
+// What the ask card draws of its controls and its options (templates/ask.html),
+// as a page says them: the buttons of its answer row (declineButton is
+// approve_test.go's), the pick button of an option (the recommended one marked,
+// as the card marks it), and the row of an option that cannot be picked, where
+// the view does not act or a pick would be refused.
+const (
+	sendButton  = `<button class="wv-btn" type="submit" name="action" value="send">Send</button>`
+	laterButton = `<button class="wv-btn" type="submit" name="action" value="later">Later</button>`
+)
+
+func optionSpans(n int, label, consequence string) string {
+	var c string
+	if consequence != "" {
+		c = `<span class="wv-opt__c">` + consequence + `</span>`
+	}
+	return fmt.Sprintf(`<span class="wv-opt__n">%d</span><span class="wv-opt__b"><span class="wv-opt__t">%s</span>%s</span>`, n, label, c)
+}
+
+func pickButton(n int, label, consequence string, rec bool) string {
+	class, title := "wv-opt", ""
+	if rec {
+		class += " wv-opt--rec"
+		title = fmt.Sprintf(` title="Answer: %d · %s"`, n, label)
+	}
+	return fmt.Sprintf(`<button class="%s" type="submit" name="option" value="%d"%s>%s</button>`, class, n, title, optionSpans(n, label, consequence))
+}
+
+func optionRow(n int, label, consequence string, rec bool) string {
+	class := "wv-opt"
+	if rec {
+		class += " wv-opt--rec"
+	}
+	return fmt.Sprintf(`<div class="%s">%s</div>`, class, optionSpans(n, label, consequence))
+}
+
+// pickOptions are the options pickAsk puts, as the card draws them as pick
+// buttons: the first recommended, the yard's own You decide last.
+var pickOptions = []string{
+	pickButton(1, "Move them now", "all links point at the new source tonight", true),
+	pickButton(2, "After Friday", "keep the old source until the release is out", false),
+	pickButton(3, "You decide", "leave it to yardmaster", false),
+}
+
+// cardsOf are the ask cards on the page's stage, each from its opening tag to
+// its closing one, squashed.
+func cardsOf(t *testing.T, body string) []string {
+	t.Helper()
+	var out []string
+	rest := squash(stageOf(t, body))
+	for {
+		_, after, ok := strings.Cut(rest, `<article class="wv-ask" `)
+		if !ok {
+			return out
+		}
+		card, next, _ := strings.Cut(after, `</article>`)
+		out = append(out, `<article class="wv-ask" `+card+`</article>`)
+		rest = next
+	}
+}
+
+// oneCard is the only ask card on the page's stage.
+func oneCard(t *testing.T, body string) string {
+	t.Helper()
+	cards := cardsOf(t, body)
+	if len(cards) != 1 {
+		t.Fatalf("the stage has %d ask cards, want one:\n%s", len(cards), stageOf(t, body))
+	}
+	return cards[0]
 }
 
 func pickAsk() store.Ask {
@@ -119,77 +190,169 @@ func TestHomeNeedsAsk(t *testing.T) {
 		}
 	}
 
-	s := answerSection(t, f.get("/").body)
-	if !strings.HasPrefix(s, "1 needs you.</p>") {
-		t.Errorf("the answer is %q, want one need and no fault", s)
+	body := f.get("/").body
+	s := answerSection(t, body)
+	if !strings.Contains(s, `<h1 class="wv-answer">1 waits for you</h1>`) || !strings.Contains(s, "1 to decide.") {
+		t.Errorf("the answer is %q, want one to decide and no fault", s)
 	}
-	want := `<a href="/beads/` + b.ID + `" class="ask"><span class="entry-title ask-q">Move the links now?</span>` +
-		`<span class="separator" aria-hidden="true">·</span>` +
-		`<span class="ask-meta"><span class="bead">` + b.ID + `</span>` +
-		`<span class="separator" aria-hidden="true">·</span><span class="faint">`
-	if !strings.Contains(s, want) {
-		t.Errorf("the row lacks %q", want)
+	// The list's row says the question first, the bead and its title under
+	// it, and who asked; the age ends it in rust.
+	rows := section2(t, listSections(t, body), "Waits for you").rows
+	if len(rows) != 1 || rows[0].href != "/beads/"+b.ID || rows[0].name != "Move the links now?" || rows[0].dot != "wait" ||
+		len(rows[0].lines) != 2 || rows[0].lines[0] != b.ID+" · a door" || rows[0].lines[1] != "asked by yardmaster" {
+		t.Errorf("the ask's row is %+v", rows)
 	}
-	if !strings.Contains(s, " ago</span></span>") {
-		t.Error("the ask row's age lacks its unit of time")
+	// The stage stands the ask whole, once, with its age in the head.
+	card := oneCard(t, body)
+	if !strings.Contains(card, `<span>yardmaster asks you</span><span class="wv-ask__age">ask `) || !strings.Contains(card, ` · `) ||
+		!strings.Contains(card, ` ago</span>`) {
+		t.Errorf("the card's head says no asker, no ask number or no age: %s", card)
 	}
-	row, _, _ := strings.Cut(s, `<div class="need-ask">`)
-	if strings.Contains(row, "1. Move them now") {
-		t.Error("the ask row repeats the recommendation shown in its detail")
-	}
-	for _, not := range []string{"held", "a door", "All waiting"} {
+	for _, not := range []string{"held", "All waiting"} {
 		if strings.Contains(s, not) {
-			t.Errorf("the ask row has %q", not)
+			t.Errorf("the ask's stage has %q", not)
 		}
 	}
 	_ = ctx
 }
 
-// Under its one-line row the home ask stands whole, as on its bead's
-// page: the context lines, each option with its consequence, and the
-// recommendation labelled. The row above it links to the bead.
+// The card on the stage stands whole, as on its bead's page: the head, the
+// question, the about line that names the bead, the context lines, each option
+// with its consequence as the pick button, and the recommendation labelled
+// under its own row.
 func TestHomeNeedsAskDetail(t *testing.T) {
 	t.Parallel()
 	f := askFixture(t)
 	b := askBead(t, f, "a door", "new")
-	if body := f.get("/").body; strings.Contains(body, "pill") {
-		t.Errorf("a bead with no ask carries a pill: %s", body)
+	if body := f.get("/").body; strings.Contains(body, "wv-ask") {
+		t.Errorf("a bead with no ask has a card: %s", body)
 	}
-	askOn(t, f, b.ID, pickAsk())
+	seq := askOn(t, f, b.ID, pickAsk())
 
-	s := answerSection(t, f.get("/").body)
+	// The view does not act, so the options are rows to read and nothing
+	// posts.
+	card := oneCard(t, f.get("/").body)
 	for _, want := range []string{
-		`<a href="/beads/` + b.ID + `" class="ask">`,
-		`<div class="need-ask">`,
-		`<p class="ask-head"><a href="/beads/` + b.ID + `"><span class="dot chip-`,
-		`depot · bead ` + b.ID + ` · Everything else</a></p>`,
-		`<div class="ask-question"><p>Move the links now?</p><span class="asked">asked `,
-		`<p class="ask-asker">asked by yardmaster</p>`,
-		`<p class="entry-note">The links file declares the new source.</p>`,
-		`<p class="entry-note">The old source goes away Friday.</p>`,
-		`<li><span>1. Move them now</span><span class="faint"> — all links point at the new source tonight</span><span class="recommended">recommended: the test passed</span></li>`,
-		`<li><span>2. After Friday</span><span class="faint"> — keep the old source until the release is out</span></li>`,
+		`id="ask-` + b.ID + `-` + strconv.FormatUint(seq, 10) + `">`,
+		`<p class="wv-ask__head"><span class="wv-dot wv-dot--wait"></span><span>yardmaster asks you</span><span class="wv-ask__age">ask ` + strconv.FormatUint(seq, 10) + ` · `,
+		`<h2 class="wv-ask__q">Move the links now?</h2>`,
+		`<p class="wv-ask__about"><a class="wv-id" href="/beads/` + b.ID + `">` + b.ID + `</a><span>a door</span><span>in new</span></p>`,
+		`<ul class="wv-ctx"><li>The links file declares the new source.</li><li>The old source goes away Friday.</li></ul>`,
+		optionRow(1, "Move them now", "all links point at the new source tonight", true),
+		`<p class="wv-rec">recommended: the test passed</p>`,
+		optionRow(2, "After Friday", "keep the old source until the release is out", false),
 		// The yard's own last pick, the shape a card stored before
 		// yardr-17bj keeps: it stands as a plain row, recommended by
 		// nobody.
-		`<li><span>3. You decide</span><span class="faint"> — leave it to yardmaster</span></li>`,
+		optionRow(3, "You decide", "leave it to yardmaster", false),
 	} {
-		if !strings.Contains(s, want) {
-			t.Errorf("the home ask lacks %q", want)
+		if !strings.Contains(card, want) {
+			t.Errorf("the home ask lacks %q:\n%s", want, card)
 		}
 	}
-	if strings.Contains(s, `<p class="entry-note">1. Move them now</p>`) {
-		t.Error("the home ask shows the recommendation unlabelled")
+	for _, foreign := range []string{"<form", "<button", "Recommended:", "Recommends", "to approve:", "need-ask", `class="options"`} {
+		if strings.Contains(card, foreign) {
+			t.Errorf("the read-only ask shows %q", foreign)
+		}
 	}
-	for _, foreign := range []string{"Recommended:", "Recommends", "to approve:"} {
-		if strings.Contains(s, foreign) {
-			t.Errorf("the home ask shows the old wording %q", foreign)
+	// A view that acts answers with the options as its pick buttons.
+	g, _ := talkFixture(t, "jo")
+	actYard(t, g, pickAsk())
+	acting := oneCard(t, g.get("/").body)
+	for _, want := range pickOptions {
+		if !strings.Contains(acting, want) {
+			t.Errorf("the acting card lacks the pick %q:\n%s", want, acting)
+		}
+	}
+	if !strings.Contains(acting, `<form class="wv-ask__form" method="post" action="/beads/`) {
+		t.Errorf("the acting card posts to no bead:\n%s", acting)
+	}
+}
+
+// One card stands on the stage, whole: the oldest ask of the first asked wait
+// of the list, whatever else waits before it or asks after it. Every other
+// asked wait has its row in the list, which opens its bead's page.
+func TestHomeStandsOneCard(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	f := askFixture(t)
+	older := askBead(t, f, "the older ask", "new")
+	askOn(t, f, older.ID, store.Ask{Question: "Older bead's question?", To: "mckean", Context: []string{"older."}})
+	newer := askBead(t, f, "the newer ask", "new")
+	askOn(t, f, newer.ID, store.Ask{Question: "Newer bead's first?", To: "mckean", Context: []string{"first."}})
+	askOn(t, f, newer.ID, store.Ask{Question: "Newer bead's second?", To: "mckean", Context: []string{"second."}})
+	// The bead that began to wait last stands first in the list, and it has no
+	// ask: the card is of the first row that has one.
+	held := askBead(t, f, "held, not asked", "new")
+	_, err := f.st.SetHold(ctx, held.ID, true, store.Expect{}, "me")
+	must(t, err)
+
+	for _, path := range []string{"/", "/line"} {
+		body := f.get(path).body
+		rows := section2(t, listSections(t, body), "Waits for you").rows
+		if len(rows) != 3 || rows[0].href != "/beads/"+held.ID || rows[1].href != "/beads/"+newer.ID || rows[2].href != "/beads/"+older.ID {
+			t.Fatalf("%s: Waits for you holds %+v, want the held bead, the newer asked bead, then the older", path, rows)
+		}
+		card := oneCard(t, body)
+		if !strings.Contains(card, `<h2 class="wv-ask__q">Newer bead&#39;s first?</h2>`) || !strings.Contains(card, `<li>first.</li>`) ||
+			!strings.Contains(card, `href="/beads/`+newer.ID+`"`) {
+			t.Errorf("%s: the card is not the oldest ask of the first asked row:\n%s", path, card)
+		}
+		for _, not := range []string{"Newer bead&#39;s second?", "Older bead&#39;s question?", "second.", "older."} {
+			if strings.Contains(stageOf(t, body), not) {
+				t.Errorf("%s: the stage has %q, which is no card's of the one standing", path, not)
+			}
+		}
+		// The other asked wait is a row, a tap from its bead's page.
+		if row := rows[2]; row.name != "Older bead's question?" || row.dot != "wait" {
+			t.Errorf("%s: the older asked wait's row is %+v", path, row)
+		}
+	}
+}
+
+// The card's typed words are kept through a read of the page again, which the
+// live pages make at every event: the words field has an id that the next read
+// gives it again, and the read lets that one stand. The form around it is not
+// kept: its revision is the bead's as of the read, and a form kept past the
+// next event would post a stale one, refused again at every retry.
+func TestAskCardKeepsItsWords(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	f, _ := talkFixture(t, "jo")
+	b, seq := actYard(t, f, pickAsk())
+	field := regexp.MustCompile(`<input class="wv-field" type="text" id="(words-[^"]*)" hx-preserve="true" name="words"`)
+	rev := regexp.MustCompile(`<input type="hidden" name="rev" value="([^"]*)">`)
+	want := fmt.Sprintf("words-%s-%d", b.ID, seq)
+	first := map[string]string{}
+	for _, path := range []string{"/", "/line", "/beads/" + b.ID} {
+		card := oneCard(t, f.get(path).body)
+		m := field.FindStringSubmatch(card)
+		if m == nil || m[1] != want {
+			t.Errorf("%s: the card's words field is not %q with hx-preserve: %s", path, want, card)
+			continue
+		}
+		if n := strings.Count(card, "hx-preserve"); n != 1 {
+			t.Errorf("%s: %d elements of the card are kept, want the words field alone: %s", path, n, card)
+		}
+		first[path] = rev.FindStringSubmatch(card)[1]
+	}
+	// The bead changes between two reads: the field keeps its id, so the read
+	// leaves what is typed in it, and the form's revision is the fresh one.
+	must(t, f.st.AddNote(ctx, b.ID, "something happened", "builder"))
+	for _, path := range []string{"/", "/line", "/beads/" + b.ID} {
+		card := oneCard(t, f.get(path).body)
+		if m := field.FindStringSubmatch(card); m == nil || m[1] != want {
+			t.Errorf("%s: the next read gives the words field another id: %s", path, card)
+		}
+		if now := rev.FindStringSubmatch(card)[1]; now == first[path] || now != revOf(t, f, b.ID) {
+			t.Errorf("%s: the form's revision is %q after the bead changed, want the fresh %q (was %q)", path, now, revOf(t, f, b.ID), first[path])
 		}
 	}
 }
 
 // A bead that both waits and carries an open ask stands once, fault first:
-// the held lead, then the question. It counts once, as a fault.
+// the held lead, then the question. It counts once, as a fault, and its ask is
+// the card the stage stands.
 func TestHomeNeedsAskAndFault(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -207,26 +370,25 @@ func TestHomeNeedsAskAndFault(t *testing.T) {
 	if len(w.Why) != 2 || w.Why[0].Kind != "held" || w.Why[1].Kind != "ask" {
 		t.Fatalf("why %+v, want the hold first and the ask after", w.Why)
 	}
-	s := answerSection(t, f.get("/").body)
-	if !strings.HasPrefix(s, "1 needs you. 1 fault.</p>") {
+	body := f.get("/").body
+	s := answerSection(t, body)
+	if !strings.Contains(s, "1 waits for you") || !strings.Contains(s, "1 held.") || strings.Contains(s, "to decide") {
 		t.Errorf("the answer is %q: the bead counts once, as a fault", s)
 	}
-	want := `<a href="/beads/` + b.ID + `" class="ask fault"><span class="dot held"></span><span class="held">held</span>` +
-		`<span class="separator" aria-hidden="true">·</span>` +
-		`<span class="entry-title ask-q">Move the links now?</span>`
-	if !strings.Contains(s, want) {
-		t.Errorf("the row lacks %q", want)
+	// One row in the list: the fault first, then the question where the
+	// note would stand.
+	rows := section2(t, listSections(t, body), "Waits for you").rows
+	if len(rows) != 1 || rows[0].name != "a door" || len(rows[0].lines) != 2 ||
+		rows[0].lines[0] != "held by me" || rows[0].lines[1] != "Move the links now?" {
+		t.Errorf("the row is %+v, want the hold first and the question after", rows)
 	}
-	text := squash(f.get("/line").body)
-	heldAt, askAt := strings.Index(text, "held by me"), strings.Index(text, "Move the links now?")
-	if heldAt < 0 || askAt < 0 || heldAt > askAt {
-		t.Error("/line does not name the hold first and the question after")
+	if !strings.Contains(oneCard(t, body), `<h2 class="wv-ask__q">Move the links now?</h2>`) {
+		t.Error("the stage does not stand the held bead's ask")
 	}
 }
 
-// /line shows the same asks whole, as the bead page does: the context
-// lines, each option with its consequence, and the recommendation
-// labelled. The bead id links to the bead.
+// /line stands the same card as the home page, whole, never folded: its stage
+// is the overview.
 func TestLineAskContext(t *testing.T) {
 	t.Parallel()
 	f := askFixture(t)
@@ -237,151 +399,102 @@ func TestLineAskContext(t *testing.T) {
 	if len(got) != 1 || len(got[0].Why) != 1 || got[0].Why[0].Kind != "ask" {
 		t.Fatalf("/line waits %+v, want the ask", got)
 	}
-	text := squash(f.get("/line").body)
+	home, line := oneCard(t, f.get("/").body), oneCard(t, f.get("/line").body)
+	// The ages are of the moment each page was drawn.
+	if sameWhole(home) != sameWhole(line) {
+		t.Errorf("/line's card is not home's:\n%s\n%s", line, home)
+	}
 	for _, want := range []string{
-		`<a class="bead" href="/beads/` + b.ID + `">` + b.ID + `</a>`,
-		`depot · bead ` + b.ID + ` · Everything else</a></p>`,
-		`<div class="ask-question"><p>Move the links now?</p><span class="asked">asked `,
-		`<p class="ask-asker">asked by yardmaster</p>`,
-		`<p class="entry-note">The links file declares the new source.</p>`,
-		`<p class="entry-note">The old source goes away Friday.</p>`,
-		`<li><span>1. Move them now</span><span class="faint"> — all links point at the new source tonight</span><span class="recommended">recommended: the test passed</span></li>`,
-		`<li><span>2. After Friday</span><span class="faint"> — keep the old source until the release is out</span></li>`,
+		`<h2 class="wv-ask__q">Move the links now?</h2>`,
+		`<li>The links file declares the new source.</li>`,
+		`<li>The old source goes away Friday.</li>`,
+		optionRow(1, "Move them now", "all links point at the new source tonight", true),
+		`<p class="wv-rec">recommended: the test passed</p>`,
 	} {
-		if !strings.Contains(text, want) {
+		if !strings.Contains(line, want) {
 			t.Errorf("/line lacks %q", want)
 		}
 	}
-	// The card stands folded under its question with its age: the row a
-	// line of many waits is read by. The summary's question gives way to
-	// the card's own once it is open, and the page keeps no aside to say
-	// the card again.
-	fold := regexp.MustCompile(`<details class="wait-ask" id="ask-` + regexp.QuoteMeta(b.ID) + `-\d+"><summary><span class="fold-closed">Move the links now\?<span class="asked">asked [^<]+</span></span><span class="fold-open">Fold</span></summary>`)
-	if !fold.MatchString(text) {
-		t.Errorf("/line lacks the folded ask row:\n%s", text)
-	}
-	if strings.Contains(text, "<details class=\"wait-ask\" open") {
-		t.Error("/line opens an ask card nobody opened")
-	}
-	if n := strings.Count(text, "Move the links now?"); n != 3 {
-		t.Errorf("/line says the question %d times, want three times: the row, its card and Decide's list", n)
-	}
-	// An open card's row is clipped away, never display: none, so the
-	// summary's accessible name keeps the question and several open cards
-	// are told apart by a screen reader; the visible word stays Fold.
-	for _, rule := range []string{
-		".wait-ask[open] > summary .fold-closed { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }",
-		".wait-ask > summary .fold-open { display: none; color: var(--faint); }",
-	} {
-		css, err := os.ReadFile("assets/yard.css")
-		must(t, err)
-		if !strings.Contains(string(css), rule) {
-			t.Errorf("yard.css lacks %q", rule)
+	// The card is not folded under its question any more, and the question
+	// stands in the card and Decide's list alone.
+	text := squash(f.get("/line").body)
+	for _, not := range []string{"<details class=\"wait-ask\"", "fold-closed", "Recommended:", "Recommends", "to approve:"} {
+		if strings.Contains(text, not) {
+			t.Errorf("/line shows %q", not)
 		}
 	}
-	for _, foreign := range []string{"Recommended:", "Recommends", "to approve:"} {
-		if strings.Contains(text, foreign) {
-			t.Errorf("/line shows the old wording %q", foreign)
-		}
+	if n := strings.Count(text, "Move the links now?"); n != 2 {
+		t.Errorf("/line says the question %d times, want twice: the card and its row of Decide's list", n)
 	}
 }
 
-// The row does not duplicate recommendations. An ask with no options and
-// one with options but no recommendation both leave the detail to speak.
+// The card does not claim a recommendation it has none of. An ask with no
+// options wants words, and one with options but no recommendation leaves every
+// option an unmarked row.
 func TestHomeNeedsAskRecommend(t *testing.T) {
 	t.Parallel()
-	f := askFixture(t)
-	words := askBead(t, f, "words", "new")
-	askOn(t, f, words.ID, store.Ask{
-		Question: "What should the greeting say?", To: "mckean",
-		Context: []string{"the greeting."},
-	})
-	plain := askBead(t, f, "plain", "new")
-	askOn(t, f, plain.ID, store.Ask{
-		Question: "Which colour?", To: "mckean", Context: []string{"the door."},
-		Options: []store.AskOption{
-			{Label: "Red", Consequence: "paint it red"},
-			{Label: "Blue", Consequence: "paint it blue"},
-		},
-	})
-	s := answerSection(t, f.get("/").body)
-	if strings.Contains(s, "words wanted") {
-		t.Error("the ask row repeats the words-wanted detail")
-	}
-	// The plain ask's row carries no recommendation, but its options
-	// stand with their consequences.
-	rows := strings.Split(s, `<li><a href="/beads/`)
-	found := false
-	for _, row := range rows[1:] {
-		id, _, _ := strings.Cut(row, `"`)
-		if id != plain.ID {
-			continue
-		}
-		found = true
-		if strings.Contains(row, "Recommended:") {
-			t.Errorf("the unrecommended row names a recommendation: %q", row)
-		}
-		for _, want := range []string{
-			`<li><span>1. Red</span><span class="faint"> — paint it red</span></li>`,
-			`<li><span>2. Blue</span><span class="faint"> — paint it blue</span></li>`,
-		} {
-			if !strings.Contains(row, want) {
-				t.Errorf("the unrecommended row lacks %q", want)
+	t.Run("words", func(t *testing.T) {
+		f := askFixture(t)
+		words := askBead(t, f, "words", "new")
+		askOn(t, f, words.ID, store.Ask{
+			Question: "What should the greeting say?", To: "mckean",
+			Context: []string{"the greeting."},
+		})
+		card := oneCard(t, f.get("/").body)
+		for _, not := range []string{"wv-opts", "wv-rec", "recommended", "words wanted"} {
+			if strings.Contains(card, not) {
+				t.Errorf("the words card has %q: %s", not, card)
 			}
 		}
-	}
-	if !found {
-		t.Error("the plain ask stands in no row")
-	}
+	})
+	t.Run("plain", func(t *testing.T) {
+		f := askFixture(t)
+		plain := askBead(t, f, "plain", "new")
+		askOn(t, f, plain.ID, store.Ask{
+			Question: "Which colour?", To: "mckean", Context: []string{"the door."},
+			Options: []store.AskOption{
+				{Label: "Red", Consequence: "paint it red"},
+				{Label: "Blue", Consequence: "paint it blue"},
+			},
+		})
+		card := oneCard(t, f.get("/").body)
+		if strings.Contains(card, "Recommended:") || strings.Contains(card, "wv-rec") || strings.Contains(card, "wv-opt--rec") {
+			t.Errorf("the unrecommended card names a recommendation: %s", card)
+		}
+		for _, want := range []string{optionRow(1, "Red", "paint it red", false), optionRow(2, "Blue", "paint it blue", false)} {
+			if !strings.Contains(card, want) {
+				t.Errorf("the unrecommended card lacks %q", want)
+			}
+		}
+	})
 }
 
-// The web stays flat and shows the bead's first topic label small where
-// there is one, and the card's head names it.
+// The web stays flat and names the bead's first topic label on the card's
+// about line where there is one, without its prefix.
 func TestHomeNeedsAskTopic(t *testing.T) {
 	t.Parallel()
 	f := askFixture(t)
 	b := askBead(t, f, "a door", "new", "topic:linear-out", "area:web")
 	askOn(t, f, b.ID, pickAsk())
-	s := answerSection(t, f.get("/").body)
-	want := `<span class="ask-meta"><span class="bead">` + b.ID + `</span><span class="label"> linear-out</span>`
-	if !strings.Contains(s, want) {
-		t.Errorf("the row lacks %q", want)
+	card := oneCard(t, f.get("/").body)
+	if want := `<span>in new</span><span>linear-out</span></p>`; !strings.Contains(card, want) {
+		t.Errorf("the card's about line lacks %q: %s", want, card)
 	}
-	if strings.Contains(s, "topic:") || strings.Contains(s, "area:") {
-		t.Error("the row shows the raw label")
+	if strings.Contains(card, "topic:") || strings.Contains(card, "area:") {
+		t.Error("the card shows the raw label")
 	}
-	nolabel := askBead(t, f, "no label", "new")
-	askOn(t, f, nolabel.ID, pickAsk())
-	s = answerSection(t, f.get("/").body)
-	rows := strings.Split(s, `<li><a href="/beads/`)
-	for _, row := range rows[1:] {
-		id, _, _ := strings.Cut(row, `"`)
-		if id != nolabel.ID {
-			continue
-		}
-		if !strings.Contains(row, `<span class="bead">`+nolabel.ID+`</span>`) {
-			t.Errorf("the labelless row lacks its linked bead id")
-		}
-		if strings.Contains(row, `<span class="label">`) {
-			t.Errorf("the labelless row has a topic label: %q", row)
-		}
-	}
-	// The card's head names the bead's topic, without its prefix, and
-	// links to the bead's page; a bead with no topic label heads
-	// Everything else.
-	for _, want := range []string{
-		`<p class="ask-head"><a href="/beads/` + b.ID + `">`,
-		`depot · bead ` + b.ID + ` · linear-out</a></p>`,
-		`depot · bead ` + nolabel.ID + ` · Everything else</a></p>`,
-	} {
-		if !strings.Contains(s, want) {
-			t.Errorf("the card head lacks %q", want)
-		}
+	// A bead with no topic label says none: the line ends with its stage.
+	g := askFixture(t)
+	nolabel := askBead(t, g, "no label", "new")
+	askOn(t, g, nolabel.ID, pickAsk())
+	card = oneCard(t, g.get("/").body)
+	if want := `<span>in new</span></p>`; !strings.Contains(card, want) || strings.Contains(card, "Everything else") {
+		t.Errorf("a bead with no topic has an about line that is not its stage's: %s", card)
 	}
 }
 
 // A stage card put now reads whole on Home and its bead's page: the frozen
-// bead header, the moves, and no You decide. Its head names the bead's
+// bead header, the moves, and no You decide. Its about line names the bead's
 // topic, never the stage the yard put it for. A card put before keeps its
 // You decide pick: the partial renders stored options either way, and a
 // hand ask stores the same You-decide-last shape, pinned in
@@ -431,15 +544,15 @@ changes: The bead goes back for changes.
 	}
 	// The new card: the frozen header, the moves, and no You decide. Its
 	// head names the bead's topic, not the review stage it was put for.
-	s := answerSection(t, f.get("/").body)
+	s := oneCard(t, f.get("/").body)
 	for _, want := range []string{
-		`depot · bead ` + fresh.ID + ` · web-view</a></p>`,
-		`<p>Where should this bead go next? — ` + fresh.ID + `: a door</p>`,
-		`<p class="entry-note">Bead: ` + fresh.ID + ` — a door (branch yard/` + fresh.ID + `)</p>`,
-		`<p class="ask-asker">asked by yard</p>`,
-		`<span class="recommended">recommended: The question is small and the branch is green.</span>`,
-		`<button type="submit" name="option" value="1">Answer: 1 · done</button>`,
-		`<button type="submit" name="option" value="2">changes</button>`,
+		`<span>in review</span><span>web-view</span></p>`,
+		`<h2 class="wv-ask__q">Where should this bead go next? — ` + fresh.ID + `: a door</h2>`,
+		`<li>Bead: ` + fresh.ID + ` — a door (branch yard/` + fresh.ID + `)</li>`,
+		`<span>yard asks you</span>`,
+		`<p class="wv-rec">recommended: The question is small and the branch is green.</p>`,
+		pickButton(1, "done", "The bead moves to approved with your words as the note.", true),
+		pickButton(2, "changes", "The bead goes back for changes.", false),
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("the new stage card lacks %q", want)
@@ -450,9 +563,9 @@ changes: The bead goes back for changes.
 	}
 	// It reads the same on its bead's page, under the ask line.
 	page := f.get("/beads/" + fresh.ID).body
-	if !strings.Contains(page, `<p class="ask-line">`+fresh.ID+` · ask `) ||
-		!strings.Contains(page, `— `+fresh.ID+`: a door</p>`) {
-		t.Errorf("the bead page lacks the ask line and frozen header:\n%s", page)
+	if !strings.Contains(page, `<span>yard asks you</span><span class="wv-ask__age">ask `) ||
+		!strings.Contains(page, `— `+fresh.ID+`: a door</h2>`) {
+		t.Errorf("the bead page lacks the card's head and frozen header:\n%s", page)
 	}
 	if strings.Contains(page, "You decide") {
 		t.Errorf("the bead page offers You decide:\n%s", page)
@@ -550,9 +663,15 @@ func TestHomeNeedsAskOnlyOpen(t *testing.T) {
 	if got := ids(waiting(lineJSON(t, f))); !slices.Equal(got, want) {
 		t.Fatalf("/line waits %v, want the open ask and the journal's %v", got, want)
 	}
-	if page := answerSection(t, f.get("/").body); !strings.HasPrefix(page, "2 need you.") ||
-		!strings.Contains(page, `<a href="/beads/`+crew.Journal+`" class="ask">`) {
-		t.Errorf("the home list is %q, want two needs and a row linking to the journal", page)
+	// Two wait, and the one card the stage stands is of the journal's or the
+	// open bead's: whichever of them waited last.
+	body := f.get("/").body
+	if page := answerSection(t, body); !strings.Contains(page, "2 wait for you") ||
+		(!strings.Contains(page, `href="/beads/`+crew.Journal+`">`) && !strings.Contains(page, `href="/beads/`+open.ID+`">`)) {
+		t.Errorf("the overview is %q, want two waits and a card of the open ask or the journal's", page)
+	}
+	if rows := section2(t, listSections(t, body), "Waits for you").rows; len(rows) != 2 {
+		t.Errorf("Waits for you has %d rows, want the open ask's and the journal's", len(rows))
 	}
 	for _, w := range h.Attention {
 		if w.Bead != crew.Journal {
@@ -579,9 +698,9 @@ func TestHomeNeedsAskTwice(t *testing.T) {
 	if len(h.Attention) != 1 || len(h.Attention[0].Why) != 2 {
 		t.Fatalf("attention %+v, want one row with both asks", h.Attention)
 	}
-	s := answerSection(t, f.get("/").body)
-	if n := strings.Count(s, `<li><a href="/beads/`+b.ID+`"`); n != 1 {
-		t.Fatalf("the bead stands in %d rows, want one", n)
+	s := oneCard(t, f.get("/").body)
+	if rows := section2(t, listSections(t, f.get("/").body), "Waits for you").rows; len(rows) != 1 {
+		t.Fatalf("the bead stands in %d rows, want one", len(rows))
 	}
 	if !strings.Contains(s, "Move the links now?") || strings.Contains(s, "And the windows?") {
 		t.Error("home shows not the oldest question alone")
@@ -626,29 +745,25 @@ func TestHomeNeedsAskTwice(t *testing.T) {
 	}
 }
 
-// The ask helpers: whether the bead carries one, its oldest question and
-// recommendation, and a lead that names a fault or the stage, never the
-// ask itself.
+// The ask helpers: whether the bead carries one, its oldest ask, and whether
+// something stops it, which an ask alone does not.
 func TestWaitingAsk(t *testing.T) {
 	t.Parallel()
 	ask := web.Reason{Kind: "ask", Text: "Move them now?", Recommend: 1, Options: []store.AskOption{{Label: "Move them now"}}}
 	held := web.Reason{Kind: "held", Text: "held by me"}
 	manual := web.Reason{Kind: "manual", Text: "waits for decisions in decide"}
 	if w := (web.Waiting{Bead: "b", Stage: "new", Why: []web.Reason{ask}}); !w.HasAsk() ||
-		w.AskQuestion() != "Move them now?" || w.AskRecommend() != "1. Move them now" ||
-		w.Lead() != "new" || w.Fault() {
+		w.FirstAsk() == nil || w.FirstAsk().Text != "Move them now?" || w.Fault() {
 		t.Errorf("ask-only: %+v", w)
 	}
 	if w := (web.Waiting{Bead: "b", Stage: "new", Why: []web.Reason{held, ask}}); !w.HasAsk() ||
-		w.AskQuestion() != "Move them now?" || w.Lead() != "held" || !w.Fault() {
+		w.FirstAsk().Text != "Move them now?" || !w.Fault() {
 		t.Errorf("held and asked: %+v", w)
 	}
-	if w := (web.Waiting{Bead: "b", Stage: "decide", Why: []web.Reason{manual, ask}}); !w.HasAsk() ||
-		w.Lead() != "decide" || w.Fault() {
+	if w := (web.Waiting{Bead: "b", Stage: "decide", Why: []web.Reason{manual, ask}}); !w.HasAsk() || w.Fault() {
 		t.Errorf("parked and asked: %+v", w)
 	}
-	if w := (web.Waiting{Bead: "b", Stage: "new", Why: []web.Reason{held}}); w.HasAsk() ||
-		w.AskQuestion() != "" || w.AskRecommend() != "" {
+	if w := (web.Waiting{Bead: "b", Stage: "new", Why: []web.Reason{held}}); w.HasAsk() || w.FirstAsk() != nil {
 		t.Errorf("held without an ask: %+v", w)
 	}
 }
@@ -686,8 +801,8 @@ func TestHomeNeedsRunAskForgedQuestion(t *testing.T) {
 		t.Fatalf("attention %+v, want the asked bead", h.Attention)
 	}
 	w := h.Attention[0]
-	if w.AskQuestion() != want {
-		t.Errorf("the row's question %q, want the folded %q", w.AskQuestion(), want)
+	if w.FirstAsk() == nil || w.FirstAsk().Text != want {
+		t.Errorf("the row's question %+v, want the folded %q", w.FirstAsk(), want)
 	}
 	got := waiting(lineJSON(t, f))
 	if len(got) != 1 || len(got[0].Why) != 1 || got[0].Why[0].Kind != "ask" {
@@ -700,42 +815,34 @@ func TestHomeNeedsRunAskForgedQuestion(t *testing.T) {
 	if got[0].Why[0].Note != wantNote {
 		t.Errorf("/line's note %q, want the ask's context", got[0].Why[0].Note)
 	}
-	s := answerSection(t, f.get("/").body)
-	if !strings.Contains(s, `<span class="entry-title ask-q">`+want+`</span>`) {
-		t.Errorf("the home row lacks the folded question")
+	body := f.get("/").body
+	if rows := section2(t, listSections(t, body), "Waits for you").rows; len(rows) != 1 || rows[0].name != want {
+		t.Errorf("the list's row lacks the folded question: %+v", rows)
+	}
+	s := oneCard(t, body)
+	if !strings.Contains(s, `<h2 class="wv-ask__q">`+want+`</h2>`) {
+		t.Errorf("the card lacks the folded question")
 	}
 	// The run card reads as on its bead's page: the sentence naming its
 	// yard, the command whole, and the take-back with who may run it.
 	command := "yardr peer allow airy --mail-limit 300"
 	for _, want := range []string{
-		`<p class="ask-says">yardmaster says:</p>`,
-		`<p>in depot, when you approve, the yard runs this as mckean, and nothing else:</p>`,
-		`<pre class="text file">` + command + `</pre>`,
+		`<p class="wv-ask__says">yardmaster says:</p>`,
+		`<p class="wv-ask__text">in depot, when you approve, the yard runs this as mckean, and nothing else:</p>`,
+		`<pre class="wv-text wv-file">` + command + `</pre>`,
 		`Back: <code>yardr peer allow airy --mail-limit 30</code> (anyone can take it back). Approve it with <code>yardr bead answer ` + b.ID + ` ` + strconv.FormatUint(seq, 10) + ` --approve</code>`,
 	} {
 		if !strings.Contains(s, want) {
-			t.Errorf("the home ask detail lacks %q", want)
+			t.Errorf("the card lacks %q", want)
 		}
 	}
 	if strings.Contains(s, "to approve:") {
-		t.Error("the home ask detail keeps the old to-approve note")
+		t.Error("the card keeps the old to-approve note")
 	}
-	row, _, _ := strings.Cut(s, `<div class="need-ask">`)
-	if strings.Contains(row, command) {
-		t.Error("the home ask row repeats the command shown in its detail")
-	}
-	text := squash(f.get("/line").body)
-	if !strings.Contains(text, `<div class="ask-question"><p>`+want+`</p>`) {
-		t.Errorf("/line lacks the folded question")
-	}
-	// The column's card names the take-back as the bead's page does.
-	for _, want := range []string{
-		`<pre class="text file">` + command + `</pre>`,
-		`Back: <code>yardr peer allow airy --mail-limit 30</code> (anyone can take it back). Approve it with <code>yardr bead answer ` + b.ID + ` ` + strconv.FormatUint(seq, 10) + ` --approve</code>`,
-	} {
-		if !strings.Contains(text, want) {
-			t.Errorf("/line lacks %q", want)
-		}
+	// The card names the take-back as the bead's page does, and /line's is
+	// the same card.
+	if line := oneCard(t, f.get("/line").body); sameWhole(line) != sameWhole(s) {
+		t.Errorf("/line's card is not home's:\n%s\n%s", line, s)
 	}
 }
 
@@ -767,21 +874,21 @@ func TestHomeSetupCard(t *testing.T) {
 		Context: []string{"the yardmaster reads mail to work beads"},
 		Setup:   &store.AskSetup{Pack: "setupmail", To: []store.Grantee{{Crew: "yardmaster"}}}})
 	for _, c := range []struct{ name, body string }{
-		{"home", answerSection(t, f.get("/").body)},
-		{"/line", squash(f.get("/line").body)},
+		{"home", oneCard(t, f.get("/").body)},
+		{"/line", oneCard(t, f.get("/line").body)},
 	} {
 		for _, want := range []string{
-			`<p class="ask-says">yardmaster says:</p>`,
-			`<p>When you approve, the yard applies the pack setupmail as mckean, and nothing else:</p>`,
+			`<p class="wv-ask__says">yardmaster says:</p>`,
+			`<p class="wv-ask__text">When you approve, the yard applies the pack setupmail as mckean, and nothing else:</p>`,
 			noGateLine,
 			`Approve it with <code>yardr bead answer ` + b.ID + ` ` + strconv.FormatUint(seq, 10) + ` &lt;n&gt; --secret</code>`,
-			`<button type="submit" name="action" value="later">Later</button>`,
+			`<button class="wv-btn" type="submit" name="action" value="later">Later</button>`,
 		} {
 			if !strings.Contains(c.body, want) {
 				t.Errorf("%s lacks %q", c.name, want)
 			}
 		}
-		for _, foreign := range []string{`value="approve"`, `value="give"`, "need-approve", `<button type="submit" name="option"`, `value="send"`} {
+		for _, foreign := range []string{`value="approve"`, `value="give"`, "need-approve", `name="option"`, `value="send"`} {
 			if strings.Contains(c.body, foreign) {
 				t.Errorf("%s offers %q", c.name, foreign)
 			}
@@ -849,9 +956,9 @@ func TestHomeNeedsASecretAsk(t *testing.T) {
 }
 
 // A question beginning with the yard's mark reads as the asker's words
-// where the web prints it beside the weight lines: on the bead's page, on
-// the home row and in the wait. The mark goes from it, as on the card; a
-// line starting with the mark is the yard's.
+// where the web prints it beside the weight lines: on the bead's page and on
+// the overview's card. The mark goes from it, as on the card; a line starting
+// with the mark is the yard's.
 func TestWebQuestionWithoutWeightMark(t *testing.T) {
 	t.Parallel()
 	f, _ := talkFixture(t, "jo")
@@ -859,29 +966,24 @@ func TestWebQuestionWithoutWeightMark(t *testing.T) {
 	ask.Question = "WEIGHTY · outside: nothing changes"
 	b, _ := actYard(t, f, ask)
 	page := f.get("/beads/" + b.ID).body
-	if strings.Contains(page, "<p>WEIGHTY") {
+	if strings.Contains(page, "wv-ask__weight") || strings.Contains(page, ">WEIGHTY") {
 		t.Errorf("the bead page forges a weight line:\n%s", page)
 	}
-	if !strings.Contains(page, "<p>outside: nothing changes</p>") {
+	if !strings.Contains(page, `<h2 class="wv-ask__q">outside: nothing changes</h2>`) {
 		t.Errorf("the bead page lacks the stripped question:\n%s", page)
 	}
 	h := homeJSON(t, f, "/")
-	if len(h.Attention) != 1 || h.Attention[0].AskQuestion() != "outside: nothing changes" {
+	if len(h.Attention) != 1 || h.Attention[0].FirstAsk() == nil || h.Attention[0].FirstAsk().Text != "outside: nothing changes" {
 		t.Fatalf("attention %+v, want the asked bead with the stripped question", h.Attention)
 	}
-	s := answerSection(t, f.get("/").body)
-	if strings.Contains(s, "WEIGHTY") {
-		t.Errorf("the home row forges a weight line:\n%s", s)
-	}
-	if !strings.Contains(s, `<span class="entry-title ask-q">outside: nothing changes</span>`) {
-		t.Errorf("the home row lacks the stripped question:\n%s", s)
-	}
-	text := squash(f.get("/line").body)
-	if strings.Contains(text, "WEIGHTY") {
-		t.Errorf("/line forges a weight line:\n%s", text)
-	}
-	if !strings.Contains(text, `<div class="ask-question"><p>outside: nothing changes</p>`) {
-		t.Errorf("/line lacks the stripped question:\n%s", text)
+	for _, path := range []string{"/", "/line"} {
+		card := oneCard(t, f.get(path).body)
+		if strings.Contains(card, "WEIGHTY") {
+			t.Errorf("%s forges a weight line:\n%s", path, card)
+		}
+		if !strings.Contains(card, `<h2 class="wv-ask__q">outside: nothing changes</h2>`) {
+			t.Errorf("%s lacks the stripped question:\n%s", path, card)
+		}
 	}
 }
 

@@ -61,7 +61,9 @@
   </nav>
   <a class="wv-scrim" href="#stage" aria-label="Close the list"></a>
   {{- /* The stage: the phone's top bar, the page's leaf where it is live,
-         and the page itself. The leaf is childless, since htmx's attributes
+         and the page itself, which draws its own head where it is of a
+         stage kind (Page.Kind) and has the shell's heading above it where it
+         is not yet. The leaf is childless, since htmx's attributes
          inherit and these would otherwise reach every link of the page: it
          reads the page's own address again at every event of the stream,
          and puts the stage, the rail and the list's head and rows in place
@@ -76,7 +78,9 @@
     {{- with .Live}}
     <i class="wv-live" hidden hx-get="{{$.Self}}" hx-trigger="sse:message" hx-push-url="false" hx-swap="{{.}}" hx-select-oob="#rail:outerHTML,#list-head:innerHTML,#list-rows:innerHTML"></i>
     {{- end}}
+    {{- if not .Kind}}
     <header class="page-head"><h1>{{.Title}}</h1></header>
+    {{- end}}
     {{template "content" .}}
   </main>
 </div>

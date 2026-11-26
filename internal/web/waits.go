@@ -26,9 +26,9 @@ type Line struct {
 	// their only reason is a stage of a manual group. In the same order.
 	Parked []Waiting `json:"parked"`
 	// Late are the open beads running past their usual time, the newest
-	// change first: /line's own rows under the waits. A late bead needs
-	// nothing yet, so they stand apart from the waits and the rail's
-	// count. Only the /line page reads them.
+	// change first. A late bead needs nothing yet, so they stand apart from
+	// the waits and the rail's count: the overview's pages read them, for the
+	// subline and the Running rows, and /line's list has a section of them.
 	Late []LateRow `json:"late"`
 	Open int       `json:"open"`
 	// Working counts the beads an agent's or a command's session has
@@ -71,8 +71,8 @@ type Waiting struct {
 	Since time.Time `json:"since"`
 	Why   []Reason  `json:"why"`
 	// Topic is the bead's first topic label without its prefix ("web-view"
-	// for "topic:web-view"), "" when it has none. The home row shows it
-	// small beside an ask; HTML-only, as the panel's marks are.
+	// for "topic:web-view"), "" when it has none. The ask card's about line
+	// names it; HTML-only.
 	Topic string `json:"-"`
 	// Revision is the bead's revision when the row was read, for the
 	// forms that answer its asks: a write from another revision is
@@ -100,17 +100,12 @@ type Reason struct {
 	// Note is what was said with it: the reason a hold was given, or an
 	// ask's context lines.
 	Note string `json:"note,omitempty"`
-	// GaveUp is set on a held reason when the bead's events hold a gave_up
-	// for that hold: a builder that gave up after repeated failures. The
-	// text then names the give-up, and the home row shortens it further.
-	// HTML-only, as the panel's marks are: the JSON carries the text.
-	GaveUp bool `json:"-"`
 	// Answered is set on a manual reason when the viewer is a member of
 	// the group with another member left, and has answered, declined or
 	// put aside an ask to them on the bead (store.PartIn): their answer is
 	// in, and the text names who moves it next. An ask taken back is no
-	// answer. Home leaves such a bead out of its count; HTML-only, as the
-	// give-up is: the JSON carries the text.
+	// answer. Home leaves such a bead out of its count; HTML-only: the
+	// JSON carries the text.
 	Answered bool `json:"-"`
 	// Recommend is an ask's recommended option's number, 0 when the ask
 	// recommends nothing. HTML-only: the JSON carries the question and
@@ -187,53 +182,13 @@ func (w Waiting) Reasons() string {
 	return strings.Join(out, " · ")
 }
 
-// Lead is the row's first words on the home page: what happened for a bead
-// something stops, where the person is needed for a parked one. A give-up
-// names itself; a manual wait names its stage. An ask is never the lead:
-// the row shows its question where the title stands, after the fault when
-// there is one.
-func (w Waiting) Lead() string {
-	for _, r := range w.Why {
-		if r.Kind == "manual" || r.Kind == "ask" {
-			continue
-		}
-		if r.Kind == "held" && r.GaveUp {
-			return "gave up"
-		}
-		return r.Kind
-	}
-	return w.Stage
-}
-
 // HasAsk reports whether the bead carries an open ask to the operator.
 func (w Waiting) HasAsk() bool {
 	return slices.ContainsFunc(w.Why, func(r Reason) bool { return r.Kind == "ask" })
 }
 
-// AskQuestion is the oldest open ask's question: what the home row shows
-// where the title stands. "" when the bead carries no ask.
-func (w Waiting) AskQuestion() string {
-	for _, r := range w.Why {
-		if r.Kind == "ask" {
-			return r.Text
-		}
-	}
-	return ""
-}
-
-// AskRecommend is the oldest open ask's recommendation in one line, "" when
-// it recommends nothing or the bead carries no ask.
-func (w Waiting) AskRecommend() string {
-	for _, r := range w.Why {
-		if r.Kind == "ask" && r.Recommend >= 1 && r.Recommend <= len(r.Options) {
-			return fmt.Sprintf("%d. %s", r.Recommend, store.OneLine(r.Options[r.Recommend-1].Label))
-		}
-	}
-	return ""
-}
-
-// FirstAsk is the oldest open ask's reason, for the home row's buttons:
-// the question the row shows is the one they answer. Nil when the bead
+// FirstAsk is the oldest open ask's reason: the question a wait's row shows
+// and the one the overview's card puts to the person. Nil when the bead
 // carries no ask.
 func (w Waiting) FirstAsk() *Reason {
 	for i := range w.Why {
@@ -245,7 +200,9 @@ func (w Waiting) FirstAsk() *Reason {
 }
 
 // Fault reports whether the bead waits on something gone wrong (a hold, a
-// prompt nobody answers) and not a stage that is a person's by design.
+// prompt nobody answers, a stage its flow lacks) and not a stage that is a
+// person's by design or a question put to them: what the list draws in red and
+// the overview's subline counts as held.
 func (w Waiting) Fault() bool {
 	return slices.ContainsFunc(w.Why, func(r Reason) bool { return r.Alarm() })
 }
@@ -266,15 +223,11 @@ func (w Waiting) AnsweredOnly() bool {
 	return true
 }
 
-// ShortID is the bead's short id for the row's end: what stands after the
-// last dash (yardr-evd6 reads as evd6), the whole id when there is none.
-func (w Waiting) ShortID() string { return shortBead(w.Bead) }
-
 // Age is how long the bead has waited, about: since its last change.
 func (w Waiting) Age() string { return age(time.Since(w.Since)) }
 
-// LateRow is one bead running past its usual time: /line lists it under
-// the waits, apart from them, since it needs nothing yet.
+// LateRow is one bead running past its usual time: /line's list has it in
+// a section of its own, apart from the waits, since it needs nothing yet.
 type LateRow struct {
 	Bead  string `json:"bead"`
 	Title string `json:"title"`
@@ -289,8 +242,9 @@ type LateRow struct {
 }
 
 // Alarm reports whether the reason is something gone wrong (a hold, a
-// prompt nobody answers) and not a stage that is a person's by design.
-func (r Reason) Alarm() bool { return r.Kind == "held" || r.Kind == "blocked" }
+// prompt nobody answers, a stage the bead's flow lacks) and not a stage that is
+// a person's by design or a question put to them.
+func (r Reason) Alarm() bool { return r.Kind == "held" || r.Kind == "blocked" || r.Kind == "stranded" }
 
 // line reads what waits for a person and the line in numbers. ov is the
 // overview when the handler has read it already, nil otherwise.
@@ -700,7 +654,6 @@ func (r *reader) held(ctx context.Context, bead string) Reason {
 		}
 	}
 	if g := r.gaveUpAfter(ctx, bead); g != nil {
-		out.GaveUp = true
 		out.Text = gaveUpText(*g)
 	}
 	return out
@@ -812,35 +765,21 @@ func sessionName(sess store.Session) string {
 	return sess.ID
 }
 
-// handleLine is what waits for a person, and the line in numbers, as a
-// page of its own.
+// handleLine is /line: the overview as its stage, which is the home page's,
+// and the line in numbers as its JSON. Decide's list adds the beads running
+// late in a section of their own (list.go). It reads itself again at every
+// event, where home follows its feed in fragments.
 func (s *Server) handleLine(w http.ResponseWriter, r *http.Request) {
-	head, err := s.st.Head(r.Context())
+	ov, l, err := s.readHome(r.Context(), 0, false)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	ov, err := s.overview(r.Context(), nil)
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	l, err := s.line(r.Context(), ov)
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	// The late beads under the waits: the page's own rows, and its list's.
-	if l.Late, err = s.lateRows(r.Context(), ov.yard); err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	s.respond(w, r, Page{Template: "line", Title: "Line", Data: l, line: l, ov: ov, head: head, live: liveStage})
+	s.respond(w, r, Page{Template: "overview", Kind: "overview", Title: "Line", Data: l, line: l, ov: ov, head: ov.Feed.Head, live: liveStage})
 }
 
 // lateRows lists the open beads running past their usual time, the newest
-// change first: /line's own rows under the waits. Their estimates come
-// from one shared queue snapshot.
+// change first. Their estimates come from one shared queue snapshot.
 func (s *Server) lateRows(ctx context.Context, y *yard) ([]LateRow, error) {
 	out := []LateRow{}
 	var ids []string

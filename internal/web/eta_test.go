@@ -214,34 +214,53 @@ func TestFlowsStreamCardLateMark(t *testing.T) {
 	s.quiet(t)
 }
 
-// /line lists late beads under the waits, counted apart from what needs
-// the person: a late bead needs nothing yet.
+// The overview's pages count the late beads apart from what needs the person:
+// a late bead needs nothing yet. Both name them in the subline, linked to
+// /line, and the Running row says the line; /line's list adds a section of
+// them, which home's does not.
 func TestLineLateRows(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	ctx := context.Background()
 	must(t, f.st.PutDepot(ctx, store.Depot{Name: "line", Base: "origin/main"}, "me"))
+	must(t, f.st.PutGroup(ctx, store.Group{Name: "builders", Runner: "fake", Limit: 5}, "me"))
 	b, err := f.st.CreateBead(ctx, store.NewBead{Title: "slow", Type: "task", Stage: "new", Depot: "line"}, "me")
 	must(t, err)
+	sess, err := f.st.Claim(ctx, b.ID, "builders", "new", "yard")
+	must(t, err)
+	must(t, f.st.MarkRunning(ctx, sess.ID, map[string]any{"agent": "slow-new"}))
 	g := serveEstimates(t, f, map[string]*eta.Result{b.ID: etaRunning})
 	r := g.get("/line")
 	if r.status != 200 {
 		t.Fatalf("status %d: %s", r.status, r.body)
 	}
-	if !strings.Contains(squash(r.body), "Late · 1") {
-		t.Errorf("/line lists no late row:\n%s", r.body)
+	secs := listSections(t, r.body)
+	late := section2(t, secs, "Late")
+	if late.count != "1" || len(late.rows) != 1 || late.rows[0].href != "/beads/"+b.ID || late.rows[0].name != "slow" ||
+		len(late.rows[0].lines) != 2 || late.rows[0].lines[1] != etaRunning.Late.Line {
+		t.Errorf("/line's Late section is %+v, want the late bead and its late line", late)
 	}
-	if n := strings.Count(squash(r.body), "Late · 1"); n != 1 {
-		t.Errorf("/line shows the late rows %d times, want once in the page centre", n)
+	if n := strings.Count(squash(r.body), "Late"); n != 1 {
+		t.Errorf("/line shows Late %d times, want its section's head once", n)
 	}
-	if strings.Contains(r.body, `<aside class="right"`) {
-		t.Errorf("/line keeps an aside beside its centre:\n%s", r.body)
+	if strings.Contains(r.body, "⚠") || strings.Contains(r.body, `<aside class="right"`) {
+		t.Errorf("/line keeps the sign of a late mark or an aside beside its stage:\n%s", r.body)
 	}
-	if !strings.Contains(r.body, "⚠ "+etaRunning.Late.Line) {
-		t.Errorf("/line lacks the late line:\n%s", r.body)
+	// The Running row says the same line, on /line and on home.
+	for _, path := range []string{"/line", "/"} {
+		body := g.get(path).body
+		running := section2(t, listSections(t, body), "Running")
+		if len(running.rows) != 1 || len(running.rows[0].lines) != 2 || running.rows[0].lines[1] != etaRunning.Late.Line {
+			t.Errorf("%s's Running row is %+v, want the late line", path, running.rows)
+		}
+		if sub := squash(stageOf(t, body)); !strings.Contains(sub, `<a href="/line">1 late</a>`) {
+			t.Errorf("%s's subline lacks the late count, linked to /line: %s", path, sub)
+		}
 	}
-	if !strings.Contains(r.body, `<a class="bead" href="/beads/`+b.ID+`">`) {
-		t.Errorf("/line links no late bead:\n%s", r.body)
+	for _, sec := range listSections(t, g.get("/").body) {
+		if sec.title == "Late" {
+			t.Errorf("home's list has a Late section")
+		}
 	}
 	var got web.Line
 	g.getJSON("/line", &got)

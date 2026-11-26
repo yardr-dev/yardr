@@ -43,6 +43,26 @@ type Entry struct {
 // Clock is the entry's time as the page shows it (see clock).
 func (e Entry) Clock() string { return clock(e.At) }
 
+// Minute is the entry's time as its line says it: 14:58, under the head of its
+// hour.
+func (e Entry) Minute() string { return clockTime(e.At) }
+
+// HourKey names the hour the entry stands in, in this machine's zone as the
+// page shows times: what the feed groups by, and what a head that repeats the
+// one above it is told by.
+func (e Entry) HourKey() string { return e.At.Local().Format("2006-01-02T15") }
+
+// HourLabel is the head of the entry's hour: 14:00 for today's, with the day
+// before it (Nov 25 14:00) for another's, as clock says a time.
+func (e Entry) HourLabel() string {
+	at, now := e.At.Local(), time.Now()
+	hour := fmt.Sprintf("%02d:00", at.Hour())
+	if at.Year() == now.Year() && at.YearDay() == now.YearDay() {
+		return hour
+	}
+	return at.Format("Jan 2") + " " + hour
+}
+
 // inFeed reports whether an event has an entry in the feed. A crew member's
 // journal entries and handoffs are its own notes to itself, and there are
 // many: they are left out. So are a crew member's turns beginning and ending

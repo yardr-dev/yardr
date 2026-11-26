@@ -21,10 +21,12 @@
 // The talk page's letters are grouped by the reader's day and clock, which
 // the browser sets over the whole pane (groupLetters, below).
 //
-// The line's ask cards stand folded, and the line is read again at every
-// event of the yard, which would fold a card under the person reading it:
-// a card that was opened is opened again after each swap (reopenAsks, at
-// the end).
+// The overview's feed is grouped by the hour, each group under a head. A
+// stream carries one event at a time and knows nothing of what the page shows,
+// so each fragment it brings has the head of its hour before its entry, and so
+// does an older page of the feed that is put under the entries above it:
+// after each swap a head that repeats the hour above it is dropped
+// (dropRepeatedHours, below).
 //
 // A link htmx boosts that the server answers with an error page (a bead that
 // is gone, a page the view refuses) would do nothing, for htmx swaps no 4xx
@@ -123,27 +125,22 @@ function groupLetters() {
 groupLetters();
 document.addEventListener("htmx:afterSwap", groupLetters);
 
-// The line's ask cards that stand open, by the id their details carries
-// (ask-<bead>-<ask>). The toggle event does not bubble, so the document
-// hears it in the capture phase. A swap puts closed cards in place of the
-// line's; each one that was open is opened again, and one whose ask is
-// gone is forgotten.
-var openAsks = {};
-document.addEventListener("toggle", function (event) {
-  var card = event.target;
-  if (!(card instanceof HTMLDetailsElement) || !card.classList.contains("wait-ask") || !card.id) return;
-  if (card.open) openAsks[card.id] = true;
-  else delete openAsks[card.id];
-}, true);
-
-function reopenAsks() {
-  Object.keys(openAsks).forEach(function (id) {
-    var card = document.getElementById(id);
-    if (card) card.open = true;
-    else delete openAsks[id];
+// The feed's heads: one per hour, as the server writes them (data-hour is the
+// hour's key). A head whose hour is the one of the head above it is dropped,
+// so a fragment that brings its own head over an entry of an hour the feed
+// already shows leaves that hour's head where it was.
+function dropRepeatedHours() {
+  var feed = document.getElementById("feed");
+  if (!feed) return;
+  var hour = null;
+  Array.prototype.slice.call(feed.children).forEach(function (item) {
+    if (!item.classList.contains("wv-hour")) return;
+    if (item.dataset.hour === hour) item.remove();
+    else hour = item.dataset.hour;
   });
 }
-document.addEventListener("htmx:afterSwap", reopenAsks);
+dropRepeatedHours();
+document.addEventListener("htmx:afterSwap", dropRepeatedHours);
 
 // A boosted click the server refused is loaded as a link without script is:
 // the address shows its own error page, inside the same window.

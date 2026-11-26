@@ -47,6 +47,41 @@ func timeless(ws []web.Waiting) []web.Waiting {
 	return out
 }
 
+// listRowsOf are the rows of the list's section on the page at path, as the
+// list says them, none where the page has no such section: Decide's list holds
+// every wait in its Waits for you and the beads parked where they start, or the
+// reader answered, in its folded Parked.
+func listRowsOf(t *testing.T, f *fixture, path, section string) []testRow {
+	t.Helper()
+	for _, sec := range listSections(t, f.get(path).body) {
+		if sec.title == section {
+			return sec.rows
+		}
+	}
+	return nil
+}
+
+// rowOf is the row of rows that opens the bead's page.
+func rowOf(t *testing.T, rows []testRow, bead string) testRow {
+	t.Helper()
+	for _, r := range rows {
+		if r.href == "/beads/"+bead {
+			return r
+		}
+	}
+	t.Fatalf("the list has no row for %s: %+v", bead, rows)
+	return testRow{}
+}
+
+// reasonLine is the line of a wait's row that says why it waits, which stands
+// after the bead's own line.
+func reasonLine(r testRow) string {
+	if len(r.lines) < 2 {
+		return ""
+	}
+	return r.lines[1]
+}
+
 // A held bead waits for a person, with who held it and the reason they
 // gave; unholding it takes it off again. The line shows it, home's aside
 // the line alone, and every other page counts it in its header.
@@ -63,8 +98,8 @@ func TestWaitsHeld(t *testing.T) {
 	if got := waiting(lineJSON(t, f)); len(got) != 0 {
 		t.Fatalf("nothing is held, and these wait: %+v", got)
 	}
-	if text := squash(f.get("/line").body); !strings.Contains(text, `<p class="faint">Nothing waits for you.</p>`) {
-		t.Error("the column of a yard where nothing waits does not say so")
+	if !strings.Contains(listOf(t, f.get("/line").body), `<li class="wv-list__none">Nothing waits for you.</li>`) {
+		t.Error("the list of a yard where nothing waits does not say so")
 	}
 
 	must(t, f.st.AddNote(ctx, b.ID, "the hinge is <missing>", "builder"))
@@ -75,15 +110,14 @@ func TestWaitsHeld(t *testing.T) {
 	if got := waiting(lineJSON(t, f)); !reflect.DeepEqual(got, want) {
 		t.Errorf("held\n got %+v\nwant %+v", got, want)
 	}
-	text := squash(f.get("/line").body)
-	for _, part := range []string{
-		`<article class="wait"><header><a class="bead" href="/beads/` + b.ID + `">` + b.ID + `</a><span class="label">new</span></header>`,
-		`<p class="wait-title">a door</p><p class="why held">held by builder</p><p class="entry-note">the hinge is &lt;missing&gt;</p>`,
-		`<dt><span class="dot held"></span>held</dt><dd>1</dd>`,
-	} {
-		if !strings.Contains(text, part) {
-			t.Errorf("/line lacks %q", part)
-		}
+	// The list's row names the bead by its title, the hold in red and the note
+	// it was given with, whole, and the answer counts one held.
+	row := rowOf(t, listRowsOf(t, f, "/line", "Waits for you"), b.ID)
+	if row.name != "a door" || row.dot != "wait" || len(row.lines) != 2 || row.lines[0] != "held by builder" || row.lines[1] != "the hinge is <missing>" {
+		t.Errorf("/line's row is %+v", row)
+	}
+	if sub := answerSection(t, f.get("/line").body); !strings.Contains(sub, "1 held.") {
+		t.Errorf("/line's answer lacks the held bead: %s", sub)
 	}
 	// Every other page counts it in the rail's badge, and keeps no aside.
 	for _, path := range []string{"/", "/sessions", "/crew", "/beads"} {
@@ -104,7 +138,7 @@ func TestWaitsHeld(t *testing.T) {
 		t.Errorf("Decide's list does not hold the held bead: %+v", waits)
 	}
 	if strings.Contains(squash(stageOf(t, home)), `<article class="wait">`) {
-		t.Error("/ has the waits panel in its centre")
+		t.Error("/ has the waits panel in its stage")
 	}
 
 	// A hold with no note of its holder right before it has no reason to
@@ -151,8 +185,15 @@ func TestWaitsHeld(t *testing.T) {
 			!strings.HasPrefix(reason.Note, wantHead) || strings.ContainsAny(reason.Note, "\n{") {
 			t.Errorf("%s: the hold reason is %+v, want its ask's first line from %q", asked.ID, reason, wantHead)
 		}
-		if want := `<p class="why held">held by ` + c.holder + `</p><p class="entry-note">` + wantHead; !strings.Contains(squash(f.get("/line").body), want) {
-			t.Errorf("/line lacks %q", want)
+		// The row stands once: the hold, then what was said with it, which is the
+		// ask's first line; an ask still open puts its question there instead.
+		row := rowOf(t, listRowsOf(t, f, "/line", "Waits for you"), asked.ID)
+		wantSaid := wantHead
+		if !c.answer {
+			wantSaid = pickAsk().Question
+		}
+		if len(row.lines) < 2 || row.lines[0] != "held by "+c.holder || !strings.HasPrefix(row.lines[1], wantSaid) {
+			t.Errorf("/line's row for %s is %+v, want the hold and %q", asked.ID, row, wantSaid)
 		}
 		var homeReason []web.Reason
 		for _, row := range homeJSON(t, f, "/").Attention {
@@ -245,28 +286,33 @@ func TestWaitsManual(t *testing.T) {
 	if l.Sessions != 0 || l.Working != 0 {
 		t.Errorf("the line has %d sessions and %d working, want none: a manual claim runs nothing", l.Sessions, l.Working)
 	}
-	text := squash(f.get("/line").body)
-	for _, part := range []string{
-		`<h2 class="label">Waits for you</h2><h3 class="label">Parked · 2</h3><div class="parked"><article class="wait"><header><a class="bead" href="/beads/` + claimed.ID + `">` + claimed.ID + `</a>`,
-		`<p class="why">waits for decisions (anna, ben) in decide</p>`,
-		`<dt>open</dt><dd>3</dd>`,
-		`<li><span>decide</span><span class="num">2</span></li>`,
-	} {
-		if !strings.Contains(text, part) {
-			t.Errorf("the column lacks %q", part)
+	// No flow tells where these beads start, so both stand among the waits,
+	// each with the group it waits for; the numbers are the subline's and the
+	// per-stage sums head Lines' list.
+	waits := listRowsOf(t, f, "/line", "Waits for you")
+	for _, b := range []*store.Bead{claimed, unclaimed} {
+		if got := reasonLine(rowOf(t, waits, b.ID)); got != "waits for decisions (anna, ben) in decide" {
+			t.Errorf("%s's row says %q", b.ID, got)
 		}
 	}
-	// Home has no aside: its page holds the waits in its centre and none
-	// of the line's numbers or panels.
+	if sub := squash(stageOf(t, f.get("/line").body)); !strings.Contains(sub, `<a href="/flows">3 open</a>`) {
+		t.Errorf("/line's subline lacks the 3 open beads: %s", sub)
+	}
+	if head := regionOf(t, f.get("/flows").body, `<header class="wv-list__head" id="list-head">`, `</header>`); !strings.Contains(head, "decide 2") {
+		t.Errorf("Lines' head lacks the open per stage: %s", head)
+	}
+	// Home has no aside: the waits stand in the list, and none of the line's
+	// panels on the stage.
 	home := squash(stageOf(t, f.get("/").body))
 	for _, not := range []string{`<dt>open</dt>`, `Parked · 2`, `<article class="wait">`, `<aside`} {
 		if strings.Contains(home, not) {
 			t.Errorf("home has %q", not)
 		}
 	}
-	// The column prints no zero: nothing working and no session running is
-	// shown by the absence of their rows.
-	for _, not := range []string{`<dd>0</dd>`, ">0<"} {
+	// The subline prints no zero: nothing working and no session running is
+	// shown by the absence of their parts.
+	text := squash(stageOf(t, f.get("/line").body))
+	for _, not := range []string{`0 moving`, ">0<"} {
 		if strings.Contains(text, not) {
 			t.Errorf("the page has %q", not)
 		}
@@ -306,9 +352,8 @@ func TestWaitsManual(t *testing.T) {
 	if got := waiting(lineJSON(t, f)); len(got) != 0 {
 		t.Errorf("a bead in decide is a person's by design, and these wait: %+v", got)
 	}
-	text = squash(f.get("/line").body)
-	if part := `<p class="why">waits for decisions (anna, ben) in decide</p><p class="why">sent to decide after 3 rounds back to new (changes from review)</p>`; !strings.Contains(text, part) {
-		t.Errorf("/line lacks %q", part)
+	if got, want := reasonLine(rowOf(t, listRowsOf(t, f, "/line", "Waits for you"), b.ID)), "waits for decisions (anna, ben) in decide · sent to decide after 3 rounds back to new (changes from review)"; got != want {
+		t.Errorf("/line's row says %q, want %q", got, want)
 	}
 
 	// A person sends it back, it goes round again and the limit sends it on a
@@ -417,11 +462,11 @@ func TestWaitsManualAnswered(t *testing.T) {
 	if got, want := attn(anna), map[string]bool{open.ID: true, quiet.ID: true, lone.ID: true, free.ID: true, other.ID: true, takenBack.ID: true}; !reflect.DeepEqual(got, want) {
 		t.Errorf("anna's attention %v, want %v", got, want)
 	}
-	if h := homeJSON(t, anna, "/"); h.Answer() != "6 need you." {
-		t.Errorf("anna's answer %q, want six needs", h.Answer())
+	if h := homeJSON(t, anna, "/"); h.Answer() != "6 wait for you" {
+		t.Errorf("anna's answer %q, want six waits", h.Answer())
 	}
-	if s := answerSection(t, anna.get("/").body); !strings.HasPrefix(s, "6 need you.</p>") {
-		t.Errorf("anna's answer line is %q, want six needs", s)
+	if s := answerSection(t, anna.get("/").body); !strings.Contains(s, `<h1 class="wv-answer">6 wait for you</h1>`) {
+		t.Errorf("anna's answer line is %q, want six waits", s)
 	}
 	// Her Parked rows for them say her answer is in and name ben.
 	for _, id := range []string{answered.ID, declined.ID, aside.ID} {
@@ -429,8 +474,11 @@ func TestWaitsManualAnswered(t *testing.T) {
 			t.Errorf("anna's parked row for %s is %q, want %q", id, got, want)
 		}
 	}
-	if text := squash(anna.get("/line").body); !strings.Contains(text, `<p class="why">you answered; waits for decisions (ben) in decide</p>`) {
-		t.Error("anna's /line page names no answered row")
+	// The answered beads stand in the list's Parked, not among her waits, and
+	// say whose move it is now.
+	parkedRows := listRowsOf(t, anna, "/line", "Parked")
+	if got := reasonLine(rowOf(t, parkedRows, answered.ID)); got != "you answered; waits for decisions (ben) in decide" {
+		t.Errorf("anna's /line page says %q of the answered bead", got)
 	}
 	// No new field: the reason's JSON is kind, text and note, as before.
 	var l struct {
@@ -457,8 +505,8 @@ func TestWaitsManualAnswered(t *testing.T) {
 	if got := attn(ben); len(got) != 9 {
 		t.Errorf("ben's attention has %d beads, want nine", len(got))
 	}
-	if h := homeJSON(t, ben, "/"); h.Answer() != "9 need you." {
-		t.Errorf("ben's answer %q, want nine needs", h.Answer())
+	if h := homeJSON(t, ben, "/"); h.Answer() != "9 wait for you" {
+		t.Errorf("ben's answer %q, want nine waits", h.Answer())
 	}
 	for _, id := range []string{answered.ID, takenBack.ID} {
 		if got, want := parkedText("ben", ben, id), "waits for decisions (anna, ben) in decide"; got != want {
@@ -570,8 +618,8 @@ func TestWaitsManualAnswered(t *testing.T) {
 	if !benHas {
 		t.Error("ben answered nothing and the limited bead is left out of his home")
 	}
-	if text := squash(anna.get("/line").body); !strings.Contains(text, `<p class="why">you answered; waits for decisions (ben) in decide</p><p class="why">sent to decide after 1 round back to new (changes from review)</p>`) {
-		t.Error("anna's /line page does not say why the answered bead waits")
+	if got, want := reasonLine(rowOf(t, listRowsOf(t, anna, "/line", "Parked"), limited.ID)), "you answered; waits for decisions (ben) in decide · sent to decide after 1 round back to new (changes from review)"; got != want {
+		t.Errorf("anna's /line page says %q of the answered bead, want %q", got, want)
 	}
 }
 
@@ -640,26 +688,24 @@ func TestManualClaimsOnly(t *testing.T) {
 		}
 	}
 
-	text := squash(f.get("/line").body)
-	for _, part := range []string{
-		`<h2 class="label">Waits for you</h2><h3 class="label">Parked · 5</h3><div class="parked"><article class="wait"><header><a class="bead" href="/beads/` + beads[4].ID + `">` + beads[4].ID + `</a>`,
-		`<dt>open</dt><dd>5</dd>`,
-	} {
-		if !strings.Contains(text, part) {
-			t.Errorf("/line lacks %q", part)
-		}
+	// Each of the five stands once in the list, the last claimed first, and
+	// the numbers are the subline's.
+	rows := listRowsOf(t, f, "/line", "Waits for you")
+	if len(rows) != 5 || rows[0].href != "/beads/"+beads[4].ID || rows[4].href != "/beads/"+beads[0].ID {
+		t.Errorf("/line lists %+v, want the five parked beads, once each, the last claimed first", rows)
 	}
-	// The line prints no zero: no work in progress is shown by the
-	// absence of its rows.
-	for _, not := range []string{`<dd>0</dd>`, ">0<"} {
+	text := squash(stageOf(t, f.get("/line").body))
+	if !strings.Contains(text, `<a href="/flows">5 open</a>`) {
+		t.Errorf("/line's subline lacks the 5 open beads: %s", text)
+	}
+	// The subline prints no zero: no work in progress is shown by the
+	// absence of its parts.
+	for _, not := range []string{`0 moving`, ">0<"} {
 		if strings.Contains(text, not) {
 			t.Errorf("/line has %q", not)
 		}
 	}
-	if n := strings.Count(text, `<article class="wait">`); n != 5 {
-		t.Errorf("/line lists %d beads, want the five parked, once each", n)
-	}
-	if strings.Contains(text, "Nothing waits for you.") {
+	if strings.Contains(listOf(t, f.get("/line").body), "Nothing waits for you.") {
 		t.Error("/line says nothing waits, over five parked beads")
 	}
 	// Every other page counts them in the rail's badge instead, and keeps no
@@ -739,15 +785,16 @@ func TestManualClaimsMixed(t *testing.T) {
 		t.Errorf("sessions %+v, want the two agents' sessions and two manual claims: a hold ends the claim", s)
 	}
 
-	text := squash(f.get("/line").body)
-	for _, part := range []string{
-		`<h2 class="label">Waits for you</h2><article class="wait"><header><a class="bead" href="/beads/` + beads[1].ID + `">` + beads[1].ID + `</a><span class="label">backlog</span></header>` +
-			`<p class="wait-title">idea b</p><p class="why held">held by me</p><p class="why">waits for backlog in backlog</p></article>` +
-			`<h3 class="label">Parked · 2</h3><div class="parked"><article class="wait"><header><a class="bead" href="/beads/` + beads[2].ID + `">` + beads[2].ID + `</a>`,
-		`<dt><span class="dot working"></span>working</dt><dd>2</dd>`,
-		`<dt><span class="dot held"></span>held</dt><dd>1</dd>`,
-		`<dt><span class="dot running"></span>sessions</dt><dd>2</dd>`,
-	} {
+	// The held bead stands first, with its holder and the group it waits for;
+	// the two parked stand after it, and the numbers are the subline's: two
+	// moving, five open, one held.
+	rows := listRowsOf(t, f, "/line", "Waits for you")
+	if len(rows) != 3 || rows[0].href != "/beads/"+beads[1].ID || rows[0].name != "idea b" ||
+		rows[0].lines[0] != "held by me" || rows[1].href != "/beads/"+beads[2].ID || rows[2].href != "/beads/"+beads[0].ID {
+		t.Errorf("/line lists %+v, want the held bead first and the two parked after it", rows)
+	}
+	text := squash(stageOf(t, f.get("/line").body))
+	for _, part := range []string{`<a href="/sessions">2 moving</a>`, `<a href="/flows">5 open</a>`, "2 to decide, 1 held, both in the list."} {
 		if !strings.Contains(text, part) {
 			t.Errorf("/line lacks %q", part)
 		}
@@ -808,8 +855,9 @@ func TestWaitsBlocked(t *testing.T) {
 	if got := waiting(lineJSON(t, f)); !reflect.DeepEqual(got, want) {
 		t.Errorf("blocked\n got %+v\nwant %+v", got, want)
 	}
-	if text := squash(f.get("/line").body); !strings.Contains(text, `<p class="why held">its session waits on a prompt: door-new</p>`) {
-		t.Errorf("the column lacks the blocked session: %s", text)
+	row := rowOf(t, listRowsOf(t, f, "/line", "Waits for you"), b.ID)
+	if len(row.lines) != 1 || row.lines[0] != "its session waits on a prompt: door-new" || !strings.Contains(listOf(t, f.get("/line").body), `<span class="wv-fault">its session waits on a prompt: door-new</span>`) {
+		t.Errorf("the list lacks the blocked session, in red: %+v", row)
 	}
 	must(t, f.st.LogDispatch(ctx, b.ID, "session_unblocked", "yard", map[string]any{"session": sess.ID}))
 	if got := waiting(lineJSON(t, f)); len(got) != 0 {
@@ -940,14 +988,14 @@ func TestRailCountsWhatWaits(t *testing.T) {
 	// is on /line, not in the count, as home needs no one.
 	parked, err := f.st.CreateBead(ctx, store.NewBead{Title: "an idea", Stage: "backlog", Depot: "line"}, "me")
 	must(t, err)
-	if s := answerSection(t, f.get("/").body); !strings.HasPrefix(s, "Nothing needs you.</p>") {
+	if s := answerSection(t, f.get("/").body); !strings.Contains(s, `<h1 class="wv-answer wv-answer--clear">Nothing needs you.</h1>`) {
 		t.Errorf("home needs %q, want nothing: the bead is parked where it starts", s)
 	}
 	if tile := badge("/beads"); strings.Contains(tile, "wv-badge") {
 		t.Errorf("/beads counts the backlog, and home needs no one: %s", tile)
 	}
-	if text := squash(f.get("/line").body); !strings.Contains(text, `<h3 class="label">Parked · 1</h3>`) {
-		t.Error("/line lists no parked bead")
+	if rows := listRowsOf(t, f, "/line", "Parked"); len(rows) != 1 || rows[0].href != "/beads/"+parked.ID {
+		t.Errorf("/line's list holds %+v of the parked, want the bead parked where it starts", rows)
 	}
 
 	// One waits: every page counts it, singular, and the list's head says
@@ -1353,27 +1401,26 @@ func TestStreamStartsBeforeThePageWasRead(t *testing.T) {
 	}
 }
 
-// A weighty mapping card's wait shows the weight first and the decline path
-// with the terminal command instead of the pick buttons, as its bead's page
-// and its home row do. A weighty secret card's wait shows the weight with
-// what the ask is for and the decline path, and a routine card's wait keeps
-// its picks.
+// A weighty mapping card, on /line's stage, shows the weight first and the
+// decline path with the terminal command instead of the pick buttons, as its
+// bead's page and the home page's do. A weighty secret card shows the weight
+// with what the ask is for and the decline path, and a routine card keeps its
+// picks.
 func TestWaitsWeightyAsk(t *testing.T) {
 	t.Parallel()
 	f, b, seq := mappingActYard(t)
 	ask := strconv.FormatUint(seq, 10)
-	text := squash(f.get("/line").body)
+	text := oneCard(t, f.get("/line").body)
 	for _, want := range []string{
-		`<article class="wait"><header><a class="bead" href="/beads/` + b.ID + `">` + b.ID + `</a>`,
-		`depot · bead ` + b.ID + ` · Everything else</a></p>`,
-		`<p class="weighty">WEIGHTY · as-user: lets calls or words count as a person&#39;s: a pick says which user U777 in talk is, and a delivery from them is then heard as that user&#39;s</p>`,
+		`<a class="wv-id" href="/beads/` + b.ID + `">` + b.ID + `</a>`,
+		`<p class="wv-ask__weight">WEIGHTY · as-user: lets calls or words count as a person&#39;s: a pick says which user U777 in talk is, and a delivery from them is then heard as that user&#39;s</p>`,
 		`This card is weighty and this window has no gate. Approve it in footplate, or in a terminal on the yard's machine:`,
 		`Approve it with <code>yardr bead answer ` + b.ID + ` ` + ask + ` &lt;n&gt;</code>`,
-		`<li><span>1. ada</span>`,
-		`<li><span>2. mckean</span>`,
+		`<span class="wv-opt__n">1</span><span class="wv-opt__b"><span class="wv-opt__t">ada</span>`,
+		`<span class="wv-opt__n">2</span><span class="wv-opt__b"><span class="wv-opt__t">mckean</span>`,
 		`hx-preserve="true" name="words"`,
-		`<button type="submit" name="action" value="later">Later</button>`,
-		`<button type="submit" name="action" value="decline" title="Say no to all options. The asker finds another way.">Decline</button>`,
+		laterButton,
+		declineButton,
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("/line lacks %q", want)
@@ -1384,14 +1431,14 @@ func TestWaitsWeightyAsk(t *testing.T) {
 	}
 
 	f2, b2, seq2 := secretActYard(t)
-	secret := squash(f2.get("/line").body)
+	secret := oneCard(t, f2.get("/line").body)
 	for _, want := range []string{
-		`<p class="weighty">WEIGHTY · credential: gives a credential or an address to the yard: CRM_TOKEN, for the source crm (https://crm.example.com)</p>`,
+		`<p class="wv-ask__weight">WEIGHTY · credential: gives a credential or an address to the yard: CRM_TOKEN, for the source crm (https://crm.example.com)</p>`,
 		`a secret: CRM_TOKEN, for the source crm (https://crm.example.com)`,
 		`This card is weighty and this window has no gate. Approve it in footplate, or in a terminal on the yard's machine:`,
 		`Give it with <code>yardr bead answer ` + b2.ID + ` ` + strconv.FormatUint(seq2, 10) + ` --secret</code>`,
-		`<button type="submit" name="action" value="later">Later</button>`,
-		`<button type="submit" name="action" value="decline" title="Say no to all options. The asker finds another way.">Decline</button>`,
+		`<button class="wv-btn" type="submit" name="action" value="later">Later</button>`,
+		`<button class="wv-btn" type="submit" name="action" value="decline" title="Say no to all options. The asker finds another way.">Decline</button>`,
 	} {
 		if !strings.Contains(secret, want) {
 			t.Errorf("/line lacks %q", want)
@@ -1406,16 +1453,13 @@ func TestWaitsWeightyAsk(t *testing.T) {
 	// A routine card's wait keeps its picks and shows no weight.
 	f3, _ := talkFixture(t, "jo")
 	actYard(t, f3, pickAsk())
-	routine := squash(f3.get("/line").body)
-	for _, want := range []string{
-		`<button type="submit" name="option" value="1">Answer: 1 · Move them now</button>`,
-		`<button type="submit" name="option" value="2">After Friday</button>`,
-	} {
+	routine := oneCard(t, f3.get("/line").body)
+	for _, want := range pickOptions[:2] {
 		if !strings.Contains(routine, want) {
 			t.Errorf("/line lacks %q", want)
 		}
 	}
-	for _, foreign := range []string{`class="weighty"`, "WEIGHTY", "no gate"} {
+	for _, foreign := range []string{`class="wv-ask__weight"`, "WEIGHTY", "no gate"} {
 		if strings.Contains(routine, foreign) {
 			t.Errorf("the routine wait shows %q:\n%s", foreign, routine)
 		}

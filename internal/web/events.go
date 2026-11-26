@@ -122,8 +122,8 @@ func (s *Server) enter(remote string) (leave func(), status int) {
 // and from now without either, and from there carries every event once
 // and in order, as `yardr watch --after` does.
 //
-// The data is an HTML fragment, the feed's entry, for htmx to put at the
-// top of the feed; an event the feed leaves out is sent as its id alone,
+// The data is an HTML fragment, the feed's entry with the head of its hour,
+// for htmx to put at the top of the feed; an event the feed leaves out is sent as its id alone,
 // so the client's cursor still passes it. ?format= asks for something
 // else: json (also by an Accept that prefers JSON) is the event itself,
 // and none is left out; seq is the seq alone, for a page that reads
@@ -292,22 +292,36 @@ func (s *Server) frame(ctx context.Context, e store.Event, format string) ([]byt
 		return message(&b, e.Seq, "", strconv.AppendUint(nil, e.Seq, 10)), true
 	case format == "home":
 		if rd := s.newReader(nil); inFeed(e) && inHomeFeed(ctx, rd, e) {
-			var html bytes.Buffer
-			if err := s.partials.ExecuteTemplate(&html, "entry", rd.entry(ctx, e)); err != nil {
+			html, err := s.feedFragment(rd.entry(ctx, e))
+			if err != nil {
 				s.log.Error("web: /events", "seq", e.Seq, "err", err)
 				break
 			}
-			return message(&b, e.Seq, "", html.Bytes()), true
+			return message(&b, e.Seq, "", html), true
 		}
 	case inFeed(e):
-		var html bytes.Buffer
-		if err := s.partials.ExecuteTemplate(&html, "entry", s.newReader(nil).entry(ctx, e)); err != nil {
+		html, err := s.feedFragment(s.newReader(nil).entry(ctx, e))
+		if err != nil {
 			s.log.Error("web: /events", "seq", e.Seq, "err", err)
 			break
 		}
-		return message(&b, e.Seq, "", html.Bytes()), true
+		return message(&b, e.Seq, "", html), true
 	}
 	return message(&b, e.Seq, "", nil), true
+}
+
+// feedFragment is the feed's fragment for one entry: the entry after the head
+// of its hour, for htmx to put on the top of the feed. The page drops the head
+// where the hour above it is the same (yard.js), since a stream carries one
+// event at a time and knows nothing of what the page shows.
+func (s *Server) feedFragment(e Entry) ([]byte, error) {
+	var html bytes.Buffer
+	for _, name := range []string{"hour", "entry"} {
+		if err := s.partials.ExecuteTemplate(&html, name, e); err != nil {
+			return nil, err
+		}
+	}
+	return html.Bytes(), nil
 }
 
 // message writes one server-sent event to b and returns b's bytes. id 0 is
