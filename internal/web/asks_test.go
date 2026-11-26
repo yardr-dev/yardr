@@ -907,7 +907,7 @@ func section(t *testing.T, page, from, to string) string {
 // aside, declined, taken back, a run ask's command as text), in the notes and
 // in the history line. An answer is read inside its ask. The page's JSON keeps
 // the notes as stored, and home's feed, whose entries are made by the reader
-// the history's are, keeps saying them as stored.
+// the history's are, says each by the first line of the ask's words.
 func TestBeadPageReadsAsksAsWords(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -1031,21 +1031,23 @@ func TestBeadPageReadsAsksAsWords(t *testing.T) {
 		if asked != 1 {
 			t.Errorf("%s: %d noted entries say the question, want the ask's own alone: %q", c.name, asked, noted)
 		}
-		// Home's feed is not the history: it says every note as it was stored, an
-		// ask's JSON and an answer's among them, so what the page draws as words
-		// does not move a value the feed carries.
-		stored := 0
+		// Home's feed is not the history: its entry is a line, so it says the ask
+		// by the first line of its words alone, which names the ask and how it
+		// stands, and says each answer to it by the same line. No JSON stands in
+		// it, and no question cut at the entry's width.
+		var feed []string
 		for _, e := range homeJSON(t, f, "/").Events {
-			if e.Bead != b.ID || e.Kind != "noted" {
-				continue
-			}
-			stored++
-			if !strings.HasPrefix(e.Note, `{"question"`) && !strings.HasPrefix(e.Note, `{"ask"`) {
-				t.Errorf("%s: home's feed says the note %q, want it as it was stored", c.name, e.Note)
+			if e.Bead == b.ID && e.Kind == "noted" {
+				feed = append(feed, e.Note)
 			}
 		}
-		if stored != 1+c.answers {
-			t.Errorf("%s: home's feed has %d noted entries, want %d", c.name, stored, 1+c.answers)
+		if len(feed) != 1+c.answers {
+			t.Fatalf("%s: home's feed has %d noted entries, want %d: %q", c.name, len(feed), 1+c.answers, feed)
+		}
+		for _, note := range feed {
+			if !strings.HasPrefix(note, at(c.head)) || strings.ContainsAny(note, "\n{") || note != feed[0] {
+				t.Errorf("%s: home's feed says the note %q, want the ask's first line from %q, the same for each note of it", c.name, note, at(c.head))
+			}
 		}
 	}
 }
@@ -1071,6 +1073,7 @@ func TestReadAsksLeavesWhatItCannotReadAsItStands(t *testing.T) {
 		note(5, store.NoteAnswer, "mckean", `{"ask":99,"option":1}`),
 		note(6, store.NoteAnswer, "mckean", "not json either"),
 		note(7, store.NoteNote, "mckean", "a plain note"),
+		note(8, store.NoteAsk, "yardmaster", "not json\nand two lines"),
 	}
 	for _, marks := range []map[string]string{nil, {"ada@airy": "ada"}} {
 		a := web.ReadAsks(notes, now, marks)
@@ -1087,16 +1090,23 @@ func TestReadAsksLeavesWhatItCannotReadAsItStands(t *testing.T) {
 		// The answer is in its ask and says its ask's first line; every other
 		// note is said as it was written, an ask that does not parse among
 		// them, and none is dropped from the words that stand for it.
-		if head, _, _ := strings.Cut(words, "\n"); !a.Folded(3) || a.Of(notes[2]) != head || a.Of(notes[0]) != words {
+		head, _, _ := strings.Cut(words, "\n")
+		if !a.Folded(3) || a.Of(notes[2]) != head || a.Of(notes[0]) != words {
 			t.Errorf("marks %v: the answer 3 is not folded into its ask: folded %v, says %q, want the ask's first line", marks, a.Folded(3), a.Of(notes[2]))
 		}
+		// Where one line is all there is room for, the ask says its first line
+		// and the answer in it the same, and what is no ask of the bead is still
+		// said as it was written, whole, not cut to its first line.
+		if a.Head(notes[0]) != head || a.Head(notes[2]) != head {
+			t.Errorf("marks %v: the ask says %q on a line and its answer %q, want the ask's first line %q", marks, a.Head(notes[0]), a.Head(notes[2]), head)
+		}
 		for _, n := range notes[3:] {
-			if a.Folded(n.Seq) || a.Of(n) != n.Text {
-				t.Errorf("marks %v: note %d (%s) is folded (%v) or says %q, want its text as it stands", marks, n.Seq, n.Kind, a.Folded(n.Seq), a.Of(n))
+			if a.Folded(n.Seq) || a.Of(n) != n.Text || a.Head(n) != n.Text {
+				t.Errorf("marks %v: note %d (%s) is folded (%v) or says %q, or %q on a line, want its text as it stands", marks, n.Seq, n.Kind, a.Folded(n.Seq), a.Of(n), a.Head(n))
 			}
 		}
-		if a.Words(2) != "" || a.Of(notes[1]) != "not json at all" {
-			t.Errorf("marks %v: the ask that does not parse reads %q and says %q, want it as it stands", marks, a.Words(2), a.Of(notes[1]))
+		if a.Words(2) != "" || a.Of(notes[1]) != "not json at all" || a.Head(notes[1]) != "not json at all" {
+			t.Errorf("marks %v: the ask that does not parse reads %q and says %q, %q on a line, want it as it stands", marks, a.Words(2), a.Of(notes[1]), a.Head(notes[1]))
 		}
 	}
 }

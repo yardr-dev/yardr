@@ -55,6 +55,7 @@ func TestWaitsHeld(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	must(t, f.st.PutDepot(ctx, store.Depot{Name: "line", Base: "origin/main"}, "me"))
+	must(t, f.st.SetSetting(ctx, "operator", "mckean", "me"))
 	b, err := f.st.CreateBead(ctx, store.NewBead{Title: "a door", Stage: "new", Depot: "line"}, "me")
 	must(t, err)
 	_, err = f.st.CreateBead(ctx, store.NewBead{Title: "a window", Stage: "new", Depot: "line"}, "me")
@@ -119,6 +120,51 @@ func TestWaitsHeld(t *testing.T) {
 	want[0].Why = []web.Reason{{Kind: "held", Text: "held by me"}}
 	if got := waiting(lineJSON(t, f)); !reflect.DeepEqual(got, want) {
 		t.Errorf("held again\n got %+v\nwant %+v", got, want)
+	}
+
+	// An ask and its answer are JSON in their notes. When one is the note
+	// right before a hold, the aside says the ask by its first line.
+	for _, c := range []struct {
+		title, state, holder string
+		answer               bool
+	}{
+		{"ask reason", "open", "yardmaster", false},
+		{"answer reason", "answered", "mckean", true},
+	} {
+		asked, err := f.st.CreateBead(ctx, store.NewBead{Title: c.title, Stage: "new", Depot: "line"}, "me")
+		must(t, err)
+		seq, err := f.st.AddAsk(ctx, asked.ID, pickAsk(), "yardmaster")
+		must(t, err)
+		if c.answer {
+			must(t, f.st.AddAnswer(ctx, asked.ID, store.Answer{Ask: seq, Option: 1}, "mckean"))
+		}
+		_, err = f.st.SetHold(ctx, asked.ID, true, store.Expect{}, c.holder)
+		must(t, err)
+		wantHead := fmt.Sprintf("ask %d · %s · to mckean · asked by yardmaster · ", seq, c.state)
+		var reason *web.Reason
+		for _, w := range waiting(lineJSON(t, f)) {
+			if w.Bead == asked.ID && len(w.Why) > 0 {
+				reason = &w.Why[0]
+				break
+			}
+		}
+		if reason == nil || reason.Kind != "held" || reason.Text != "held by "+c.holder ||
+			!strings.HasPrefix(reason.Note, wantHead) || strings.ContainsAny(reason.Note, "\n{") {
+			t.Errorf("%s: the hold reason is %+v, want its ask's first line from %q", asked.ID, reason, wantHead)
+		}
+		if want := `<p class="why held">held by ` + c.holder + `</p><p class="entry-note">` + wantHead; !strings.Contains(squash(f.get("/line").body), want) {
+			t.Errorf("/line lacks %q", want)
+		}
+		var homeReason []web.Reason
+		for _, row := range homeJSON(t, f, "/").Attention {
+			if row.Bead == asked.ID {
+				homeReason = row.Why
+				break
+			}
+		}
+		if reason == nil || len(homeReason) == 0 || !sameReason(*reason, homeReason[0]) {
+			t.Errorf("home says the hold reason %+v, /line %+v, want the same", homeReason, reason)
+		}
 	}
 }
 

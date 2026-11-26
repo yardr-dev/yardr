@@ -9,8 +9,8 @@ import (
 
 // askNotes are the notes of one bead that hold an ask, or an answer to one,
 // read as words. A note of either kind is JSON in its text, which no person
-// reads: the page and the history word it as `yardr prime` does, from the
-// store's own reading of the notes (store.ResolveAsks), so the two never say
+// reads: the page, the history and the feed word it as `yardr prime` does, from
+// the store's own reading of the notes (store.ResolveAsks), so they never say
 // a question differently and the web holds no parser of its own.
 type askNotes struct {
 	// words is each ask note's words by its seq: the question, whom it is
@@ -67,8 +67,25 @@ func (a askNotes) of(n store.Note) string {
 		return w
 	}
 	if ask, ok := a.asks[n.Seq]; ok {
-		head, _, _ := strings.Cut(a.words[ask], "\n")
-		return head
+		return firstLine(a.words[ask])
 	}
 	return n.Text
+}
+
+// head is what the note n says where one line is all there is room for: an
+// ask's first line, which names it and says how it stands and so reads alone
+// where its question, cut at the width of an entry, would not; the same line
+// for an answer to it; and any other note's text as it was written, as of says
+// it, so what is no ask is not cut to its first line.
+func (a askNotes) head(n store.Note) string {
+	if w, ok := a.words[n.Seq]; ok {
+		return firstLine(w)
+	}
+	return a.of(n)
+}
+
+// firstLine is the words up to their first line break.
+func firstLine(words string) string {
+	head, _, _ := strings.Cut(words, "\n")
+	return head
 }

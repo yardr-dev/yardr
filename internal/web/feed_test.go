@@ -88,6 +88,10 @@ func TestFeedWords(t *testing.T) {
 	rawBead := bead(t, f.st, "a note with marks")
 	rawNote := "note names roles/07\u202e\u2066.md\x1b[31m\u2028\nx.md"
 	must(t, f.st.AddNote(context.Background(), rawBead.ID, rawNote, "passer"))
+	asked := bead(t, f.st, "an ask with options")
+	ask, err := f.st.AddAsk(context.Background(), asked.ID, pickAsk(), "yardmaster")
+	must(t, err)
+	must(t, f.st.AddAnswer(context.Background(), asked.ID, store.Answer{Ask: ask, Option: 1}, "mckean"))
 	b := landing(t, f.st)
 	h := homeJSON(t, f, "/")
 	type line struct{ actor, text, note, tone string }
@@ -135,6 +139,20 @@ func TestFeedWords(t *testing.T) {
 	}
 	if !foundRaw {
 		t.Error("the feed has no note for the bead with marks")
+	}
+	// An ask is JSON in its note, and so is the answer to it. An entry is a
+	// line, so the feed says each by the first line of the ask's words, which
+	// names the ask and how it stands: one line for both notes, and neither
+	// the JSON nor the question cut at the width of an entry.
+	head := regexp.MustCompile(`^ask ` + strconv.FormatUint(ask, 10) + ` · answered · to mckean · asked by yardmaster · \d+[mhd] ago$`)
+	var said []string
+	for _, e := range h.Events {
+		if e.Bead == asked.ID && e.Kind == "noted" {
+			said = append(said, e.Note)
+		}
+	}
+	if len(said) != 2 || !head.MatchString(said[0]) || said[0] != said[1] {
+		t.Errorf("the feed says the ask's note and its answer's as %q, want the same first line of the ask's words: %v", said, head)
 	}
 	// The landing's commit is data of its own.
 	if h.Events[0].Commit != "70dabcd" {

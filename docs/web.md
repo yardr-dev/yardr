@@ -1364,7 +1364,7 @@ An entry says its event in the yard's words:
 | `closed`, by hand | closed: *reason* | |
 | `held` | held (`tone` `held`) | the reason |
 | `unheld`, `reopened`, `released` | no longer held; reopened; released, to be routed again | for a release, its reason |
-| `noted` | noted | the note |
+| `noted` | noted | the note; an ask or an answer by its ask's first line |
 | `updated` | updated | what changed, a field after the other: `title "a door" → "the door" · priority 2 → 1 · labels +wood · body`. The body is named alone: its diff is on the bead's page |
 | `claimed` | claimed by *group* for *stage* | |
 | `started` | session started, with the agent's name when the runner gives one | |
@@ -1382,7 +1382,8 @@ An entry says its event in the yard's words:
   left on the bead right before (`yardr bead note … && yardr bead hold`,
   `yardr bead advance --note`): the bead's previous event must be that
   actor's note. Anyone else's note, or an older one, is not shown as the
-  reason.
+  reason. A note that is an ask, or an answer to one, is said as the
+  `noted` row says it, by its ask's first line.
 - A landing's `commit` is the first commit hash in the note of the move
   that landed the bead, which is where the assembly writes it (`merged
   70dabcd`). The yard records a landing's commit nowhere else, so a merger
@@ -1861,10 +1862,17 @@ words end on the line that says how in the terminal, `answer with: yardr bead
 answer …`, as `yardr prime` prints it: the words give a view that only reads
 no way to answer. The JSON keeps every note as stored, so `notes` carries the
 ask's own JSON in `text`. The history, which `yardr bead history` prints as
-well, says an ask in the same words, in the `note` of its entry, and an
-answer to it by the first line of them, which names the ask and says how it
-stands, each cut at 280 bytes as every `note` is. Only the history does:
-[the feed](#the-feed) and the stream say a note as it was stored.
+well, says an ask in the same words, whole, in the `note` of its entry, cut at
+280 bytes as every `note` is. The entries of [the feed](#the-feed) and of the
+stream, and the reason of a hold in [the right column](#the-right-column),
+give a note one line, with no room for a question and its options: wherever
+they say a note (the `note` of a `noted` entry, the note a move or a hold came
+with) they say an ask by the first line of those words, which names the ask
+and says how it stands, and so reads alone where the question would be cut.
+An answer to an ask is said by that same line in all of them, the history too:
+its pick is read under its ask in the notes. An ask that does not parse, and
+an answer that names no ask, are said as they were written there as on the
+page.
 
 A note's files are what `yardr bead note --file` or `--page` attached to it
 (a page made with `--page` is dressed in a frame before it is a blob, so it

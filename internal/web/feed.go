@@ -31,7 +31,8 @@ type Entry struct {
 	// review (done)".
 	Text string `json:"text"`
 	// Note is what was said with it: the note itself, the reason of a hold,
-	// the note a move came with. A long one is cut short.
+	// the note a move came with. An ask, or an answer to one, is said by the
+	// first line of the ask's words (askNotes.head). A long one is cut short.
 	Note string `json:"note,omitempty"`
 	// Commit is the commit a bead landed at, when its landing's note names one.
 	Commit string `json:"commit,omitempty"`
@@ -170,14 +171,14 @@ type reader struct {
 	byName   map[string]store.Group
 	operator string
 	routed   bool
-	// askWords makes an entry say an ask, and the answers to it, in words
-	// (askNotes) instead of the JSON they are stored as. Only a bead's
-	// history turns it on: the feed and the stream say a note as it was
-	// written.
-	askWords bool
+	// askWhole makes an entry say an ask by its whole words (askNotes.of).
+	// Without it an entry says the ask by their first line (askNotes.head):
+	// an entry is a line, and only a bead's history has room for the
+	// question, its context and its options.
+	askWhole bool
 	// asks are the asks among a bead's notes read as words (readAsks), once
 	// a bead, and marks whom the links trust, read when the first is: what
-	// askWords reads.
+	// noteOf reads an ask and its answers from.
 	asks   map[string]askNotes
 	marks  map[string]string
 	marked bool
@@ -215,9 +216,12 @@ func (r *reader) beadNotes(ctx context.Context, bead string) []store.Note {
 	return ns
 }
 
-// noteOf is the note a `noted` event added, as it was written, except where
-// askWords is on: there an ask and the answers to it, which are JSON in the
-// note, are said as the bead's page says them (askNotes).
+// noteOf is the note a `noted` event added, as it was written, except an ask
+// and the answers to it, which are JSON in the note and no one reads: those
+// are said in the words the bead's page says them in (askNotes). An ask is
+// said by their first line, or whole where askWhole is on, and an answer by
+// the first line of its ask's. An ask that does not parse and an answer that
+// names no ask stay as they were written.
 func (r *reader) noteOf(ctx context.Context, e store.Event) string {
 	seq, ok := number(e.Data["note"])
 	if !ok || e.Bead == nil {
@@ -225,8 +229,12 @@ func (r *reader) noteOf(ctx context.Context, e store.Event) string {
 	}
 	for _, n := range r.beadNotes(ctx, *e.Bead) {
 		if n.Seq == seq {
-			if r.askWords && (n.Kind == store.NoteAsk || n.Kind == store.NoteAnswer) {
-				return r.asksOf(ctx, *e.Bead).of(n)
+			if n.Kind == store.NoteAsk || n.Kind == store.NoteAnswer {
+				asks := r.asksOf(ctx, *e.Bead)
+				if r.askWhole {
+					return asks.of(n)
+				}
+				return asks.head(n)
 			}
 			return n.Text
 		}

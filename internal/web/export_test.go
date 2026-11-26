@@ -136,3 +136,6 @@ func ReadAsks(notes []store.Note, now time.Time, marks map[string]string) askNot
 
 // Of is what the note says where a line has room for its words alone.
 func (a askNotes) Of(n store.Note) string { return a.of(n) }
+
+// Head is what the note says where one line is all there is room for.
+func (a askNotes) Head(n store.Note) string { return a.head(n) }
