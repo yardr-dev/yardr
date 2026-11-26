@@ -283,10 +283,10 @@ the contract. A name that is not a link is a page not yet written
 - `runner.md`: starting and reading a session, the `Runner` interface and the session handle (design 3.2.3)
 - `flow.md`: flows and stages, the files the flow engine reads (design 3.2.4)
 
-- `pack.md`: the pack API, the `api:` number of `pack.yaml` (design 3.2.5)
-- `card.md`: the card and the ask, the ask as the core's data and what one command supplies to be proposed (design 3.2.6)
-- `view.md`: what web, chat, mcp and footplate read (design 3.2.7)
-- `peer.md`: the protocol between two yards, with the edge link (design 3.2.8)
+- [`pack.md`](pack.md): the pack API, the `api:` number of `pack.yaml` (design 3.2.5)
+- [`card.md`](card.md): the card and the ask, the ask as the core's data and what one command supplies to be proposed (design 3.2.6)
+- [`view.md`](view.md): what web, chat, mcp and footplate read (design 3.2.7)
+- [`peer.md`](peer.md): the protocol between two yards, with the edge link (design 3.2.8)
 
 ## Rules
 
