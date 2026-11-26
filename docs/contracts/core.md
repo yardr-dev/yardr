@@ -416,6 +416,25 @@ The check of rule 4 reads each page and fails a row whose check does not
 exist. It does not judge whether a named test holds the rule. The page's
 author and its reviewer read the test for that.
 
+A page cites the code it is about as file and symbol, in one span of
+backticks: the path from the repository root, a colon and the symbol, as
+`internal/store/asks.go:Ask`. The symbol is a func, type, var or const that
+the file declares at its top level, or `Type.Method` for a method, as
+`internal/store/flows.go:Store.PutFlow`. The path is always whole, never a
+bare file name. Code inside a declaration, such as a line in the middle of a
+function, is cited by the declaration. A line number is no citation, because
+it moves with every edit above it and nothing goes red when it does. A
+sentence that names the symbol in backticks keeps the name, and the citation
+follows in parentheses.
+
+The check of rule 8 reads each page and fails a citation whose file does not
+exist or does not declare the symbol. It also fails a line number on any page
+that `linePages` in `contracts_test.go` does not list. The list holds the
+pages that still cite by line and wait to be converted. A listed page that
+holds no line number fails until it comes off the list, so the list only
+shrinks. The check does not judge whether the symbol is what the sentence
+says. The page's author and its reviewer read that.
+
 | # | rule | check |
 |---|---|---|
 | 1 | No import between `internal` packages breaks rule (a), (b) or (c) under Import rules. | `TestImportRules` |
@@ -425,3 +444,4 @@ author and its reviewer read the test for that.
 | 5 | A package with a row in Line ceilings holds no more non-test Go lines than its ceiling, each row names a package that exists, and each package this page names as core has a row. | `TestCorePackagesKeepUnderTheirCeilings` |
 | 6 | A non-test Go file in a package of Line ceilings, less the files under Files the name scan does not read, names no word of the list under Names the core may not name as a whole string literal or as whole parts of an identifier, beyond what its row of the allow-list holds; a row holds no more hits than its file has. | `TestCoreNamesNothingOnTheList` |
 | 7 | A file of `harnesses/` is named for a kind in the harness kinds row of the list under Names the core may not name. | `TestHarnessFilesNameOnlyListedKinds` |
+| 8 | A page in `docs/contracts/` cites code as file and symbol, and the file declares the symbol. | `TestContractPagesCiteDeclaredSymbols` |

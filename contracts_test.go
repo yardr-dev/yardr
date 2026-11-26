@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -13,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"unicode"
 	"unicode/utf8"
 )
@@ -304,11 +306,209 @@ func checkProblems(cell string, tests map[string]bool, gate string) []string {
 	return problems
 }
 
+// linePages are the pages of docs/contracts/ that still cite code by line
+// number, the form TestContractPagesCiteDeclaredSymbols refuses on any other
+// page. Each is converted to file and symbol in turn and then comes off this
+// list. The list only shrinks: a page on it that holds no line number fails
+// the test, so a converted page cannot go back to line numbers unseen. The
+// conversion that empties the list deletes it and the code that reads it.
+var linePages = map[string]bool{
+	"card.md":    true,
+	"harness.md": true,
+	"peer.md":    true,
+	"runner.md":  true,
+	"view.md":    true,
+}
+
+// A page of docs/contracts/ cites the code it is about as file and symbol,
+// <path>.go:<Symbol> in one span of backticks, and never by line number,
+// which goes stale with every edit above it while nothing goes red. This test
+// holds each citation to the code: the path, read from the repository root,
+// names a Go file that go/parser reads, and the file declares the symbol at
+// its top level, a func, type, var or const by its name or a method as
+// Type.Method. It also fails a line number on every page that linePages does
+// not list. It does not hold that the symbol is what its sentence says, which
+// the page's author and its reviewer read. The form is the Rules section of
+// docs/contracts/core.md, which names this test as the check of its fifth
+// rule. It reads files and starts no process.
+func TestContractPagesCiteDeclaredSymbols(t *testing.T) {
+	t.Parallel()
+	// The test runs in the repository root, the root package's directory.
+	pages, err := filepath.Glob("docs/contracts/*.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pages) == 0 {
+		t.Fatal("docs/contracts/ holds no page")
+	}
+	declared := declaredIn(os.DirFS("."))
+	for _, path := range pages {
+		page, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, problem := range citationProblems(string(page), linePages[filepath.Base(path)], declared) {
+			t.Errorf("%s: %s", filepath.ToSlash(path), problem)
+		}
+	}
+}
+
+// codeSpan is a run of text in backticks on one line of a page.
+var codeSpan = regexp.MustCompile("`([^`]+)`")
+
+// citation is a span that cites code: a Go file by its path from the
+// repository root, a colon, and a symbol, which is one name or a type's name,
+// a dot and a method's. A span of any other shape is no citation to this
+// check, so that a page may show the form with a placeholder.
+var citation = regexp.MustCompile(`^([A-Za-z0-9_./-]+\.go):([A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?)$`)
+
+// lineCitation is a Go file and a line of it, a citation by line number. It
+// is looked for in the whole line of a page, not only in a span, so that a
+// line number written without backticks is found too.
+var lineCitation = regexp.MustCompile(`[A-Za-z0-9_./-]*\.go:[0-9]+`)
+
+// citationProblems reads a page's text and says what is wrong with the code
+// it cites, one sentence for each fault, each naming its line and the
+// citation. declared says what a file declares at its top level. A line number
+// is a fault, unless the page is listed as still to convert. A listed page
+// that holds no line number is a fault too, so that a converted page is taken
+// off the list.
+func citationProblems(page string, listed bool, declared func(path string) (map[string]bool, error)) []string {
+	var problems []string
+	var lined bool
+	n := 0
+	for line := range strings.Lines(page) {
+		n++
+		add := func(cite, why string) {
+			problems = append(problems, "line "+strconv.Itoa(n)+": `"+cite+"`: "+why)
+		}
+		for _, span := range codeSpan.FindAllStringSubmatch(line, -1) {
+			if m := citation.FindStringSubmatch(span[1]); m != nil {
+				if why := undeclared(m[1], m[2], declared); why != "" {
+					add(span[1], why)
+				}
+			}
+		}
+		for _, cite := range lineCitation.FindAllString(line, -1) {
+			lined = true
+			if !listed {
+				add(cite, "a line number goes stale with every edit above it: cite the symbol, as <path>.go:<Symbol>")
+			}
+		}
+	}
+	if listed && !lined {
+		problems = append(problems, "no line number is left: take the page off linePages in contracts_test.go")
+	}
+	return problems
+}
+
+// undeclared says why the file at path does not declare symbol, or gives ""
+// when it does. A path that fs.ValidPath refuses, with a leading ./ or a .. in
+// it, names no file, as a bare file name does when the file is not at the
+// repository root.
+func undeclared(path, symbol string, declared func(path string) (map[string]bool, error)) string {
+	names, err := declared(path)
+	switch {
+	case errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrInvalid):
+		return "the file does not exist: cite its path from the repository root"
+	case err != nil:
+		return "the file cannot be read: " + err.Error()
+	case names[symbol]:
+		return ""
+	}
+	if typ, method, ok := strings.Cut(symbol, "."); ok {
+		return "the file declares no method " + method + " on " + typ
+	}
+	return "the file declares no func, type, var or const named " + symbol + " (a method is cited as Type.Method)"
+}
+
+// declaredIn reads what the Go files of fsys declare, each file once however
+// often the pages cite it.
+func declaredIn(fsys fs.FS) func(path string) (map[string]bool, error) {
+	type read struct {
+		names map[string]bool
+		err   error
+	}
+	seen := map[string]read{}
+	return func(path string) (map[string]bool, error) {
+		r, ok := seen[path]
+		if !ok {
+			r.names, r.err = declaredNames(fsys, path)
+			seen[path] = r
+		}
+		return r.names, r.err
+	}
+}
+
+// declaredNames is what the Go file at path in fsys declares at its top
+// level: each func with no receiver, type, var and const by its name, and each
+// method as Type.Method, with the receiver's type name and neither its pointer
+// nor its type parameters. Declarations are read with go/parser, as
+// declaredTests reads tests.
+func declaredNames(fsys fs.FS, path string) (map[string]bool, error) {
+	src, err := fs.ReadFile(fsys, path)
+	if err != nil {
+		return nil, err
+	}
+	file, err := parser.ParseFile(token.NewFileSet(), path, src, parser.SkipObjectResolution)
+	if err != nil {
+		return nil, err
+	}
+	names := map[string]bool{}
+	for _, decl := range file.Decls {
+		switch decl := decl.(type) {
+		case *ast.FuncDecl:
+			if decl.Recv == nil {
+				names[decl.Name.Name] = true
+			} else if typ := receiverType(decl.Recv); typ != "" {
+				names[typ+"."+decl.Name.Name] = true
+			}
+		case *ast.GenDecl:
+			for _, spec := range decl.Specs {
+				switch spec := spec.(type) {
+				case *ast.TypeSpec:
+					names[spec.Name.Name] = true
+				case *ast.ValueSpec:
+					for _, name := range spec.Names {
+						names[name.Name] = true
+					}
+				}
+			}
+		}
+	}
+	return names, nil
+}
+
+// receiverType is the name of the type a method is declared on, whether the
+// receiver is T, *T, T[P] or *T[P, Q].
+func receiverType(recv *ast.FieldList) string {
+	if len(recv.List) != 1 {
+		return ""
+	}
+	expr := recv.List[0].Type
+	for {
+		switch t := expr.(type) {
+		case *ast.Ident:
+			return t.Name
+		case *ast.StarExpr:
+			expr = t.X
+		case *ast.IndexExpr:
+			expr = t.X
+		case *ast.IndexListExpr:
+			expr = t.X
+		default:
+			return ""
+		}
+	}
+}
+
 // The refusals fire. Each page below is right or wrong in one way, and the
 // problem contractProblems gives for it must name the rule and the check it
 // is about. The pages are written here because the real ones have no fault
 // to show. The rest of the test holds what a declared name is: the functions
-// isTestFunc accepts, and the files declaredTests reads them from.
+// isTestFunc accepts, and the files declaredTests reads them from. The last
+// part holds the citations the same way: what citationProblems accepts as a
+// declared symbol and what it refuses, over files written here as well.
 func TestContractChecksRefuse(t *testing.T) {
 	t.Parallel()
 	tests := map[string]bool{"TestDeclared": true}
@@ -318,6 +518,25 @@ func TestContractChecksRefuse(t *testing.T) {
 	rules := func(rows ...string) string {
 		return "# A contract\n\nText.\n\n## Rules\n\n| # | rule | check |\n|---|---|---|\n" +
 			strings.Join(rows, "\n") + "\n\n## After\n\n| 1 | not a rule | |\n"
+	}
+	// refused holds the problems a check gave to what a case wants: none
+	// where want is empty, else a first problem that says every part of want.
+	refused := func(t *testing.T, got, want []string) {
+		t.Helper()
+		if len(want) == 0 {
+			if len(got) != 0 {
+				t.Errorf("a right page is refused: %q", got)
+			}
+			return
+		}
+		if len(got) == 0 {
+			t.Fatalf("a page that is wrong in %q is accepted", want)
+		}
+		for _, part := range want {
+			if !strings.Contains(got[0], part) {
+				t.Errorf("the problem %q does not say %q", got[0], part)
+			}
+		}
 	}
 	for _, tc := range []struct {
 		name string
@@ -355,21 +574,7 @@ func TestContractChecksRefuse(t *testing.T) {
 		{"a second table", "# A contract\n\n## Rules\n\n| # | rule | check |\n|---|---|---|\n| 1 | a rule | unchecked |\n\n| # | rule | check |\n|---|---|---|\n| 1 | a rule | unchecked |\n", []string{"second table"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := contractProblems(tc.page, tests, gate)
-			if len(tc.want) == 0 {
-				if len(got) != 0 {
-					t.Errorf("a right page is refused: %q", got)
-				}
-				return
-			}
-			if len(got) == 0 {
-				t.Fatalf("a page that is wrong in %q is accepted", tc.want)
-			}
-			for _, part := range tc.want {
-				if !strings.Contains(got[0], part) {
-					t.Errorf("the problem %q does not say %q", got[0], part)
-				}
-			}
+			refused(t, contractProblems(tc.page, tests, gate), tc.want)
 		})
 	}
 
@@ -439,5 +644,82 @@ func helper(t *testing.T) {}
 	}
 	if !maps.Equal(got, map[string]bool{"TestA": true, "TestB": true}) {
 		t.Errorf("the walk declares %v, want TestA and TestB alone", slices.Sorted(maps.Keys(got)))
+	}
+
+	// What a page may cite: the symbols a file declares at its top level, and
+	// the forms of a citation that are refused. The files are read as the
+	// repository's are, through an fs.FS.
+	files := fstest.MapFS{
+		"main.go": {Data: []byte("package main\n\nfunc main() {}\n")},
+		"internal/x/x.go": {Data: []byte(`package x
+
+type T struct{}
+type G[P any] struct{}
+type H[P, Q any] struct{}
+type (
+	U int
+)
+
+func F() {}
+
+func (T) Value() {}
+func (t *T) Pointer() {}
+func (g *G[P]) Generic() {}
+func (h *H[P, Q]) Two() {}
+
+var V, W = 1, 2
+
+const C = 1
+
+const (
+	A = iota
+	B
+)
+`)},
+		"internal/x/broken.go": {Data: []byte("package x\n\nfunc (\n")},
+	}
+	declared := declaredIn(files)
+	for _, tc := range []struct {
+		name   string
+		page   string
+		listed bool     // the page is on linePages
+		want   []string // parts of the first problem; none means the page is right
+	}{
+		{"a func", "`internal/x/x.go:F`", false, nil},
+		{"a type", "`internal/x/x.go:T`", false, nil},
+		{"a type of a group", "`internal/x/x.go:U`", false, nil},
+		{"a var", "`internal/x/x.go:V`", false, nil},
+		{"the second name of a var", "`internal/x/x.go:W`", false, nil},
+		{"a const", "`internal/x/x.go:C`", false, nil},
+		{"a const of a group", "`internal/x/x.go:B`", false, nil},
+		{"a method", "`internal/x/x.go:T.Value`", false, nil},
+		{"a method on a pointer", "`internal/x/x.go:T.Pointer`", false, nil},
+		{"a method on a generic type", "`internal/x/x.go:G.Generic`", false, nil},
+		{"a method on a type of two parameters", "`internal/x/x.go:H.Two`", false, nil},
+		{"a file at the root", "`main.go:main`", false, nil},
+		{"a citation in a sentence", "A type `x.T` (`internal/x/x.go:T`) has a method `T.Value` (`internal/x/x.go:T.Value`).", false, nil},
+		{"a placeholder is no citation", "A citation is `<path>.go:<Symbol>`, as `internal/x/x.go:F`.", false, nil},
+		{"no citation", "A page with no citation at all.", false, nil},
+		{"a line number on a listed page", "`internal/x/x.go:12`", true, nil},
+		{"a missing file", "`internal/x/nosuch.go:F`", false, []string{"line 1: ", "`internal/x/nosuch.go:F`", "does not exist"}},
+		{"a bare file name", "`x.go:F`", false, []string{"`x.go:F`", "does not exist", "repository root"}},
+		{"a path from the working directory", "`./internal/x/x.go:F`", false, []string{"`./internal/x/x.go:F`", "does not exist"}},
+		{"a path that is not clean", "`internal/../internal/x/x.go:F`", false, []string{"`internal/../internal/x/x.go:F`", "does not exist"}},
+		{"a missing symbol", "`internal/x/x.go:Nosuch`", false, []string{"line 1: ", "`internal/x/x.go:Nosuch`", "named Nosuch"}},
+		{"a method cited as a func", "`internal/x/x.go:Value`", false, []string{"`internal/x/x.go:Value`", "named Value", "Type.Method"}},
+		{"a func cited as a method", "`internal/x/x.go:T.F`", false, []string{"`internal/x/x.go:T.F`", "no method F on T"}},
+		{"a missing method", "`internal/x/x.go:T.Nosuch`", false, []string{"no method Nosuch on T"}},
+		{"a method of another type", "`internal/x/x.go:G.Value`", false, []string{"no method Value on G"}},
+		{"a file that does not parse", "`internal/x/broken.go:F`", false, []string{"`internal/x/broken.go:F`", "cannot be read"}},
+		{"the line of the fault", "Text.\n\nText `internal/x/x.go:F` and `internal/x/x.go:Nosuch`.\n", false, []string{"line 3: ", "`internal/x/x.go:Nosuch`"}},
+		{"a line number", "`internal/x/x.go:12`", false, []string{"line 1: ", "`internal/x/x.go:12`", "cite the symbol"}},
+		{"a line number of a bare file name", "`x.go:12`", false, []string{"`x.go:12`", "cite the symbol"}},
+		{"a line number outside backticks", "See internal/x/x.go:12 for it.", false, []string{"line 1: ", "`internal/x/x.go:12`", "cite the symbol"}},
+		{"a listed page with no line number", "`internal/x/x.go:F`", true, []string{"no line number is left", "take the page off linePages"}},
+		{"a listed page with a missing symbol", "`internal/x/x.go:Nosuch` and `internal/x/x.go:12`", true, []string{"`internal/x/x.go:Nosuch`"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			refused(t, citationProblems(tc.page, tc.listed, declared), tc.want)
+		})
 	}
 }

@@ -19,22 +19,25 @@ A pack is a file format and a directory layout, with the commands and scripts
 a pack may call beside them.
 
 - **The file.** A pack is a directory with `pack.yaml` at its root
-  (`pack.File`, `internal/pack/pack.go:31`). `pack.Load` reads and checks it
-  (`pack.go:316`) and refuses it with every mistake named by file, line and
-  key. `LoadDir` reads one from a directory (`pack.go:299`), `URLFS` serves
-  one from a URL (`internal/pack/url.go:131`), `LoadRepository` reads one
-  from the packs repository (`internal/pack/repository.go:47`), and the
-  binary carries the packs of `packs/` (`packs/packs.go:38`). Each reads the
-  pack through `Load`.
+  (`pack.File`, `internal/pack/pack.go:File`). `pack.Load` reads and checks
+  it (`internal/pack/pack.go:Load`) and refuses it with every mistake named
+  by file, line and key. `LoadDir` reads one from a directory
+  (`internal/pack/pack.go:LoadDir`), `URLFS` serves one from a URL
+  (`internal/pack/url.go:URLFS`), `LoadRepository` reads one from the packs
+  repository (`internal/pack/repository.go:LoadRepository`), and the binary
+  carries the packs of `packs/` (`packs/packs.go:FS`). Each reads the pack
+  through `Load`.
 - **The kinds.** A pack is for one kind of depot, `git` or `dir`
-  (`pack.Kinds`, `pack.go:284`), or is of kind `source` and is imported into
-  the yard itself (`pack.KindSource`, `pack.go:289`), or names none.
+  (`pack.Kinds`, `internal/pack/pack.go:Kinds`), or is of kind `source` and
+  is imported into the yard itself (`pack.KindSource`,
+  `internal/pack/pack.go:KindSource`), or names none.
 - **The number.** `api:` at the root of `pack.yaml` says which API the pack is
-  written for. `pack.API` is the highest the build reads (`pack.go:39`).
+  written for. `pack.API` is the highest the build reads
+  (`internal/pack/pack.go:API`).
 - **The pin.** A pack's digest is a sha256 over each file the pack names, as
   its path, a NUL, its length, a NUL and its bytes, in path order
-  (`internal/pack/digest.go:105`). `pack apply --sha256` holds a pack to it
-  (`CheckDigest`, `digest.go:142`).
+  (`internal/pack/digest.go:Pack.digest`). `pack apply --sha256` holds a pack
+  to it (`CheckDigest`, `internal/pack/digest.go:Plan.CheckDigest`).
 - **The scripts.** A program a group runs (`run:`) and a command a declaration
   names run as the yard's user. A group's script is given the variables of
   pack-api.md, What an exec group's script gets, and reaches the yard through
@@ -43,10 +46,10 @@ a pack may call beside them.
   source's command reads and writes the JSON the source contract defines
   (design 3.2.2). A declaration a pack carries is that contract's.
 - **The records.** Applying a pack writes records through `store.API`, and
-  `store.PackImport` (`internal/store/packs.go:26`) keeps what the import
-  made. The delegated import of a pack from the packs repository
-  (`pack.Repository`, `repository.go:17`) is how-and-what: it reads a pack
-  through this contract and is no part of it.
+  `store.PackImport` (`internal/store/packs.go:PackImport`) keeps what the
+  import made. The delegated import of a pack from the packs repository
+  (`pack.Repository`, `internal/pack/repository.go:Repository`) is
+  how-and-what: it reads a pack through this contract and is no part of it.
 
 ## Owner
 
@@ -99,10 +102,10 @@ marking it deprecated. That text is the old rule, and this page replaces it
 ## Stored data
 
 - The import record of each pack and depot (`store.PackImport`, bucket
-  `packs`, `internal/store/packs.go:17`). It keeps where the pack was read
-  from, who imported it and when, the names it mapped, and each object it
-  made with the sha256 of what was installed, so that a later import can tell
-  what the pack dropped and what was changed by hand since.
+  `packs`, `internal/store/packs.go:bPacks`). It keeps where the pack was
+  read from, who imported it and when, the names it mapped, and each object
+  it made with the sha256 of what was installed, so that a later import can
+  tell what the pack dropped and what was changed by hand since.
 - The records a pack becomes: flows, groups, routes, sources, crew and their
   subscriptions, and the files installed under the yard's home.
 - The records stay when a pack is refused for its number. A refused pack
@@ -126,11 +129,12 @@ marking it deprecated. That text is the old rule, and this page replaces it
 ## Planned
 
 - **planned**, design 3.2.5: the build reads a range of numbers that can
-  begin above 1. Today `later` (`pack.go:561`) refuses a number above
-  `pack.API` and nothing else, and no number has been dropped, so no pack is
-  refused for being too old. The first removal or change of meaning that
-  drops a number adds the lower bound, its refusal that names the number the
-  build needs, and a row for it in the Rules table.
+  begin above 1. Today `later` (`internal/pack/pack.go:reader.later`)
+  refuses a number above `pack.API` and nothing else, and no number has been
+  dropped, so no pack is refused for being too old. The first removal or
+  change of meaning that drops a number adds the lower bound, its refusal
+  that names the number the build needs, and a row for it in the Rules
+  table.
 - **planned**, design 3.2 and 3.2.5: pack-api.md's Taking something away
   follows the whole-change rule above. It says today that dropping a seam
   takes two releases, the first marking it deprecated. The rule replaces that

@@ -4,15 +4,15 @@ A flow is the stages a bead passes through and the moves allowed between them, a
 
 ## Form
 
-**The flow file** is lines, one rule each, or one JSON object. `store.ParseFlow` (`internal/store/flows.go:340`) reads both into `store.Flow` (`internal/store/flows.go:23`: the stages in the order written, the transitions between them, the terminal stages and the outcomes of each stage). `Flow.String` writes the line format back. The names are held to patterns: a flow's by `validFlowName`, a stage's by `validStage` and an outcome's by `validOutcome` (`internal/store/flows.go:67` to `:71`). The vocabulary of outcomes is open, and the code names two of them, `done` (`store.DefaultOutcome`, `internal/store/flows.go:50`) and `question` (`internal/store/flows.go:54`).
+**The flow file** is lines, one rule each, or one JSON object. `store.ParseFlow` (`internal/store/flows.go:ParseFlow`) reads both into `store.Flow` (`internal/store/flows.go:Flow`: the stages in the order written, the transitions between them, the terminal stages and the outcomes of each stage). `Flow.String` writes the line format back. The names are held to patterns: a flow's by `validFlowName`, a stage's by `validStage` and an outcome's by `validOutcome` (`internal/store/flows.go:validFlowName`, `internal/store/flows.go:validStage` and `internal/store/flows.go:validOutcome`). The vocabulary of outcomes is open, and the code names two of them, `done` (`store.DefaultOutcome`, `internal/store/flows.go:DefaultOutcome`) and `question` (`internal/store/flows.go:questionOutcome`).
 
-**In a repository**, a depot's flows are `.yardr/flows/<name>.flow` and `.yardr/flows/type/<type>.flow`, and the stage files of a flow are Markdown beside it, `.yardr/flows/<name>/<stage>.md` and `.yardr/flows/type/<type>/<stage>.md` (`store.RepoFlowDir`, `internal/store/repoflows.go:40`). They are read from the tip of the depot's base branch, never from a bead's branch or worktree, so that a bead cannot change its own lifecycle: a change takes effect once it has been reviewed and landed. A depot with no base is read from its directory as it is. [flows.md](../flows.md#repo-flows) says more.
+**In a repository**, a depot's flows are `.yardr/flows/<name>.flow` and `.yardr/flows/type/<type>.flow`, and the stage files of a flow are Markdown beside it, `.yardr/flows/<name>/<stage>.md` and `.yardr/flows/type/<type>/<stage>.md` (`store.RepoFlowDir`, `internal/store/repoflows.go:RepoFlowDir`). They are read from the tip of the depot's base branch, never from a bead's branch or worktree, so that a bead cannot change its own lifecycle: a change takes effect once it has been reviewed and landed. A depot with no base is read from its directory as it is. [flows.md](../flows.md#repo-flows) says more.
 
-**In the store**, a flow is saved under a name (`Store.PutFlow`, `internal/store/flows.go:462`), a depot or a bead type points at it (`Store.SetFlowPointer`, `internal/store/flows.go:646`), and a bead may pin one by name in its `flow` metadata. The stage files of a stored flow are in the yard's home, `<home>/flows/<name>/<stage>.md`.
+**In the store**, a flow is saved under a name (`Store.PutFlow`, `internal/store/flows.go:Store.PutFlow`), a depot or a bead type points at it (`Store.SetFlowPointer`, `internal/store/flows.go:Store.SetFlowPointer`), and a bead may pin one by name in its `flow` metadata. The stage files of a stored flow are in the yard's home, `<home>/flows/<name>/<stage>.md`.
 
-**In a pack**, `pack.yaml` has a `flows:` key (`internal/pack/pack.go:613`). Each flow names its `type`, if it is for one bead type, and its `stages`; each stage has `group`, `file`, `outcomes`, `manual` and `end`, and an outcome may be written as a mapping that limits its rounds (`to`, `max` and `then`). `reader.flow` (`internal/pack/pack.go:1502`) reads it and `pack.Flow.StoreFlow` (`internal/pack/pack.go:1741`) turns it into a `store.Flow`.
+**In a pack**, `pack.yaml` has a `flows:` key (`internal/pack/pack.go:reader.pack`). Each flow names its `type`, if it is for one bead type, and its `stages`; each stage has `group`, `file`, `outcomes`, `manual` and `end`, and an outcome may be written as a mapping that limits its rounds (`to`, `max` and `then`). `reader.flow` (`internal/pack/pack.go:reader.flow`) reads it and `pack.Flow.StoreFlow` (`internal/pack/pack.go:Flow.StoreFlow`) turns it into a `store.Flow`.
 
-**Which flow governs a bead** is decided by `resolveFlow` (`internal/store/flows.go:1106`): the bead's pin, else the store's pointer for its type, else the store's pointer for its depot, else the repository's `type/<type>.flow`, else its `default.flow`, else none, and a bead that no flow governs may move to any stage.
+**Which flow governs a bead** is decided by `resolveFlow` (`internal/store/flows.go:resolveFlow`): the bead's pin, else the store's pointer for its type, else the store's pointer for its depot, else the repository's `type/<type>.flow`, else its `default.flow`, else none, and a bead that no flow governs may move to any stage.
 
 ## Owner
 
@@ -20,7 +20,7 @@ The core owns the formats and the flow engine that reads them. Depots own the fl
 
 ## Version
 
-None. A flow file has no version key. A flow in a depot's `.yardr/flows/`, and one saved with `yardr flow set`, is read at the running build's format, which is the line format of `store.ParseFlow` or its JSON form. A flow in a pack is read with the pack, which says the API number it is written for with `api:`; a pack above `pack.API` (`internal/pack/pack.go:39`) is refused before any other key is read. A flow the build cannot read is refused with the line and its reason, as `ParseFlow` refuses a line today (`flow line 3: missing stage before ->`). The beads that a repository flow the build cannot read would govern are neither claimed nor moved until the base is fixed: the depot follows the core.
+None. A flow file has no version key. A flow in a depot's `.yardr/flows/`, and one saved with `yardr flow set`, is read at the running build's format, which is the line format of `store.ParseFlow` or its JSON form. A flow in a pack is read with the pack, which says the API number it is written for with `api:`; a pack above `pack.API` (`internal/pack/pack.go:API`) is refused before any other key is read. A flow the build cannot read is refused with the line and its reason, as `ParseFlow` refuses a line today (`flow line 3: missing stage before ->`). The beads that a repository flow the build cannot read would govern are neither claimed nor moved until the base is fixed: the depot follows the core.
 
 ## Change rule
 
@@ -28,7 +28,7 @@ A change to the line format or to `store.Flow` updates every flow the repository
 
 ## Stored data
 
-Flows, flow pointers, the flow a bead pins, each bead's stage, and its history in events. A stage that a flow loses strands the open beads in it: `Stranded` (`internal/store/flows.go:974`) reads that case, saving a flow or setting a pointer that would strand open beads is refused, and a bead in a stage its flow does not know may move only to the flow's first stage.
+Flows, flow pointers, the flow a bead pins, each bead's stage, and its history in events. A stage that a flow loses strands the open beads in it: `Stranded` (`internal/store/flows.go:Store.Stranded`) reads that case, saving a flow or setting a pointer that would strand open beads is refused, and a bead in a stage its flow does not know may move only to the flow's first stage.
 
 ## Rules
 
