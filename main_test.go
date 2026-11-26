@@ -180,6 +180,9 @@ func mustRepoScan(t *testing.T) []repoFileScan {
 // own is read by): there the name is allowed in that form and no other.
 // Tests are not held to this: they say what the embedded packs install, and
 // build depots with roles of their own.
+//
+// It overlaps no group of the core's name list in docs/contracts/core.md,
+// which holds no role's file name, so it stays.
 func TestNoGoCodeNamesARole(t *testing.T) {
 	t.Parallel()
 	examples := []string{"internal/cli/groupform.go", "internal/cli/ops.go"}
@@ -213,6 +216,10 @@ func TestNoGoCodeNamesARole(t *testing.T) {
 // permitted list is internal/source's BuiltIn, which a declared source's
 // name must keep clear of; it goes when the sources leave the binary
 // (YRD-29).
+//
+// It overlaps the providers group of the core's name list in
+// docs/contracts/core.md. The scan of that list reads only the packages of the
+// page's Line ceilings, so this test stays for the rest of internal/.
 func TestCoreComparesNoSourceName(t *testing.T) {
 	t.Parallel()
 	var files int
@@ -290,6 +297,11 @@ func TestCallsAreMadeAgainstWhatTheSourceResolves(t *testing.T) {
 // (internal/store/settings.go), which names the two packs that set a notify
 // source, by design (yardr-6ja6 decision 10): a refusal that cannot point
 // at them leaves the operator with no next step.
+//
+// It overlaps the providers group of the core's name list in
+// docs/contracts/core.md. The scan of that list reads only the packages of the
+// page's Line ceilings and skips comments, so this test stays for the rest of
+// the repository and for comments.
 func TestNoGoCodeNamesANotifyService(t *testing.T) {
 	t.Parallel()
 	var files int
@@ -584,6 +596,11 @@ func TestDocsShowNoQuotedText(t *testing.T) {
 // use GitHub as the example source. Tests are not held to this: they prove
 // the pack against the stand-in. A line importing a Go module
 // (github.com/...) cannot go.
+//
+// It overlaps the providers group of the core's name list in
+// docs/contracts/core.md. The scan of that list reads only the packages of the
+// page's Line ceilings and skips comments, so this test stays for the rest of
+// the repository, for comments and for the credential names.
 func TestNoGoCodeNamesGitHub(t *testing.T) {
 	t.Parallel()
 	kept := []string{

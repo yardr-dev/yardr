@@ -325,12 +325,25 @@ is where a session runs and which one a call came from.
 | group | names |
 |---|---|
 | harness kinds | `agy`, `claude`, `codex`, `grok`, `kimi`, `kiro`, `muse`, `opencode`, `pi` |
-| providers | `google` |
+| providers | `github`, `google`, `linear`, `pushover`, `telegram` |
 | herdr's command words | `tab`, `workspace` |
 
 The word lists of yardr's own commands, and the names of the hosted edge, the
 pack planner and a source's identity forms, are not on the list yet and wait
 for the operator's choice of words.
+
+`TestCoreNamesNothingOnTheList` does not replace four other tests, because
+each holds more than it does. It reads the non-test Go of the packages in Line
+ceilings and skips comments. `main_test.go:TestCoreComparesNoSourceName` keeps
+`github` and `linear` out of all of `internal/` but `internal/hooks` and
+`internal/standin`. `main_test.go:TestNoGoCodeNamesANotifyService` keeps
+`telegram` and `pushover` out of the non-test Go of the whole repository,
+comments included. `main_test.go:TestNoGoCodeNamesGitHub` keeps `github` out
+of the same files, except those it lists, and keeps the names of GitHub's
+credentials out of all of them. `main_test.go:TestNoGoCodeNamesARole` keeps
+the file names of a pack's roles out of the non-test Go outside
+`internal/pack` and `packs/`, and no row of the list holds them. Each has
+exceptions of its own, named in its comment.
 
 The harness kinds row holds the kind of each file in `harnesses/`, which is
 named for it (`claude.yaml` is `claude`), so that a new kind joins the list in
