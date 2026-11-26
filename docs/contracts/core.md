@@ -434,10 +434,10 @@ exist. It does not judge whether a named test holds the rule. The page's
 author and its reviewer read the test for that.
 
 A page cites the code it is about as file and symbol, in one span of
-backticks: the path from the repository root, a colon and the symbol, as
-`internal/store/asks.go:Ask`. The symbol is a func, type, var or const that
-the file declares at its top level, or `Type.Method` for a method, as
-`internal/store/flows.go:Store.PutFlow`. The path is always whole, never a
+backticks on one line: the path from the repository root, a colon and the
+symbol, as `internal/store/asks.go:Ask`. The symbol is a func, type, var or
+const that the file declares at its top level, or `Type.Method` for a method,
+as `internal/store/flows.go:Store.PutFlow`. The path is always whole, never a
 bare file name. Code inside a declaration, such as a line in the middle of a
 function, is cited by the declaration. A line in a comment that no declaration
 holds, such as the package comment, is cited by the declaration that does what
@@ -453,12 +453,13 @@ parentheses or cell and separated by commas, as
 own can be renamed or moved, and nothing goes red.
 
 The check of rule 8 reads each page and fails a citation whose file does not
-exist or does not declare the symbol. It also fails a line number on any page
-that `linePages` in `contracts_test.go` does not list. The list holds the
-pages that still cite by line and wait to be converted. A listed page that
-holds no line number fails until it comes off the list, so the list only
-shrinks. The check does not judge whether the symbol is what the sentence
-says. The page's author and its reviewer read that.
+exist or does not declare the symbol, and a citation whose span breaks across
+lines. It also fails a line number on any page that `linePages` in
+`contracts_test.go` does not list. The list holds the pages that still cite by
+line and wait to be converted. A listed page that holds no line number fails
+until it comes off the list, so the list only shrinks. The check does not
+judge whether the symbol is what the sentence says. The page's author and its
+reviewer read that.
 
 | # | rule | check |
 |---|---|---|

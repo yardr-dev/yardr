@@ -58,10 +58,12 @@ The form that crosses is RPC over HTTP, and a stream of events.
   and the call is made for that view (core.md, Where the rule cannot decide,
   case 3). These are `Line` (`internal/store/line.go:Store.Line`), for
   footplate's Line window, `Flows`, which serves the board of
-  `internal/store/flowsboard.go` to footplate's timetable and the web's flows
-  page, and `UserAsks`, `UserOpenAsks` and `Bead`
-  (`internal/store/decisions.go`), for the decisions a person is asked. They
-  stand in `Calls` or `OperatorCalls` like any other call.
+  `internal/store/flowsboard.go:FlowsBoard` to footplate's timetable and the
+  web's flows page, and `UserAsks`, `UserOpenAsks` and `Bead`
+  (`internal/store/decisions.go:Store.UserAsks`,
+  `internal/store/decisions.go:Store.UserOpenAsks`,
+  `internal/store/decisions.go:Store.Bead`), for the decisions a person is
+  asked. They stand in `Calls` or `OperatorCalls` like any other call.
 
 ## Owner
 

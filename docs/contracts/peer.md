@@ -125,7 +125,7 @@ for its `v` stays in the outbox as given up, with its reason.
 | 14 | On the edge link, a frame is served only when it is the edge's as it came, over this link's session and in its place in the sequence. A frame signed by another key, changed after the edge signed it, sent again, or recorded from an earlier link never reaches the handler, and the link stays up. | `TestLinkRefusesAFrameNotTheEdgesAsItCame`, `TestLinkRefusesAFrameSentAgain`, `TestLinkRefusesAFrameFromAnotherLink` |
 | 15 | On the edge link, a socket that falls silent is counted dead after `DeadAfter`, told down as unanswered pings and dialled again, and the new link serves. | `TestLinkDialsAgainAfterASilentSocket` |
 | 16 | On the edge link, an answer that does not fit one frame goes as a stream, the head with an empty body and then the body in data frames, and the link serves the next call as before. | `TestLinkStreamsAnAnswerLargerThanOneFrame` |
-| 17 | On the edge link, the frames that cross are those listed in the comment at the head of `internal/edgelink/link.go`, which the edge defines. | unchecked |
+| 17 | On the edge link, the frames that cross are those listed in the doc comment of `internal/edgelink/link.go:LinkPath`, which the edge defines. | unchecked |
 
 ## The edge link
 
@@ -138,11 +138,11 @@ rows 13 to 17 of the table above.
 
 ### Form
 
-- **The handshake.** The yard dials `GET /edge/link` (`LinkPath`,
-  `internal/edgelink/link.go`), signed as an enrolling call is, with a nonce of
-  its own. The edge sends a `challenge`: its own nonce and its signature over
-  both. The yard checks it against the key it pinned when it connected, answers
-  with a `hello` it signs, and the edge answers `welcome`.
+- **The handshake.** The yard dials `GET /edge/link`
+  (`internal/edgelink/link.go:LinkPath`), signed as an enrolling call is, with
+  a nonce of its own. The edge sends a `challenge`: its own nonce and its
+  signature over both. The yard checks it against the key it pinned when it
+  connected, answers with a `hello` it signs, and the edge answers `welcome`.
 - **The frames.** After the welcome the edge sends `request` and `socket`
   frames, each numbered and signed over this link's session, and the yard
   answers with `response`, `data`, `end`, `socket-head`, `socket-data`,

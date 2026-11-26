@@ -2298,15 +2298,20 @@ response gives usage for a known model.
   start, and the yard answers it each time. Set `--set trust=false`
   on a group (or crew member) to answer it yourself: the session then waits
   as `session_blocked` and gets its first prompt once you have. yardr
-  answers only this dialog, only when both its mark and its answer show and
-  its cursor is seen on the answer; anything else an agent asks is left to
-  you. When the pane shows the dialog with answers this yardr does not
-  know — the harness renamed them since the file was written — the daemon
-  raises `session_harness_dialog` on the first pass that finds the session
-  idle, with `kind`, `version` (what the installed harness reports), the
-  dialog's lines (`dialog`), the pane's `tail` and `prompt_look`, and types
-  nothing. Its `hint` names the file to update (`harnesses/<kind>.yaml`);
-  answer the dialog in its pane meanwhile. Under load the dialog may draw only after the start looked, or over
+  answers only the dialogs its kind's file names: the folder-trust dialog
+  (`trust`), the API-key dialog (`api_key`) and the onboarding screens
+  (`onboarding`). It answers each only when both its mark and its answer
+  show and, where the file names a cursor for it, the cursor is seen on
+  the answer. It also cancels some dialogs with Esc: the `dialogs` row of
+  [what yardr knows of a kind](#what-yardr-knows-of-a-kind) says which. Anything
+  else an agent asks is left to you. When the pane shows the folder-trust
+  dialog with answers this yardr does not know — the harness renamed them
+  since the file was written — the daemon raises `session_harness_dialog` on
+  the first pass that finds the session idle, with `kind`, `version` (what
+  the installed harness reports), the dialog's lines (`dialog`), the pane's
+  `tail` and `prompt_look`, and types nothing. Its `hint` names the file to
+  update (`harnesses/<kind>.yaml`); answer the dialog in its pane meanwhile.
+  Under load the dialog may draw only after the start looked, or over
   the delivery itself: while the first prompt is pending and never taken,
   the daemon's passes answer it the same way, and a delivery herdr reports
   blocked at a dialog counts as no delivery when a readable pane has no
