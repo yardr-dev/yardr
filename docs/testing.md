@@ -5,8 +5,8 @@ Seven rules keep the suite fast, each with the number that justifies it
 the depot's test command, `sh .yardr/test`: builders and reviewers run it in
 their worktree, without `-race`; the assembly runs it with `YARDR_LANDING=1`
 on what lands, with it (R4). R1 and R2 are script behavior: R2 is enforced
-on every run, R1 on every race leg; the rest are rules the gate, the roles
-and the assembly keep between them.
+on every run, R1 on the quiet run's race leg alone (R6); the rest are rules
+the gate, the roles and the assembly keep between them.
 
 An allow-list in `.yardr/test` names what is over budget today. Each entry
 says why; entries with a fix name the bead that brings them under. A fix
@@ -15,52 +15,48 @@ left for later. One row has a fix bead: `internal/cli`'s (yardr-2xke).
 One row has none: `contrib/isolated-yard`'s, since the yard-shape matrix
 is long by design and runs only in the quiet run (R6).
 
-R1. A package's tests finish in 60 s under `-race`, or the gate fails.
+R1. A package's tests finish in 60 s under `-race`, or the quiet run fails.
 Only a race leg is judged, and only the landing and the quiet run (R6) have
-one (R4): a builder's or reviewer's run, and a landing that changed nothing
-compiled (R5), test their selection without `-race` and so reach no R1
-verdict. A package that slips over 60 s shows at its landing, not before.
+one (R4), but the gate judges R1 in the quiet run alone, which sets
+`YARDR_R1_STRICT`. A builder's or reviewer's run, and a landing that changed
+nothing compiled (R5), test their selection without `-race` and so reach no R1
+verdict; a landing's race leg runs each package once, judges none of their
+times and re-runs nothing, as does every run that sets `YARDR_LANDING=1`
+without `YARDR_R1_STRICT`, CI's, the release's and a pull request's among
+them. What a landing loses is the
+catch: a package that slips over 60 s is found at the next quiet run, not at
+its landing, and the quiet run starts only when the yard is quiet, so that can
+be hours later. What it saves is minutes of every landing: the race leg loads
+the machine itself, so the alone re-runs after it cleared or excused every
+package they measured -- all ten on the landing measured, 453 s of package
+time (yardr-n03h).
 The wall is the slowest package. When a non-allow-listed package takes over
-60 s in the race leg, the gate runs it again alone under the leg's lock.
-Several over-budget packages are re-run up to three at a time, and every
-one is judged by the single load pair sampled around the batch. With
-`YARDR_R1_STRICT` set, which only the quiet run does (R6), they are re-run
-one after another instead, each judged by the pair sampled around its own
-re-run, so a package's line names the load that package sat in: three race
-suites side by side make a load and times of their own, and a time over
-60 s must be the package's own to judge it by (yardr-t4c0).
-Over 60 s alone fails the run and names both times; 60 s or less passes
-with a `test: R1:` line naming both times and marking the first run as loaded.
-One exception, on that quiet fail path alone: the gate runs the same
-package alone at the base, in a temporary worktree it removes after, and
-a package over 60 s alone there too passes the landing with a
-`test: R1:` line naming the run's, the alone and the base's times and
-the fix bead a person now owes for the base's time, as a flake's line
-names the bead a hand files for it: the time is the base's, not the
-change's. Under budget at the base fails as before,
-and a base run that cannot start, fails or prints no seconds falls back
-to that failure. No fix bead is filed and no allow-list row is added by
-the gate: a person files the bead, and its fix deletes the row it adds
-to the list in `.yardr/test`.
+60 s in the quiet run's race leg, the gate runs it again alone under the leg's
+lock, one package after another in sorted order, each judged by the load
+sampled around its own re-run, so a package's line names the load that package
+sat in: race suites side by side make a load and times of their own, and a
+time over 60 s must be the package's own to judge it by (yardr-t4c0). Over 60 s
+alone on a quiet machine fails the run and names both times; 60 s or less
+passes with a `test: R1:` line naming both times and marking the first run as
+loaded. The package is not compared with the base: the quiet run tests the
+base itself. The gate files no fix bead and adds no allow-list row: a person
+files the bead, and its fix deletes the row it adds to the list in
+`.yardr/test`.
 Load multiplies package times up to ~2.5x, so the first run's time by
 itself does not fail the gate.
 The re-measurement can be loaded too: the race lock holds off the other
 gate legs, not every test on the machine. Over 60 s alone on a loaded
-machine -- the one-minute load average past the core count -- passes with
-a `test: R1:` line naming both times and the load instead of failing
-(yardr-wq5h), unless `YARDR_R1_STRICT` is set by the quiet run (R6): then
-over 60 s alone on a loaded machine is refused the verdict, in a
-`test: R1:` line naming both times and the load, and the run ends neither
-passed nor failed (exit 3); over 60 s alone on a quiet machine fails as
-before. The load is sampled when
-the re-runs start and again when the last ends, and the machine is loaded when
-either sample is (yardr-f5f7): the average lags, so the end sample alone
-read a load that dipped before the check as quiet, while the start sample
-holds the loaded minutes the re-run was about to sit in. The line names the
-start sample's load where that is loaded, else the end's. Under the strict
-verdict a refusal names both times and the load, a quiet-sample failure
-both times, and a failure beside a refusal still fails the run. Unknown
-load counts as quiet and fails as before. A landing's `-p` follows the same load: past the
+machine -- the one-minute load average past the core count -- is refused the
+verdict, in a `test: R1:` line naming both times and the load, and the run ends
+neither passed nor failed (exit 3, yardr-wq5h); over 60 s alone on a quiet
+machine fails the run. The load is sampled when a re-run starts and again when
+it ends, and the machine is loaded when either sample is (yardr-f5f7): the
+average lags, so the end sample alone read a load that dipped before the check
+as quiet, while the start sample holds the loaded minutes the re-run was about
+to sit in. The line names the start sample's load where that is loaded, else
+the end's. A refusal names both times and the load, a quiet-sample failure both
+times, and a failure beside a refusal still fails the run. Unknown load counts
+as quiet and fails. A landing's `-p` follows the same load: past the
 core count the race leg runs `go test -race -p=N`, N the cores squared over the
 load, rounded down (at least 2, at most the cores), and logs one `test: go test
 -p=N (load A on C cores)` line; a quiet or unknown load runs go's default and
@@ -252,7 +248,7 @@ to keep one shape. That adds a second or two to the package's run, and no bead
 brings it under. `TestFdTestsRunInTheSerialPhase` fails if either test calls
 `t.Parallel` again.
 
-To read a package's R1 time as the landing does, run its race test binary
+To read a package's R1 time as the quiet run does, run its race test binary
 (`go test -race -c`) alone as R2's launchd job: one stream, `-count=1`, no
 cap, the load average noted before and after. A pane runs under the session's
 `GOMAXPROCS` and `-p` cap and gives the shape only: internal/store's base read
@@ -401,8 +397,8 @@ the yard from ever being quiet (yardr-hqsn). A
 threshold reached while the yard is busy stays in the log and fires at
 the next quiet event. Quiet is the yard's, not the machine's: nothing
 here waits for low load, and the run starts however loaded the host,
-which is why it judges R1 strictly instead of loud-passing as a
-landing may. The run tests the depot's base in a worktree of
+which is why it judges R1 strictly: a package over 60 s on a loaded host
+is refused the verdict, never excused with a pass. The run tests the depot's base in a worktree of
 its own with `YARDR_LANDING=1`, `YARDR_R1_STRICT=1` and
 `YARDR_QUIET_RUN=1`, holding the
 machine-wide race lock for its whole length, so it never overlaps a
@@ -412,10 +408,13 @@ a second, and the trigger re-arms only when the first finishes. A green
 run is logged and told as `quiet_passed`, a red base as `quiet_failed`
 naming the failing packages, the failing tests and the base commit, each
 with its wall time and starting load. The strict setting, which only the
-quiet run sets, turns off R1's loaded pass: a package over 60 s alone on
-a loaded machine is refused the verdict instead of passing, in a
-`test: R1:` line naming both times and the load, and the run ends neither
-passed nor failed (exit 3). Such a run is told as `quiet_unjudged`,
+quiet run sets, is what turns R1 on: the gate re-runs the packages over
+budget, and judges them, only where it is set, so a landing, which does not
+set it, loses the verdict and a package that slips over 60 s is found by the
+next quiet run (R1). A package over 60 s alone on a loaded machine is
+refused the verdict, in a `test: R1:` line naming both times and the load,
+and the run ends neither passed nor failed (exit 3). Such a run is told as
+`quiet_unjudged`,
 beadless and of no attention class, carrying the refused packages with
 their times and loads and the run's own output as `run.log`; the landings
 are counted since the last judged run's start -- the last `quiet_started`
@@ -424,12 +423,11 @@ the count; the trigger retries when the run ends if the yard is still
 quiet. Three refusals in a row are told as `quiet_failed` instead, naming
 the bound, so a machine that never quiets still accuses its base. On a
 quiet host a package over
-60 s alone fails as before, so a slowdown cannot hide behind a loaded host
-(yardr-8gdt). The strict run also re-runs
-the packages over budget one after another, not up to three at a time, so
-that the time a package is judged by is its own and not what three race
-suites side by side made of it, and the load a line names is the one
-around that package's own re-run (R1, yardr-t4c0).
+60 s alone fails, so a slowdown cannot hide behind a loaded host
+(yardr-8gdt). The re-runs of the packages over budget go one after another,
+so that the time a package is judged by is its own and not what race suites
+side by side made of it, and the load a line names is the one around that
+package's own re-run (R1, yardr-t4c0).
 
 `YARDR_QUIET_RUN=1`, which like `YARDR_R1_STRICT` only the quiet run sets, is
 the mark a test reads when it costs minutes and belongs to no other run.
@@ -549,7 +547,7 @@ What each part is for:
 
 Two of the cases the recipe was drawn from fit it with those first lines set
 and nothing else changed: `PKG=.` with
-`RUN='^TestYardTestBudgets$/^over-budget_packages_are_re-run_up_to_three_at_a_time,_and_one_at_a_time_in_a_strict_run$'`
+`RUN='^TestYardTestBudgets$/^over-budget_packages_are_re-run_one_at_a_time,_in_sorted_order$'`
 for the uutils `mkdir` that was no lock, and `PKG=internal/web` with
 `RUN='^TestLimits'` for the `ETXTBSY` a fork of a parallel test caused, which
 failed three runs in three hundred, so `COUNT` in the hundreds.
