@@ -2293,9 +2293,12 @@ response gives usage for a known model.
   so a bead session meets it once per depot's worktree; Kimi and
   Antigravity record it per folder, so it comes up in every new worktree.
   Antigravity keeps the folders in `trustedWorkspaces` in
-  `~/.gemini/antigravity-cli/settings.json`. Claude Code keeps no trust
-  for the home directory, so a crew session there meets the dialog at every
-  start, and the yard answers it each time. Set `--set trust=false`
+  `~/.gemini/antigravity-cli/settings.json`. Claude Code keeps no accept
+  for the home directory, so before a crew member's Claude session starts
+  in its home the yard writes the trust itself, once, and the dialog does
+  not draw there. Where it cannot (Claude Code's settings file is not there
+  yet, or the session sets `CLAUDE_CONFIG_DIR`), the dialog draws and the
+  yard answers it, as it answers it anywhere else. Set `--set trust=false`
   on a group (or crew member) to answer it yourself: the session then waits
   as `session_blocked` and gets its first prompt once you have. yardr
   answers only the dialogs its kind's file names: the folder-trust dialog

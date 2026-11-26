@@ -724,8 +724,9 @@ func TestQuietTestsNamesTheFailingTests(t *testing.T) {
 }
 
 // A strict run's "not judged" lines name the refused packages with their
-// times and the load each sat in, in the order printed; a landing's "not
-// failed" line refuses nothing, and a run with no refusal names none.
+// times and the load each sat in, in the order printed. A line of the same
+// shape under another verdict word ("not failed", which the gate does not
+// print) is no refusal and names nothing; a run with no refusal names none.
 func TestQuietNotJudgedNamesTheRefusedPackages(t *testing.T) {
 	out := "ok  \tyardr.dev/yardr/internal/cli\t1.0s\n" +
 		"test: R1: not judged: yardr.dev/yardr/internal/store took 85.8 s in the run, 94.1 s alone: over budget, loaded machine (load 40.59 on 10 cores)\n" +
@@ -1275,10 +1276,10 @@ func TestQuietExecRunEnvironment(t *testing.T) {
 			script: "[ -z \"$YARDR_WEB_ADDR\" ] && [ -z \"$YARDR_HOOK_ADDR\" ] && [ \"$QUIET_SENTINEL\" = kept ]\n",
 		},
 		{
-			// The real run judges R1 strictly: it starts the gate with
-			// YARDR_R1_STRICT, which the quiet run alone sets, so a
-			// package over 60 s alone on a loaded machine is refused
-			// the verdict instead of loud-passing as at a landing.
+			// The real run judges R1: it starts the gate with
+			// YARDR_R1_STRICT, which the quiet run alone sets and which
+			// is what makes the gate judge R1 at all, so a package over
+			// 60 s alone on a loaded machine is refused the verdict.
 			name:   "SetsStrictR1",
 			script: "[ \"$YARDR_R1_STRICT\" = 1 ] && [ \"$YARDR_LANDING\" = 1 ] && [ \"$YARDR_RACE_HELD\" = 1 ]\n",
 		},

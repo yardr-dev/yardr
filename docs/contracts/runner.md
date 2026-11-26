@@ -67,7 +67,21 @@ Each runner builds its handle in `Start`:
 - `manual` (`internal/runner/notify.go:Manual.Start`) writes `manual`, and `notify` and `session` when it shows a notification.
 - `exec` (`internal/runner/exec.go:Exec.Start`) writes `pid`, `log` and `start`, the start time that tells the process from a later one with its pid.
 - `peer` (`internal/runner/peer.go:Peer.Start`) writes `peer`, `bead` and, once the message is sent, `message`.
-- `herdr` writes for a bead's session `agent`, `branch`, `repo`, `workspace`, `worktree`, `tab`, `pane`, `brief`, and `pull` and `pull_head` or `head` for a pull request (`internal/runner/herdr.go:Herdr.Start`, `internal/runner/herdr.go:Herdr.brief`), and the pane's shell as `shell_pid`, `shell_start` and `herdr_session` (`internal/runner/herdr.go:Herdr.shellOn`). For a bead of a dir depot it writes `agent`, `dir`, `depot`, `bead`, `workspace`, `tab` and `pane` (`internal/runner/herdr_dir.go:Herdr.startDir`), and for a crew member `agent`, `workspace`, `tab`, `pane`, `dir` and `for` (`internal/runner/herdr_crew.go:Herdr.StartCrew`).
+- `herdr` writes for a bead's session `agent`, `branch`, `repo`, `workspace`,
+  `worktree`, `tab`, `pane`, `brief`, and `pull` and `pull_head` or `head` for
+  a pull request (`internal/runner/herdr.go:Herdr.Start`,
+  `internal/runner/herdr.go:Herdr.brief`), and the pane's shell as `shell_pid`,
+  `shell_start` and `herdr_session` (`internal/runner/herdr.go:Herdr.shellOn`).
+  For a bead of a dir depot it writes `agent`, `dir`, `depot`, `bead`,
+  `workspace`, `tab` and `pane` (`internal/runner/herdr_dir.go:Herdr.startDir`),
+  and for a crew member `agent`, `workspace`, `tab`, `pane`, `dir` and `for`
+  (`internal/runner/herdr_crew.go:Herdr.StartCrew`), and also
+  `launch_reference` when its harness finds the transcript by a live index
+  (`internal/runner/herdr_crew.go:launchReference`),
+  `pane_home` when the pane's environment sets HOME
+  (`internal/runner/herdr_crew.go:paneHome`), and always
+  `first_prompt` (`internal/runner/herdr_prompt.go:firstPrompt`) and
+  `context_started_at` (`internal/runner/context.go:contextStartedAt`).
 
 The store names the keys it reads or writes itself where it declares the record: `pending_prompt` (`internal/store/routing.go:PendingPrompt`), `snooze_until` and `snooze_count` (`internal/store/routing.go:SnoozeUntil`, `internal/store/routing.go:SnoozeCount`), `count_due` (`internal/store/routing.go:CountDue`), `agent_session` and `kind` (`internal/store/crew.go:HandleAgentSession`, `internal/store/crew.go:HandleKind`), `harness_login` and `harness_login_ask` (`internal/store/crew.go:HarnessLoginKey`, `internal/store/crew.go:HarnessLoginAskKey`) and `herdr_session` (`internal/store/settings.go:HandleHerdrSession`). The dispatcher names the keys it writes in `internal/dispatch/dispatch.go`: `prompt_unconfirmed`, `prompt_started` and `prompt_look` (`internal/dispatch/dispatch.go:PromptUnconfirmed`, `internal/dispatch/dispatch.go:PromptStarted`, `internal/dispatch/dispatch.go:PromptLook`), and the keys of the harness passes that [harness.md](harness.md) lists.
 

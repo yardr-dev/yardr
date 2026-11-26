@@ -27,8 +27,9 @@ import (
 // where a blank cell would hide it. It holds that the named check exists,
 // not that the check holds the rule, which the page's author and its
 // reviewer read. The form of a page is the Rules section of
-// docs/contracts/core.md, which names this test as the check of its fourth
-// rule. It reads text only and starts no process.
+// docs/contracts/core.md, which names this test as the check of the rule that
+// a page holds each of its rules to a check that exists. It reads text only
+// and starts no process.
 func TestContractPagesNameTheirChecks(t *testing.T) {
 	t.Parallel()
 	// The test runs in the repository root, the root package's directory.
@@ -331,7 +332,8 @@ func checkProblems(cell string, tests map[string]bool, gate string) []string {
 // that breaks across two lines. It does not hold that the symbol is what its
 // sentence says, which the page's author and its reviewer read. The form is
 // the Rules section of docs/contracts/core.md, which names this test as the
-// check of its fifth rule. It reads files and starts no process.
+// check of the rule that a page cites code as file and symbol. It reads files
+// and starts no process.
 func TestContractPagesCiteDeclaredSymbols(t *testing.T) {
 	t.Parallel()
 	// The test runs in the repository root, the root package's directory.

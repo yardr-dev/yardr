@@ -608,10 +608,10 @@ func quietPackages(out string) []string {
 // notJudgedLine is a strict run's refusal for one package: over budget
 // alone on a loaded machine, so not judged, with both times and the load.
 // The load is the machine's own line ("load 72.4 on 10 cores"), as the
-// gate's machineload prints it. The gate puts the verdict first, which is
-// what tells this line from its twin that refuses nothing ("R1: not failed:",
-// a landing's); TestQuietReadsTheGatesR1Lines reads the gate's own echo, so a
-// reword there fails that test and not, silently, this match.
+// gate's machineload prints it. The gate puts the verdict first, and prints
+// this line only in a strict run (YARDR_R1_STRICT, which the quiet run alone
+// sets). TestQuietReadsTheGatesR1Lines holds the match to the gate's own
+// echo, so a reword there fails that test and not, silently, this match.
 var notJudgedLine = regexp.MustCompile(`(?m)^test: R1: not judged: (\S+) took (\S+) s in the run, (\S+) s alone: over budget, loaded machine \((load [^)]+)\)$`)
 
 // quietNotJudged names the packages a strict whole-suite output refused to
@@ -813,11 +813,11 @@ const quietUnjudgedExit = 3
 // execQuietRun is the real quiet run: the depot's base in a worktree of
 // its own, tested as a landing tests it (the depot's test command with
 // YARDR_LANDING=1), under the race lock throughout, except that R1 is
-// judged strictly (YARDR_R1_STRICT, which the quiet run alone sets): a
-// package over 60 s alone on a loaded machine is refused the verdict
-// instead of loud-passing as it may at a landing, and the run ends
-// neither passed nor failed (exit 3), so a slowdown cannot hide behind a
-// loaded host and a loaded host cannot convict a package either.
+// judged only here, with YARDR_R1_STRICT (the quiet run alone sets it; a
+// landing does not judge R1 at all): a package over 60 s alone on a
+// loaded machine is refused the verdict, and the run ends neither passed
+// nor failed (exit 3), so a slowdown cannot hide behind a loaded host and
+// a loaded host cannot convict a package either.
 // YARDR_QUIET_RUN is the quiet run's other mark, for the tests
 // themselves: a test that costs minutes (the yard-shape matrix,
 // contrib/isolated-yard/matrix_test.go) runs only where it is set, so
