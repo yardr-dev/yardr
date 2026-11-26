@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"yardr.dev/yardr/internal/store"
@@ -33,7 +32,7 @@ func (h *Herdr) indexSession(kind store.Harness, handle map[string]any, dir stri
 	if err := eachLine(path, func(line []byte) bool {
 		start = src.Index.LineAt(line)
 		if prompt != "" {
-			owns = wrappedFirstPrompt(line, prompt)
+			owns = src.Index.Prompt.Matches(line, prompt)
 			return true
 		}
 		return !start.IsZero()
@@ -44,25 +43,6 @@ func (h *Herdr) indexSession(kind store.Harness, handle map[string]any, dir stri
 		return "", nil
 	}
 	return id, nil
-}
-
-// wrappedFirstPrompt tells whether line is a first user message that wraps the
-// launch's prompt in USER_REQUEST. The wrapper may be followed by metadata, so
-// the prompt is the request inside it, not the whole message.
-func wrappedFirstPrompt(line []byte, prompt string) bool {
-	var input struct {
-		Type    string `json:"type"`
-		Content string `json:"content"`
-	}
-	if json.Unmarshal(line, &input) != nil || input.Type != "USER_INPUT" {
-		return false
-	}
-	content, wrapped := strings.CutPrefix(input.Content, "<USER_REQUEST>\n")
-	if !wrapped {
-		return false
-	}
-	request, _, closed := strings.Cut(content, "\n</USER_REQUEST>")
-	return closed && request == prompt
 }
 
 // indexedSession reads the exact directory key; absent records never fall back

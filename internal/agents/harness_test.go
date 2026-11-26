@@ -722,6 +722,8 @@ func TestLoadRefuses(t *testing.T) {
 		"session, index escape":               {"claude.yaml", "version: 1\nlabel: x\nsession: {home: .x, glob: '{session}.jsonl', index: {file: ../index.json, field: ., at: t}}\n", "file must stay"},
 		"session, empty field key":            {"claude.yaml", "version: 1\nlabel: x\nsession: {home: .x, glob: '{session}.jsonl', index: {file: index.json, field: a..b, at: t}}\n", "empty key"},
 		"session, index at_unit":              {"claude.yaml", "version: 1\nlabel: x\nsession: {home: .x, glob: '{session}.jsonl', index: {file: index.json, field: ., at: t, at_unit: h}}\n", `index: at_unit "h" is none of s, ms, us`},
+		"session, index no prompt":            {"claude.yaml", "version: 1\nlabel: x\nsession: {home: .x, glob: '{session}.jsonl', index: {file: index.json, field: ., at: t}}\n", "index: prompt needs type, field, open and close"},
+		"session, prompt no close":            {"claude.yaml", "version: 1\nlabel: x\nsession: {home: .x, glob: '{session}.jsonl', index: {file: index.json, field: ., at: t, prompt: {type: USER_INPUT, field: content, open: '<USER_REQUEST>'}}}\n", "index: prompt needs type, field, open and close"},
 		"session, unknown field":              {"claude.yaml", "version: 1\nlabel: x\nsession: {home: .x, glob: '{session}.jsonl', index: {file: index.json, field: ., at: t, latest: true}}\n", "field latest not found"},
 		"session, no index or model":          {"claude.yaml", "version: 1\nlabel: x\nsession: {home: .x, glob: '{session}.jsonl'}\n", "no session id to read it by"},
 		"a nameless preset":                   {"claude.yaml", "version: 1\nlabel: x\nflags: {permissions: [{args: [--yes]}]}\n", "without label or args"},
@@ -1137,6 +1139,10 @@ func TestContextSource(t *testing.T) {
 				h.Session.Index.File != "cache/last_conversations.json" || h.Session.Index.Field != "." || h.Session.Index.At != "created_at" {
 				t.Fatalf("agy's session locator = %+v", h.Session)
 			}
+			// The newlines are part of the wrapper: the prompt stands on a line of its own.
+			if want := (store.SessionPrompt{Type: "USER_INPUT", Field: "content", Open: "<USER_REQUEST>\n", Close: "\n</USER_REQUEST>"}); h.Session.Index.Prompt == nil || *h.Session.Index.Prompt != want {
+				t.Fatalf("agy's first prompt = %+v, want %+v", h.Session.Index.Prompt, want)
+			}
 			if h.Model != nil {
 				t.Fatal("agy declares a model reader; the session keeps its group's configured model")
 			}
@@ -1215,7 +1221,8 @@ func TestContextSource(t *testing.T) {
 // half read.
 func TestContextSourceChecked(t *testing.T) {
 	model := "model:\n  home: .x\n  glob: s/{session}.jsonl\n  field: m.model\n"
-	session := "session:\n  home: .x\n  glob: s/{session}.jsonl\n  index:\n    file: index.json\n    field: .\n    at: at\n"
+	session := "session:\n  home: .x\n  glob: s/{session}.jsonl\n  index:\n    file: index.json\n    field: .\n    at: at\n" +
+		"    prompt:\n      type: USER_INPUT\n      field: content\n      open: \"<USER_REQUEST>\\n\"\n      close: \"\\n</USER_REQUEST>\"\n"
 	for name, body := range map[string]string{
 		"no usage":              "version: 1\nlabel: Q\n" + model + "context:\n  type: assistant\n",
 		"no model":              "version: 1\nlabel: Q\ncontext:\n  type: assistant\n  usage: message.usage\n",

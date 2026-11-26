@@ -9,9 +9,13 @@ provider: Google
 # the session ends. Its first timed line must be at or after the launch's
 # start floored to a second, so a record an earlier session left is no
 # match. Crews verify the launch-specific first prompt in that
-# transcript's first USER_INPUT, since multiple panes can open
-# conversations in the same directory. Context reads only the pinned
-# transcript. An unpinned session has no reading.
+# transcript, since multiple panes can open conversations in the same
+# directory. The transcript's first USER_INPUT line holds the prompt in
+# its content, between <USER_REQUEST> and </USER_REQUEST> on lines of
+# their own, with metadata that may follow the closing one. The prompt is
+# matched inside that wrapper, which `prompt` describes, and not as the
+# whole message. Context reads only the pinned transcript. An unpinned
+# session has no reading.
 session:
   home: .gemini/antigravity-cli
   glob: brain/{session}/.system_generated/logs/transcript.jsonl
@@ -19,6 +23,11 @@ session:
     file: cache/last_conversations.json
     field: .
     at: created_at
+    prompt:
+      type: USER_INPUT
+      field: content
+      open: "<USER_REQUEST>\n"
+      close: "\n</USER_REQUEST>"
 
 # Context use is the last PLANNER_RESPONSE line's input and cache-read
 # tokens, which add up to what the session holds: input excludes the cache

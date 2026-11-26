@@ -342,7 +342,10 @@ func printHarness(w io.Writer, h store.Harness, has bool) {
 		fmt.Fprintln(w, "\nSession file locator")
 		fmt.Fprintf(w, "  %s\n", sessionFiles(src.Home, src.HomeEnv, src.Glob))
 		if idx := src.Index; idx != nil {
-			fmt.Fprintf(w, "  index: %s, exact directory key, id at %s; pinned on a live pass of a crew session, never after the end, when the transcript's first %s is at or after the session's start and its first prompt is that launch's\n", sessionFiles(src.Home, src.HomeEnv, idx.File), idx.Field, idx.At)
+			// %q keeps the newlines of a wrapper visible.
+			p := idx.Prompt
+			fmt.Fprintf(w, "  index: %s, exact directory key, id at %s; pinned on a live pass of a crew session, never after the end, when the transcript's first %s is at or after the session's start and its first prompt is that launch's, inside %q…%q in the %s of the first line of type %s\n",
+				sessionFiles(src.Home, src.HomeEnv, idx.File), idx.Field, idx.At, p.Open, p.Close, p.Field, p.Type)
 		}
 	}
 	if len(h.Usage) > 0 {

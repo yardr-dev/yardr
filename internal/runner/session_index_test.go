@@ -213,31 +213,3 @@ func TestCleanPaneHome(t *testing.T) {
 		}
 	}
 }
-
-// Antigravity's first user message wraps the prompt the pane was sent, with
-// its metadata after the wrapper; anything else is another session's file.
-func TestWrappedFirstPrompt(t *testing.T) {
-	t.Parallel()
-	wrap := func(content string) string {
-		return `{"type":"USER_INPUT","content":"<USER_REQUEST>\n` + content + `\n</USER_REQUEST>"}` + "\n"
-	}
-	for _, tc := range []struct {
-		name string
-		line string
-		want bool
-	}{
-		{"wrapped", wrap("go"), true},
-		{"metadata after", `{"type":"USER_INPUT","content":"<USER_REQUEST>\ngo\n</USER_REQUEST>\n<metadata/>"}` + "\n", true},
-		{"another prompt", wrap("stay"), false},
-		{"unwrapped", `{"type":"USER_INPUT","content":"go"}` + "\n", false},
-		{"unclosed", `{"type":"USER_INPUT","content":"<USER_REQUEST>\ngo"}` + "\n", false},
-		{"another line", `{"type":"GENERIC","content":"<USER_REQUEST>\ngo\n</USER_REQUEST>"}` + "\n", false},
-		{"no JSON", "not json\n", false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := wrappedFirstPrompt([]byte(tc.line), "go"); got != tc.want {
-				t.Errorf("wrappedFirstPrompt = %v, want %v", got, tc.want)
-			}
-		})
-	}
-}
