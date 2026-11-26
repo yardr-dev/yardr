@@ -124,7 +124,8 @@ func TestStalledSessionIsReportedOnceWithItsPane(t *testing.T) {
 	}
 
 	// A daemon that replaced itself tells nobody again and still holds the
-	// group back: the mark is on the session's handle.
+	// group back: the mark is on the session's handle, and the wait of the
+	// bead that waits for the model is in its log.
 	d2 := &dispatch.Dispatcher{Store: s, Runners: map[string]dispatch.Runner{"fake": r}, Backoff: time.Nanosecond}
 	must(t, d2.Reconcile(ctx))
 	later(d2)
@@ -135,8 +136,8 @@ func TestStalledSessionIsReportedOnceWithItsPane(t *testing.T) {
 	if got := r.starts(); !slices.Equal(got, []string{b.ID}) {
 		t.Fatalf("starts after a restart = %v", got)
 	}
-	if n := len(eventKinds(t, s, b2.ID, "group_wait")); n != 2 {
-		t.Fatalf("group_wait events after a restart = %d, want 2: the wait is reported once per daemon, as quota_wait is", n)
+	if n := len(eventKinds(t, s, b2.ID, "group_wait")); n != 1 {
+		t.Fatalf("group_wait events after a restart = %d, want 1: the wait is told once for the bead's stay, as quota_wait is, across a restart too", n)
 	}
 
 	// A bead that brings its own model is not held back by the group's.

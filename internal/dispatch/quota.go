@@ -142,7 +142,7 @@ func (d *Dispatcher) chooseGroup(ctx context.Context, b store.Bead, r *store.Rou
 		return c, false // the daemon is stopping: the provider was not heard out
 	}
 	// Once for a route, not for each percentage a window passes through.
-	if d.noted(b.ID, "quota_wait", b.Stage+"|"+r.ID) {
+	if d.notedWait(ctx, b, "quota_wait", r.ID) {
 		return c, false
 	}
 	data := map[string]any{"stage": b.Stage, "route": r.ID, "passed": c.Passed, "reason": c.Why()}
@@ -163,7 +163,7 @@ func (d *Dispatcher) chooseGroup(ctx context.Context, b store.Bead, r *store.Rou
 // until the bead starts, as quota_wait is, however many passes it is held
 // for. A stopping daemon says nothing: it did not hear the provider out.
 func (d *Dispatcher) reportLimitsWait(ctx context.Context, b store.Bead, r *store.Route, c store.RouteChoice) {
-	if ctx.Err() != nil || d.noted(b.ID, "limits_wait", b.Stage+"|"+r.ID) {
+	if ctx.Err() != nil || d.notedWait(ctx, b, "limits_wait", r.ID) {
 		return
 	}
 	d.Log.Warn("limits_wait", "bead", b.ID, "route", r.ID, "reason", c.Unknown)
@@ -248,7 +248,7 @@ func (d *Dispatcher) waitReason(g store.Group, b store.Bead, active map[string]i
 // cannot start now: each group with its reason in words. Once per stage
 // and route until the bead starts, as quota_wait is.
 func (d *Dispatcher) reportGroupWait(ctx context.Context, b store.Bead, r *store.Route, waits []waitedGroup) {
-	if d.noted(b.ID, "group_wait", b.Stage+"|"+r.ID) {
+	if d.notedWait(ctx, b, "group_wait", r.ID) {
 		return
 	}
 	groups := make([]map[string]any, 0, len(waits))

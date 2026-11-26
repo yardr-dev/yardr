@@ -44,6 +44,23 @@ func quotaYard(t *testing.T, first string, further ...string) (store.API, *fakeR
 	return s, f, d, p, saved, &now
 }
 
+// restarted is d replaced by a daemon on the same store, as a landing
+// replaces it: what d remembered of what it said is gone, and so is its cache
+// of the provider's windows, which a test primes again as it did for d. now is
+// the clock the new daemon reads. d stops with the clock where it was: the
+// cleanup of a daemon waits for its answers to be fresh by its clock, and a
+// clock that moved on without it would leave them stale for ever, since no
+// read of d stamps its scheduler's time again.
+func restarted(t *testing.T, d *dispatch.Dispatcher, now *time.Time) *dispatch.Dispatcher {
+	t.Helper()
+	stopped := *now
+	dispatch.SetClock(d, func() time.Time { return stopped })
+	next := &dispatch.Dispatcher{Store: d.Store, Runners: d.Runners, Backoff: d.Backoff}
+	t.Cleanup(func() { dispatch.WaitLimitsIdle(next) })
+	dispatch.SetClock(next, func() time.Time { return *now })
+	return next
+}
+
 // weekly is a report with the Weekly window at week percent and the 5h
 // window at five, resetting three days and one hour after noon.
 func weekly(week, five float64) string {
@@ -514,6 +531,16 @@ func TestBeadWaitsWhileNoGroupsConditionHolds(t *testing.T) {
 		t.Fatalf("resets_at = %v, want the earliest reset %s", data["resets_at"], want)
 	}
 
+	// A landing replaces the daemon, which forgets what it said. The one that
+	// finds the bead still waiting reads the wait in the log and says nothing
+	// of it again.
+	d = restarted(t, d, now)
+	primeGroupLimits(t, s, d, "a")
+	must(t, d.Reconcile(ctx))
+	if evs := eventKinds(t, s, b.ID, "quota_wait"); len(evs) != 1 {
+		t.Fatalf("quota_wait events after a restart = %v, want still one", evs)
+	}
+
 	p.say(weekly(20, 10))
 	*now = now.Add(6 * time.Minute)
 	primeGroupLimits(t, s, d, "a")
@@ -658,7 +685,7 @@ func TestBeadWaitsWhileNoGroupsConditionHolds(t *testing.T) {
 			t.Fatalf("quota_wait = %v, want the window as last known and its reset", evs[0].Data)
 		}
 	})
-	t.Run("alternating group and quota waits report once each", func(t *testing.T) {
+	t.Run("alternating group and quota waits report once each, across restarts too", func(t *testing.T) {
 		ctx := context.Background()
 		s, _, d, p, _, now := quotaYard(t, "a@Weekly<80")
 		p.say(weekly(85, 10))
@@ -671,8 +698,18 @@ func TestBeadWaitsWhileNoGroupsConditionHolds(t *testing.T) {
 			_, err := s.SetGroup(ctx, "a", store.GroupEdit{Limit: &limit}, "me")
 			must(t, err)
 		}
+		// A landing replaces the daemon between rounds, which asks the
+		// provider again and has said nothing of the bead.
+		land := func() {
+			t.Helper()
+			d = restarted(t, d, now)
+			primeGroupLimits(t, s, d, "a")
+		}
 		b := newBead(t, s, "x")
-		for range 3 {
+		for i := range 3 {
+			if i > 0 {
+				land()
+			}
 			pause(true)
 			must(t, d.Reconcile(ctx))
 			pause(false)
@@ -694,13 +731,19 @@ func TestBeadWaitsWhileNoGroupsConditionHolds(t *testing.T) {
 			t.Fatalf("claimed by %q once the window opened, want a", group)
 		}
 
-		// Released, it waits again, and each wait reports once more.
+		// Released, it waits again, and each wait reports once more, though
+		// a daemon that never saw the first stay finds the waits of it in the
+		// log: they are older than the claim, and the new stay is not theirs.
 		_, err := s.Release(ctx, b.ID, "try again", store.Expect{}, "me")
 		must(t, err)
+		d = restarted(t, d, now)
 		*now = now.Add(6 * time.Minute)
 		p.say(weekly(85, 10))
 		primeGroupLimits(t, s, d, "a")
-		for range 2 {
+		for i := range 2 {
+			if i > 0 {
+				land()
+			}
 			pause(true)
 			must(t, d.Reconcile(ctx))
 			pause(false)
@@ -856,7 +899,7 @@ func TestGroupAtItsLimitIsWaitedForNotPassedOver(t *testing.T) {
 func TestSingleGroupRouteAtItsLimitWaitsWithOneEvent(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	s, f, d, p, r, _ := quotaYard(t, "a")
+	s, f, d, p, r, now := quotaYard(t, "a")
 	must(t, s.PutGroup(ctx, store.Group{Name: "a", Runner: "herdr", Limit: 1, Config: map[string]any{"kind": "kimi"}}, "me"))
 	p.say(weekly(70, 10))
 	primeGroupLimits(t, s, d, "a")
@@ -882,6 +925,15 @@ func TestSingleGroupRouteAtItsLimitWaitsWithOneEvent(t *testing.T) {
 	g, _ := gs[0].(map[string]any)
 	if g["group"] != "a" || !strings.Contains(fmt.Sprint(g["reason"]), "limit (1)") {
 		t.Fatalf("group_wait groups = %v, want a at its limit", gs)
+	}
+
+	// A landing replaces the daemon, which forgets what it said. The bead
+	// still waits for the same group on the same route, and the one that finds
+	// it so says nothing of it again.
+	d = restarted(t, d, now)
+	must(t, d.Reconcile(ctx))
+	if evs := eventKinds(t, s, waiting, "group_wait"); len(evs) != 1 {
+		t.Fatalf("group_wait events of the waiting bead after a restart = %d, want still 1", len(evs))
 	}
 }
 
