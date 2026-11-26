@@ -18,20 +18,21 @@ as the approval, which is the mixed case core.md's first case names.
 Two forms cross, and today both are Go in `internal/store`.
 
 **The ask** is the core's data. A question is a note of kind `ask` whose JSON
-is `Ask` (`internal/store/asks.go:64`), and what became of it is a note of
-kind `answer` whose JSON is `Answer` (`asks.go:164`): a pick, words, put aside,
-declined, taken back by its asker and, for a run ask, the record of what the
-yard ran. `ParseAsk` and `ParseAnswer` read them (`asks.go:190`, `asks.go:199`)
-and `ResolveAsks` says where each ask stands (`asks.go:1233`). A client reads
-asks with `UserAsks` and `Bead`, answers with `AnswerAsk`, `DeferAsk`,
-`DeclineAsk` and their guarded forms, and approves with `ApproveAsk`
+is `Ask` (`internal/store/asks.go:Ask`), and what became of it is a note of
+kind `answer` whose JSON is `Answer` (`internal/store/asks.go:Answer`): a pick,
+words, put aside, declined, taken back by its asker and, for a run ask, the
+record of what the yard ran. `ParseAsk` and `ParseAnswer` read them
+(`internal/store/asks.go:ParseAsk`, `internal/store/asks.go:ParseAnswer`) and
+`ResolveAsks` says where each ask stands (`internal/store/asks.go:ResolveAsks`).
+A client reads asks with `UserAsks` and `Bead`, answers with `AnswerAsk`,
+`DeferAsk`, `DeclineAsk` and their guarded forms, and approves with `ApproveAsk`
 ([api.md](../api.md)). An `Ask` may take one of several shapes besides a plain
 question: a secret (`Secret`), a run (`Run`), a setup (`Setup`), a depot's push
-(`DepotPush`), a mapping of an unknown sender (`Identity`) or a pairing's
-check (`Pair`). The rules below are those of the ask and of the run ask.
+(`DepotPush`), a mapping of an unknown sender (`Identity`) or a pairing's check
+(`Pair`). The rules below are those of the ask and of the run ask.
 
 **The card** is the run ask's data for the person approving it. There is no
-Card type: it is `AskRun` (`internal/store/runask.go:69`). `Argv` is the
+Card type: it is `AskRun` (`internal/store/runask.go:AskRun`). `Argv` is the
 command as the yard parsed it, in one order however it was typed. `Does` is
 the yard's sentences for what it changes, `Back` the command that takes the
 change back and `BackBy` who may run it. `Seen` holds what the yard held of
@@ -39,16 +40,18 @@ each thing the command names, whole, and an approval is held to it. `Plan`
 is the change field by field, and `Carried`, `Pack` and the other fields hold
 the bytes an approval installs, for the rows that carry any. `General` holds
 the words of a general card, the command no row fits, which the yard shows
-whole and unchecked (`generalRow`, `runask_general.go:33`). The yard writes
-all of it from its own records, and none of it from the asker's words. A
-client is sent `RunAsked` (`runask_proposed.go:32`) and the card's weight
-(`AskWeight`, `weight.go:54`).
+whole and unchecked (`generalRow`,
+`internal/store/runask_general.go:generalRow`). The yard writes all of it from
+its own records, and none of it from the asker's words. A client is sent
+`RunAsked` (`internal/store/runask_proposed.go:RunAsked`) and the card's weight
+(`AskWeight`, `internal/store/weight.go:AskWeight`).
 
 **The row** is what one command supplies to be proposed: `runCommand`
-(`runask.go:148`), a struct of functions. The rows are the list `runList`
-(`runask.go:236`) and what the `init()` of files beside it append, and
-`parseRun` finds a row by the words of the stored command
-(`runask_parse.go:86`). A row's functions are of three kinds.
+(`internal/store/runask.go:runCommand`), a struct of functions. The rows are the
+list `runList` (`internal/store/runask.go:runList`) and what the `init()` of
+files beside it append, and `parseRun` finds a row by the words of the stored
+command (`internal/store/runask_parse.go:parseRun`). A row's functions are of
+three kinds.
 
 - Those that read only the typed words take no store: `parse`, and `whose`,
   `sole` and `link`, which read the parsed command.
@@ -64,38 +67,45 @@ client is sent `RunAsked` (`runask_proposed.go:32`) and the card's weight
 one and run inside the one write that approval opens, so the yard cannot change
 between the check and the run, and an error anywhere rolls the write back, so
 that nothing ran. This is the rule that any move of the rows must keep. Today
-it holds as follows. `ApproveAsk` (`runask.go:693`) reads before the write what
-the card needs of git and of the packs repository (`approvalRepos`,
-`runask_prewrite.go:36`), opens the write with `writeVia`, and hands those
-readings into it. In that write `approveAsk` (`runask.go:740`) finds the row by
-the stored words, checks who is approving, draws the card again with the row's
-`card`, compares its `Seen`, `Does`, `Back`, `BackBy` and `Plan` with the
-stored card's and calls the row's `stale` where they differ, weighs it again,
-holds the approval to the weight it showed, runs the row, records the carrying
-out of what runs after the write, and records the answer. Running a row
-through `store.API` after the approving write instead would let the yard change
-between the check and the run, and that recheck is what makes a card safe to
-approve.
+it holds as follows. `ApproveAsk` (`internal/store/runask.go:Store.ApproveAsk`)
+reads before the write what the card needs of git and of the packs repository
+(`approvalRepos`, `internal/store/runask_prewrite.go:Store.approvalRepos`),
+opens the write with `writeVia`, and hands those readings into it. In that write
+`approveAsk` (`internal/store/runask.go:wtx.approveAsk`) finds the row by the
+stored words, checks who is approving, draws the card again with the row's
+`card`, compares its `Seen`, `Does`, `Back`, `BackBy` and `Plan` with the stored
+card's and calls the row's `stale` where they differ, weighs it again, holds the
+approval to the weight it showed, runs the row, records the carrying out of what
+runs after the write, and records the answer. Running a row through `store.API`
+after the approving write instead would let the yard change between the check
+and the run, and that recheck is what makes a card safe to approve.
 
 Some approvals take another path.
 
 - Four kinds of command have an effect outside the store: registering a hook
-  with its service (`approveHookRegister`, `runask_hook.go:510`), a test
-  message to a user (`approveSourceCheck`, `runask_check.go:305`), a call of a
-  source (`approveSourceCall`, `runask_call.go:378`) and a pack install
-  (`approvePackInstall`, `runask_packinstall.go:309`). Each is approved in
-  phases that no one write holds. A first write holds the approval to the card,
-  the effect runs with no write open, and a last write records the answer
-  (`finishPhasedRun`, `runask_finish.go:16`). A failed effect leaves the ask
-  open, and approving again retries it, but for a pack install that stopped
-  after some of its installs, which asks for a new card for the rest.
+  with its service (`approveHookRegister`,
+  `internal/store/runask_hook.go:Store.approveHookRegister`), a test message to
+  a user (`approveSourceCheck`,
+  `internal/store/runask_check.go:Store.approveSourceCheck`), a call of a source
+  (`approveSourceCall`, `internal/store/runask_call.go:Store.approveSourceCall`)
+  and a pack install (`approvePackInstall`,
+  `internal/store/runask_packinstall.go:Store.approvePackInstall`). Each is
+  approved in phases that no one write holds. A first write holds the approval
+  to the card, the effect runs with no write open, and a last write records the
+  answer (`finishPhasedRun`,
+  `internal/store/runask_finish.go:wtx.finishPhasedRun`). A failed effect leaves
+  the ask open, and approving again retries it, but for a pack install that
+  stopped after some of its installs, which asks for a new card for the rest.
 - A device pairing is approved inside the usual write, under the pairing lock
-  (`approveDevicePair`, `runask_devicepair.go:295`).
+  (`approveDevicePair`,
+  `internal/store/runask_devicepair.go:Store.approveDevicePair`).
 - What runs after the write (a pack apply, an up, a source add with command
   files, a depot add, a teammate invite or removal, a general card) leaves a
-  carrying record in the approving write (`needsCarry`, `carry.go:147`;
-  `recordCarry`, `carry.go:174`). The record is `Carry` (`carry.go:55`) in the
-  `carry` bucket, and the server carries it out (`internal/server/carry*.go`).
+  carrying record in the approving write (`needsCarry`,
+  `internal/store/carry.go:needsCarry`; `recordCarry`,
+  `internal/store/carry.go:wtx.recordCarry`). The record is `Carry`
+  (`internal/store/carry.go:Carry`) in the `carry` bucket, and the server
+  carries it out (`internal/server/carry*.go`).
 
 ## Owner
 
@@ -181,7 +191,7 @@ is about to be deleted.
   and `Fetch` that opens no write. What they return the store hands into the
   write as it does today.
 - **planned**, design 3.2.6: `ApprovedOn`, the exported form of `approvedOn`
-  (`runask_proposed.go:104`).
+  (`internal/store/runask_proposed.go:approvedOn`).
 - **planned**, design 3.2.6: the rows are handed to the store when the server
   starts, as an argument of `server.Run`, which gives them to the store it
   opened before the socket is served. They are no longer added by the `init()`

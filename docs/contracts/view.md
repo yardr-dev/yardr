@@ -17,48 +17,51 @@ page, window or terminal view: `internal/web`, `internal/chat`,
 The form that crosses is RPC over HTTP, and a stream of events.
 
 - **The socket.** `POST /call/<Method>` on the yard's unix socket
-  (`rpc.Handler`, `internal/rpc/server.go:77`). The body is a JSON object of
-  the arguments by name for the calls api.md names, and the reply is
+  (`rpc.Handler`, `internal/rpc/server.go:Handler`). The body is a JSON object
+  of the arguments by name for the calls api.md names, and the reply is
   `{"result": ...}`, `{}` or `{"error": {"code", "message"}}`. The array form
-  of the arguments is yardr's own. `rpc.Client` (`internal/rpc/client.go:38`)
-  is generated from `store.API` (`internal/store/api.go:11`), and every yardr
-  process but the one that owns the store calls the yard through it.
+  of the arguments is yardr's own. `rpc.Client`
+  (`internal/rpc/client.go:Client`) is generated from `store.API`
+  (`internal/store/api.go:API`), and every yardr process but the one that owns
+  the store calls the yard through it.
 - **The listener.** A device calls `POST /user/call/<Method>` on the yard's
-  listener with its token (`internal/rpc/user.go:25`,
-  `internal/rpc/usere2e.go:271`). Every device is served the calls of `Calls`,
-  and a device of the operator is served the calls of `OperatorCalls` besides,
-  but for those in `socketOnly`, which no device is served. Device enrolment,
-  which keeps what a device is paired with, is a library outside the core.
-- **The lists.** `rpc.Calls` (`internal/rpc/api.go:46`) and `rpc.OperatorCalls`
-  (`api.go:261`) are the calls a program that is not yardr may rely on, each
-  with the names of its arguments. `listenerOnly` (`api.go:100`) and
-  `socketOnly` (`api.go:288`) say which door serves which. Every other method
-  of `store.API` is yardr's own and is no contract. Every method the socket
-  serves has a class that says which callers may make it (`rpc.Access`,
-  `internal/rpc/access.go:108`).
+  listener with its token (`internal/rpc/user.go:UserPath`,
+  `internal/rpc/usere2e.go:UserServer.routes`). Every device is served the calls
+  of `Calls`, and a device of the operator is served the calls of
+  `OperatorCalls` besides, but for those in `socketOnly`, which no device is
+  served. Device enrolment, which keeps what a device is paired with, is a
+  library outside the core.
+- **The lists.** `rpc.Calls` (`internal/rpc/api.go:Calls`) and
+  `rpc.OperatorCalls` (`internal/rpc/api.go:OperatorCalls`) are the calls a
+  program that is not yardr may rely on, each with the names of its arguments.
+  `listenerOnly` (`internal/rpc/api.go:listenerOnly`) and `socketOnly`
+  (`internal/rpc/api.go:socketOnly`) say which door serves which. Every other
+  method of `store.API` is yardr's own and is no contract. Every method the
+  socket serves has a class that says which callers may make it (`rpc.Access`,
+  `internal/rpc/access.go:Access`).
 - **The events.** The stream carries event kinds, documented in api.md under
   The stream. For each kind the store decides which of its data a person who
   is not the operator is told (`store.EventDataTold`).
-- **The headers.** `X-Yardr-Client` (`rpc.ClientHeader`, `api.go:14`) is where
-  a program that is not yardr says what it is. A yardr caller sends
-  `X-Yardr-Revision` instead (`version.Header`, `internal/version/version.go:20`)
-  and the server answers with its own build in the same header
-  ([api.md](../api.md#builds)).
+- **The headers.** `X-Yardr-Client` (`rpc.ClientHeader`,
+  `internal/rpc/api.go:ClientHeader`) is where a program that is not yardr says
+  what it is. A yardr caller sends `X-Yardr-Revision` instead (`version.Header`,
+  `internal/version/version.go:Header`) and the server answers with its own
+  build in the same header ([api.md](../api.md#builds)).
 - **The readers inside the module.** Every reader uses `store.API`, which is
   `*store.Store` in the process that owns the store and `rpc.Client`
   elsewhere. Chat reads through the interface `chat.Store`
-  (`internal/chat/chat.go:40`), and mcp through `mcp.Yard`
-  (`internal/mcp/mcp.go:369`), each the calls it uses and no more. The web
-  holds the whole `store.API` (`internal/web/server.go:49`).
+  (`internal/chat/chat.go:Store`), and mcp through `mcp.Yard`
+  (`internal/mcp/mcp.go:Yard`), each the calls it uses and no more. The web
+  holds the whole `store.API` (`internal/web/server.go:Server`).
 - **The view-shaped reads.** Where a read must be consistent in one
   transaction, the store assembles records in the shape of one window or page,
   and the call is made for that view (core.md, Where the rule cannot decide,
-  case 3). These are `Line` (`internal/store/line.go:255`), for footplate's
-  Line window, `Flows`, which serves the board of `internal/store/flowsboard.go`
-  to footplate's timetable and the web's flows page, and `UserAsks`,
-  `UserOpenAsks` and `Bead` (`internal/store/decisions.go`), for the decisions
-  a person is asked. They stand in `Calls` or `OperatorCalls` like any other
-  call.
+  case 3). These are `Line` (`internal/store/line.go:Store.Line`), for
+  footplate's Line window, `Flows`, which serves the board of
+  `internal/store/flowsboard.go` to footplate's timetable and the web's flows
+  page, and `UserAsks`, `UserOpenAsks` and `Bead`
+  (`internal/store/decisions.go`), for the decisions a person is asked. They
+  stand in `Calls` or `OperatorCalls` like any other call.
 
 ## Owner
 
@@ -68,7 +71,7 @@ replies and the kinds of event.
 ## Version
 
 The contract has no number of its own today. What holds is the promise in
-`internal/rpc/api.go:35`: a name in `Calls` or `OperatorCalls` is on the wire
+`internal/rpc/api.go:Calls`: a name in `Calls` or `OperatorCalls` is on the wire
 for good. A later build may add an argument, which a client of today leaves
 out and which means what the call did before when it is the zero value, and
 may add fields to a reply and kinds of event, which a client ignores when it
@@ -80,9 +83,9 @@ the build's revision, and the server holds them to one build. When a call
 names a revision the server does not run, and the binary the server started
 from has since been replaced by exactly that build, the server refuses the call
 as replacing, finishes the calls it is running and starts the new build in its
-place (`internal/server/server.go:437`). A caller built from an older binary
-is served as it is. A program that is not yardr is served whatever build the
-server is.
+place (`internal/server/server.go:runner.handler`). A caller built from an older
+binary is served as it is. A program that is not yardr is served whatever build
+the server is.
 
 ## Change rule
 

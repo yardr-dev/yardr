@@ -328,9 +328,7 @@ func checkProblems(cell string, tests map[string]bool, gate string) []string {
 // the test, so a converted page cannot go back to line numbers unseen. The
 // conversion that empties the list deletes it and the code that reads it.
 var linePages = map[string]bool{
-	"card.md":   true,
 	"runner.md": true,
-	"view.md":   true,
 }
 
 // A page of docs/contracts/ cites the code it is about as file and symbol,
