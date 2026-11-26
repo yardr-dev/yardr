@@ -95,10 +95,6 @@ an old form goes, because it goes in the release that changes it.
   not in the commit. Its author follows the core, and until the author does
   the yard refuses the pack with a plain reason that names the number.
 
-pack-api.md still says that a seam is dropped in two releases, the first
-marking it deprecated. That text is the old rule, and this page replaces it
-(see Planned).
-
 ## Stored data
 
 - The import record of each pack and depot (`store.PackImport`, bucket
@@ -135,7 +131,3 @@ marking it deprecated. That text is the old rule, and this page replaces it
   change of meaning that drops a number adds the lower bound, its refusal
   that names the number the build needs, and a row for it in the Rules
   table.
-- **planned**, design 3.2 and 3.2.5: pack-api.md's Taking something away
-  follows the whole-change rule above. It says today that dropping a seam
-  takes two releases, the first marking it deprecated. The rule replaces that
-  with one release, and the page changes to say so.

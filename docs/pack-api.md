@@ -111,14 +111,18 @@ the yardr it meets is refused with the cause.
 
 ### Taking something away
 
-Within the range yardr reads, a change never removes a stable seam and never
-changes what one means. Dropping a seam takes two releases. The first marks
-it deprecated on this page, and `pack check` says so for a pack that uses
-it. The second stops reading the numbers that had it, and refuses such a
-pack with a message like the one above that names the number. yardr's
-maintainers decide that each time, and this page records it with a
-`BREAKING CHANGE:` line, as a commit does
+A stable seam goes whole, in one release. A removal of one, or a change in
+what one means, raises the API number in the release that makes it, and that
+release stops reading the numbers below the one that names the change. A pack
+written for a lower number is refused, with its reason and the lowest number
+yardr reads. No old form is kept readable beside the new one, and no release
+marks a seam for removal ahead of the one that removes it. The commit that
+makes the change carries a `BREAKING CHANGE:` line
 ([line.md](line.md#landing-by-squash)).
+
+Today no number has been dropped, so yardr refuses no pack for being too old.
+The lower bound is planned in `docs/contracts/pack.md`, in yardr's
+repository.
 
 ### A declaration added by hand
 
