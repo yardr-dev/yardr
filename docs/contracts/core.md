@@ -278,10 +278,10 @@ as a table with a check for each rule. The line also names the section of
 the contract. A name that is not a link is a page not yet written
 (**planned**).
 
-- `harness.md`: what the core asks of an agent program (design 3.2.1)
-- `source.md`: calls and hooks, the declaration format, the command protocol and the hook envelope (design 3.2.2)
-- `runner.md`: starting and reading a session, the `Runner` interface and the session handle (design 3.2.3)
-- `flow.md`: flows and stages, the files the flow engine reads (design 3.2.4)
+- [`harness.md`](harness.md): what the core asks of an agent program (design 3.2.1)
+- [`source.md`](source.md): calls and hooks, the declaration format, the command protocol and the hook envelope (design 3.2.2)
+- [`runner.md`](runner.md): starting and reading a session, the `Runner` interface and the session handle (design 3.2.3)
+- [`flow.md`](flow.md): flows and stages, the files the flow engine reads (design 3.2.4)
 
 - [`pack.md`](pack.md): the pack API, the `api:` number of `pack.yaml` (design 3.2.5)
 - [`card.md`](card.md): the card and the ask, the ask as the core's data and what one command supplies to be proposed (design 3.2.6)
