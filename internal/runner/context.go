@@ -39,7 +39,8 @@ const contextCacheCap = 200
 // use and window its own session file holds, by the kind's context source
 // (store.ContextSource). ok is false when the kind names no source, or
 // the file says no use yet (no reply, or none with numbers). The file is
-// found as the model source's is (see Model).
+// found as the model source's is (see Model), or, for an indexed session
+// locator, only by the conversation id pinned on the handle.
 //
 // The daemon asks on each pass that reaches its context read, so both
 // halves are remembered across calls: the transcript is pinned while its
@@ -52,6 +53,28 @@ func (h *Herdr) Context(ctx context.Context, handle map[string]any, startedAt ti
 	kind, id, err := h.contextKind(ctx, handle, startedAt)
 	if err != nil {
 		return 0, 0, false, err
+	}
+	if kind.Kind == "" {
+		// As matchSession resolves it: herdr named no agent, so the
+		// handle's own kind says what the pin below is under.
+		if name, _ := handle[harnessKind].(string); name != "" {
+			kind, _ = agents.Lookup(name)
+		}
+	}
+	if src := kind.SessionFile(); src != nil && src.Index != nil && kind.Context != nil {
+		// An indexed locator is read only by the conversation id pinned
+		// on the handle: the index is live, and may already name another
+		// session's conversation. An unpinned session has no reading.
+		// The transcript stands under the pane's HOME (sessionHome).
+		id, _ := handle[agentSession].(string)
+		if !plainSessionID(id) || id == "." || id == ".." {
+			return 0, 0, false, nil
+		}
+		p, err := sessionFile(src.Pattern(h.sessionHome(handle, kind.Kind, src.Home, src.HomeEnv), id))
+		if p == "" || err != nil {
+			return 0, 0, false, err
+		}
+		return h.cachedContext(p, *kind.Context)
 	}
 	// wide is the glob of every file a match judges, "" for an id herdr named.
 	var path, key, wide string
@@ -75,13 +98,6 @@ func (h *Herdr) Context(ctx context.Context, handle map[string]any, startedAt ti
 				if err != nil {
 					return 0, 0, false, err
 				}
-			}
-		}
-		if kind.Kind == "" {
-			// As matchSession resolves it: herdr named no agent, so the
-			// handle's own kind says what the pin below is under.
-			if name, _ := match[harnessKind].(string); name != "" {
-				kind, _ = agents.Lookup(name)
 			}
 		}
 		key = contextMatchKey(kind, match, startedAt)
@@ -624,17 +640,16 @@ func (h *Herdr) cachedContext(path string, source store.ContextSource) (used, wi
 	}
 	var readErr error
 	end, err := eachLineFrom(path, start, func(line []byte) bool {
-		n, w, has, e := source.ReadIn(line)
+		n, w, has, reset, e := source.ReadIn(line)
 		if e != nil {
 			readErr = e
 			return true
 		}
-		if has {
+		// A reset or newer usage with no known window clears the older sample.
+		if reset || has && w == 0 && (source.WindowField != "" || source.ModelField != "") {
+			used, window, ok = 0, 0, false
+		} else if has {
 			used, window, ok = n, w, true
-			if source.WindowField != "" && w == 0 {
-				// A newer call without its window cannot reuse an older reading.
-				used, window, ok = 0, 0, false
-			}
 		}
 		return false
 	})
