@@ -201,11 +201,12 @@ to it, and that event carries the end of the pane as `tail` too (its last
 question the agent waits on is in `yardr inbox`, with no `herdr agent read`
 to get it.
 
-At startup, yardr answers only a folder-trust dialog named by the agent's
-harness, while the first prompt is still pending and no delivery was taken.
+At startup, while the first prompt is still pending and no delivery was
+taken, yardr answers the folder-trust dialog, the API-key dialog and the
+onboarding screens, each only where the agent's harness file names it.
 A prompt seen in the pane or a working status closes that guard. Crew
 sessions also read their `crew_status` history since the current
-`crew_started`, so a daemon restart cannot reopen trust after the session
+`crew_started`, so a daemon restart cannot reopen the guard after the session
 was seen working. A crew prompt counted sent but never taken is answered
 all the same when the session never worked and the live pane has no echo
 of it; `prompt_started`, a shown or typed prompt, or any working in the
