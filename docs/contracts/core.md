@@ -3,15 +3,17 @@
 This page is the norm for what the core is and what may import what. It
 states the rule that puts a file inside or outside the core, the core's
 types, the split of `store.API`, the layers of `internal/`, the import
-rules and the line ceilings of the packages that hold core code. The Rules
-table names the check of each rule. `TestImportRules` and
-`TestLayersMatchCode` in `arch_test.go` (package main, at the repository
-root) hold the code to the import rules and the layers, and
+rules, the line ceilings of the packages that hold core code and the names
+the core may not name. The Rules table names the check of each rule.
+`TestImportRules` and `TestLayersMatchCode` in `arch_test.go` (package main,
+at the repository root) hold the code to the import rules and the layers,
 `TestCorePackagesKeepUnderTheirCeilings` in `ceilings_test.go` holds each
-package to its ceiling. The page and its checks change together, so a new
-import that breaks the rules, or a package that outgrows its ceiling, fails
-the gate. The contracts at the core's edge each have a page beside this one,
-listed under The contracts, with a Rules table of the same form.
+package to its ceiling, and `TestCoreNamesNothingOnTheList` in
+`corenames_test.go` holds the code to the list of names. The page and its
+checks change together, so a new import that breaks the rules, a package
+that outgrows its ceiling or a new hit of a listed name fails the gate. The
+contracts at the core's edge each have a page beside this one, listed under
+The contracts, with a Rules table of the same form.
 
 ## What is core
 
@@ -75,7 +77,7 @@ These are how-and-what:
 - doctor
 - onboarding (`init`, `setup`, `guide`)
 - upgrade and release
-- the daemon's housekeeping passes that know about the machine (`gocache.go`, `diskkeep`, `telemetry.go`)
+- the daemon's housekeeping passes that know about the machine (`internal/dispatch/gocache.go`, `internal/diskkeep`, `internal/dispatch/telemetry.go`)
 - the per-source parts of `internal/store/subscriptions.go` (who a crew member is in a source, the `--where` matching)
 - the preview supervisor (`internal/preview/preview.go`)
 - delegated pack imports (`internal/store/delegation_pack.go`, `delegation_pack_record.go`, `delegation_pack_target.go`)
@@ -308,6 +310,72 @@ a package as core by a file's path in the list of what is core, and by the
 owning package of a type in Core types. A package under its ceiling by any
 amount passes, and the test never raises, lowers or rewrites a ceiling.
 
+## Names the core may not name
+
+A name written in the core's code is knowledge of something that changes
+without the core: the harness a session runs, the service a source calls, the
+program that holds the panes. The table lists the names the core may not
+write, and `TestCoreNamesNothingOnTheList` holds the code to it. The list is
+written out here and not read from the names of directories under `packs/`,
+which would also stop words that are the yard's own (`design`, `dir`,
+`routine`, `starter`). For the same reason a word that is also a plain word of
+the yard's own model stays off it: `herdr` is the name of a runner, and `pane`
+is where a session runs and which one a call came from.
+
+| group | names |
+|---|---|
+| harness kinds | `agy`, `claude`, `codex`, `grok`, `kimi`, `kiro`, `muse`, `opencode`, `pi` |
+| providers | `google` |
+| herdr's command words | `tab`, `workspace` |
+
+The word lists of yardr's own commands, and the names of the hosted edge, the
+pack planner and a source's identity forms, are not on the list yet and wait
+for the operator's choice of words.
+
+The harness kinds row holds the kind of each file in `harnesses/`, which is
+named for it (`claude.yaml` is `claude`), so that a new kind joins the list in
+the commit that adds its file (rule 7).
+
+A group joins the list as a row, and a name as an entry in a row's cell: one
+lowercase word of letters and digits. The test reads the table and knows
+nothing of the groups but the harness kinds row.
+
+The test reads the non-test Go of each package in Line ceilings, the files in
+the package's own directory, less the files under Files the name scan does
+not read, and skips comments. A name matches a whole string literal (`"pi"`)
+and a whole part of an identifier, or several whole parts in a row, and never
+the inside of a part: `kindPi` and `Pi` name `pi`, `OpenCode` names
+`opencode`, and `pick` and `PID` do not name `pi`. A name's case is ignored.
+A hit fails with its file, its line and the name.
+
+Today's hits are the allow-list, `coreNamesAllowed` in `corenames_test.go`:
+one row for a file and a name, with the number of hits the file may keep. A
+file with more hits of a name than its row holds fails, and so does a row that
+holds more hits than its file has, with the number to lower it to, so that a
+count only falls as the code that names the name moves out and a hit that has
+gone cannot come back. A row is added only in the commit that adds its name
+to the list, at the hits that name has that day, and a file that moves or
+splits takes its rows to its new paths with no more hits in all.
+
+## Files the name scan does not read
+
+A file that the how-and-what list in What is core names by its path is
+how-and-what, so it may name the listed words, and the name scan does not
+read it. The table gives each such file's path and the entry of that list
+that names it. A file that the list names for part of it only, such as
+`internal/store/subscriptions.go` for its per-source parts, stays in the scan,
+because the rest of it is core. The test fails when a row names a file that
+is not there or that stands in no package of Line ceilings.
+
+| file | listed as |
+|---|---|
+| `internal/dispatch/gocache.go` | the daemon's housekeeping passes |
+| `internal/dispatch/telemetry.go` | the daemon's housekeeping passes |
+| `internal/store/delegation_pack.go` | delegated pack imports |
+| `internal/store/delegation_pack_record.go` | delegated pack imports |
+| `internal/store/delegation_pack_target.go` | delegated pack imports |
+| `internal/store/eta.go` | ETA cells |
+
 ## The contracts
 
 A contract is a form that crosses between the core and the how-and-what:
@@ -355,6 +423,5 @@ author and its reviewer read the test for that.
 | 3 | A non-test Go file over 1,000 lines has a row in the `filesizes` table and may not grow past the row's ceiling. | `gate:filesizes` |
 | 4 | A page in `docs/contracts/` holds each of its rules to a check that exists. | `TestContractPagesNameTheirChecks` |
 | 5 | A package with a row in Line ceilings holds no more non-test Go lines than its ceiling, each row names a package that exists, and each package this page names as core has a row. | `TestCorePackagesKeepUnderTheirCeilings` |
-
-The list of what the core may not name (design 3.4) joins this table later,
-with its check.
+| 6 | A non-test Go file in a package of Line ceilings, less the files under Files the name scan does not read, names no word of the list under Names the core may not name as a whole string literal or as whole parts of an identifier, beyond what its row of the allow-list holds; a row holds no more hits than its file has. | `TestCoreNamesNothingOnTheList` |
+| 7 | A file of `harnesses/` is named for a kind in the harness kinds row of the list under Names the core may not name. | `TestHarnessFilesNameOnlyListedKinds` |

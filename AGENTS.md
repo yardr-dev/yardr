@@ -22,7 +22,8 @@ worked); user docs live in `docs/` and are not repeated here.
 - `docs/`: user and design docs, including `docs/api.md` (the socket API
   contract), `docs/testing.md` (the test rules), `docs/contracts/` (the
   core's norm pages: one per contract, `core.md` for the core, its import
-  rules and its line ceilings), `docs/design/`, `docs/flows.md`;
+  rules, its line ceilings and the names it may not name), `docs/design/`,
+  `docs/flows.md`;
   `docs/docs.go` beside them embeds the top-level pages in the binary (`yardr docs`).
 - `packs/`: packs shipped inside the binary (`packs/packs.go` embeds them);
   per-service and per-depot-kind directories. `pageframe` is neither: the

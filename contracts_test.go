@@ -178,8 +178,9 @@ func rulesTable(page string) (rows [][]string, problem string) {
 // exactly one table with the header cols and a row. The section runs to the
 // next heading of level one or two, and what stands in a code fence, a
 // heading or a table shown as an example, is no part of the page's structure.
-// The Rules tables and core.md's own tables (Core types, Line ceilings) are
-// read with it, so that a page's tables are one form.
+// The Rules tables and core.md's own tables (Core types, Line ceilings, Names
+// the core may not name, Files the name scan does not read) are read with it,
+// so that a page's tables are one form.
 func sectionTable(page, heading string, cols []string) (rows [][]string, problem string) {
 	var section []string
 	var sections int

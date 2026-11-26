@@ -30,7 +30,7 @@ A file's `version` is the format's one number, `store.FileVersion` (`internal/st
 
 ## Change rule
 
-A change to the format is made in `store.Harness` and `Harness.Check` and in every file of `harnesses/` it touches, in one commit. A new kind needs, today, its file `harnesses/<kind>.yaml`; the kind in `store.HerdrKinds` (`internal/store/harness_kinds.go:5`), the list of kinds herdr starts, which a file's kind must be among; a model lister for it in `modelLists` (`internal/agents/harness.go:26`); and its entries in the tables of `internal/store/harness_kinds.go` that copy what its file says. `TestHarnessFiles` and `TestStoreTablesMatchCatalogue` fail until they agree. A new kind as a file with fixtures and no Go is planned.
+A change to the format is made in `store.Harness` and `Harness.Check` and in every file of `harnesses/` it touches, in one commit. A new kind needs, today, its file `harnesses/<kind>.yaml`; the kind in `store.HerdrKinds` (`internal/store/harness_kinds.go:5`), the list of kinds herdr starts, which a file's kind must be among; a model lister for it in `modelLists` (`internal/agents/harness.go:26`); and its entries in the tables of `internal/store/harness_kinds.go` that copy what its file says. `TestHarnessFiles` and `TestStoreTablesMatchCatalogue` fail until they agree. A kind is also a name the core may not name, so it joins the harness kinds row of the list in [core.md](core.md#names-the-core-may-not-name) in the same commit, and `TestHarnessFilesNameOnlyListedKinds` fails until it does; each file that already names the kind then gets a row in that page's allow-list, at the hits it has that day. A new kind as a file with fixtures and no Go is planned.
 
 ## Stored data
 
