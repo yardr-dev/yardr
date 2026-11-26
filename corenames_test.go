@@ -17,16 +17,15 @@ import (
 )
 
 // The core must not learn what is outside it, and a name is where that shows.
-// docs/contracts/core.md lists, under Names the core may not name, the harness
-// kinds, the providers and the herdr command words that the core's code may
-// not write, and this test holds the non-test Go of each package in its Line
-// ceilings table to the list, less the files the page puts on the
-// how-and-what side by path. A name matches a whole string literal and a
-// whole part of an identifier, comments skipped. Today's hits are
-// coreNamesAllowed below, rows that only fall, so that a new hit fails from the
-// day the list lands and a hit that has gone cannot come back. The page names
-// this test as the check of its sixth rule. It reads files and starts no
-// process.
+// docs/contracts/core.md lists, under Names the core may not name, the groups
+// of names that the core's code may not write, and this test holds the
+// non-test Go of each package in its Line ceilings table to the list, less the
+// files the page puts on the how-and-what side by path. A name matches a whole
+// string literal and a whole part of an identifier, comments skipped. Today's
+// hits are coreNamesAllowed below, rows that only fall, so that a new hit fails
+// from the day the list lands and a hit that has gone cannot come back. The
+// page names this test as the check of its sixth rule. It reads files and
+// starts no process.
 func TestCoreNamesNothingOnTheList(t *testing.T) {
 	t.Parallel()
 	// The test runs in the repository root, the root package's directory.
@@ -707,7 +706,10 @@ var coreNamesAllowed = []nameAllowance{
 	{"internal/dispatch/crewstarts.go", "tab", 1},
 	{"internal/dispatch/homesessions.go", "tab", 5},
 	{"internal/dispatch/starts.go", "tab", 1},
+	{"internal/rpc/client.go", "delegatedpack", 3},
+	{"internal/rpc/client_gen.go", "delegatedpack", 3},
 	{"internal/rpc/client_gen.go", "workspace", 1},
+	{"internal/rpc/server.go", "delegatedpack", 3},
 	{"internal/rpc/user.go", "google", 3},
 	{"internal/rpc/userclear.go", "google", 2},
 	{"internal/rpc/usersecret.go", "google", 6},
@@ -717,6 +719,7 @@ var coreNamesAllowed = []nameAllowance{
 	{"internal/runner/herdr.go", "workspace", 12},
 	{"internal/runner/herdr_brief.go", "claude", 1},
 	{"internal/runner/herdr_brief.go", "kimi", 1},
+	{"internal/runner/herdr_crew.go", "otel", 2},
 	{"internal/runner/herdr_crew.go", "tab", 2},
 	{"internal/runner/herdr_crew.go", "workspace", 2},
 	{"internal/runner/herdr_dir.go", "tab", 6},
@@ -726,11 +729,27 @@ var coreNamesAllowed = []nameAllowance{
 	{"internal/runner/herdr_status.go", "tab", 5},
 	{"internal/runner/herdr_status.go", "workspace", 5},
 	{"internal/runner/model.go", "workspace", 5},
+	{"internal/runner/runner.go", "otel", 2},
 	{"internal/runner/trust.go", "claude", 9},
 	{"internal/runner/usage.go", "workspace", 1},
+	{"internal/server/carry.go", "shadows", 4},
+	{"internal/server/carry_teammate.go", "edgelink", 5},
 	{"internal/server/carry_userlogin.go", "claude", 3},
+	{"internal/server/edge.go", "edgelink", 9},
+	{"internal/server/hostedmint.go", "edgelink", 3},
 	{"internal/server/hostedmint.go", "google", 3},
+	{"internal/server/packreader.go", "shadows", 2},
+	{"internal/server/pairaddress.go", "edgelink", 1},
+	{"internal/server/push.go", "edgelink", 8},
+	{"internal/server/server.go", "pprof", 2},
+	{"internal/server/server.go", "supervisor", 9},
+	{"internal/store/api.go", "delegatedpack", 3},
 	{"internal/store/api.go", "workspace", 1},
+	{"internal/store/define.go", "delegatedpack", 1},
+	{"internal/store/delegation.go", "delegatedpack", 7},
+	{"internal/store/delegation_repo.go", "delegatedpack", 3},
+	{"internal/store/delegation_view.go", "delegatedpack", 1},
+	{"internal/store/footplate.go", "footplate", 1},
 	{"internal/store/googlecred.go", "google", 20},
 	{"internal/store/harness.go", "workspace", 19},
 	{"internal/store/harness_effort.go", "agy", 1},
@@ -750,16 +769,24 @@ var coreNamesAllowed = []nameAllowance{
 	{"internal/store/harness_model.go", "opencode", 2},
 	{"internal/store/loginsteps.go", "google", 1},
 	{"internal/store/migrate_settings.go", "claude", 1},
+	{"internal/store/packs.go", "delegatedpack", 1},
 	{"internal/store/routing.go", "claude", 1},
 	{"internal/store/routing.go", "workspace", 4},
+	{"internal/store/runask_pack.go", "shadows", 1},
+	{"internal/store/runask_packcard.go", "shadows", 1},
 	{"internal/store/runask_userlogin.go", "claude", 3},
 	{"internal/store/secretask.go", "google", 29},
 	{"internal/store/secretgive.go", "google", 5},
 	{"internal/store/secretreach.go", "google", 3},
+	{"internal/store/settings.go", "bdp", 6},
 	{"internal/store/settings.go", "claude", 1},
 	{"internal/store/sourcecalls.go", "google", 3},
 	{"internal/store/sourcehosted.go", "google", 2},
 	{"internal/store/sourcekeyed.go", "google", 10},
+	{"internal/store/sources.go", "delegatedpack", 1},
+	{"internal/store/subscriptions.go", "bot", 4},
+	{"internal/store/subscriptions.go", "slug", 3},
+	{"internal/store/subscriptions.go", "team", 1},
 	{"internal/store/userlogin.go", "claude", 3},
 	{"internal/store/weight.go", "google", 2},
 	{"internal/store/yardrsource.go", "google", 4},

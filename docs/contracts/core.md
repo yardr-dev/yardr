@@ -327,10 +327,14 @@ is where a session runs and which one a call came from.
 | harness kinds | `agy`, `claude`, `codex`, `grok`, `kimi`, `kiro`, `muse`, `opencode`, `pi` |
 | providers | `github`, `google`, `linear`, `pushover`, `telegram` |
 | herdr's command words | `tab`, `workspace` |
+| yardr's commands outside the core | `bdp`, `footplate`, `mcp`, `otel`, `pprof` |
+| the hosted edge | `edgelink`, `supervisor` |
+| the pack planner's objects | `delegatedpack`, `shadows` |
+| a source's identity forms | `bot`, `profile`, `slug`, `team` |
 
-The word lists of yardr's own commands, and the names of the hosted edge, the
-pack planner and a source's identity forms, are not on the list yet and wait
-for the operator's choice of words.
+`telemetry`, `packobject` and `assignee` are not on the list yet. Each waits
+for the move that touches its files to show which side it falls on, core or
+how-and-what.
 
 `TestCoreNamesNothingOnTheList` does not replace four other tests, because
 each holds more than it does. It reads the non-test Go of the packages in Line
