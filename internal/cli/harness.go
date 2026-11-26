@@ -238,7 +238,7 @@ func printHarness(w io.Writer, h store.Harness, has bool) {
 			fmt.Fprintf(w, "  trust environment (automatic only): %s\n", strings.Join(envKeys(h.Trust.Env), ", "))
 		}
 	} else {
-		fmt.Fprintln(w, "  trust: yardr answers no dialog of it")
+		fmt.Fprintln(w, "  trust: yardr answers no trust dialog of it")
 	}
 	fmt.Fprintln(w, "\nMarks its pane is read by")
 	if m := h.Marks; m.Input == "" {

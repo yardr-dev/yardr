@@ -334,7 +334,7 @@ func (d *Dispatcher) nudgeHeld(ctx context.Context, bead string, who, handle map
 			"it is typed once the input is empty. Send or clear the text in its pane",
 			waited.Round(time.Second), what)}
 	if why.dialog != "" {
-		hint := fmt.Sprintf("the agent's harness asks this in place of its input, and yardr answers no dialog of a harness: "+
+		hint := fmt.Sprintf("the agent's harness asks this in place of its input, and yardr leaves this dialog to you: "+
 			"%s waits until it is answered in the agent's pane", what)
 		if why.dialog == "auto_mode_setup" {
 			hint = fmt.Sprintf("the agent's harness asks this in place of its input, and yardr cancels the auto mode offer with Esc: "+

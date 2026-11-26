@@ -2160,9 +2160,9 @@ until the menu is answered:
 ```
 
 A nudge, a first prompt or the prompt at a usage limit's reset typed after
-such a spell meets it. yardr answers no dialog of a harness for you: a
-compaction, or 198k tokens sent again at full price, is yours to choose.
-What it does while the menu is on:
+such a spell meets it. yardr leaves this menu to you: a compaction, or 198k
+tokens sent again at full price, is yours to choose. What it does while the
+menu is on:
 
 - It types nothing into the menu. The selected answer is marked as an
   input is, so the pane reads as an input that holds text, and a nudge's

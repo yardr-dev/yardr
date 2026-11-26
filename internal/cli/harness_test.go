@@ -158,7 +158,7 @@ func TestHarnessListAndShow(t *testing.T) {
 		"     time:   from recorded_at, RFC 3339 when a string or Unix time in microseconds\n")
 	wantText(t, ask(0, "harness", "show", "kiro"), "kiro  Kiro, by AWS  (harnesses/kiro.yaml, version 1)",
 		"get it: curl -fsSL https://cli.kiro.dev/install | bash (https://kiro.dev/cli)",
-		"trust: yardr answers no dialog of it", "input begins with:    ›", "a message it took:    no mark known",
+		"trust: yardr answers no trust dialog of it", "input begins with:    ›", "a message it took:    no mark known",
 		"an empty input shows: ask a question or describe a task", "before an error line: any of •▸✓✗⏸╰",
 		"unattended: --trust-tools=*", "always:     chat", "model flag: --model", "one shot:   chat --no-interactive <prompt>",
 		`permission "allow all tools": --trust-tools=*`, `permission "trust all tools": --trust-all-tools`,

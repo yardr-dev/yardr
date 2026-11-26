@@ -191,8 +191,9 @@ func TestADialogInPlaceOfTheInputIsToldOfAtOnceAndOnce(t *testing.T) {
 	must(t, d.Reconcile(ctx))
 	n, ev := kindCount(t, s, r.Journal, "nudge_held")
 	if n != 1 || ev.Data["reason"] != "dialog" || ev.Data["dialog"] != "cache_menu" || ev.Data["text"] != cacheMenuLine ||
-		ev.Data["crew"] != "yardmaster" || ev.Data["waited"] != nil {
-		t.Fatalf("on the pass that found the menu: nudge_held %d times, want once with the dialog and its line: %+v", n, ev.Data)
+		ev.Data["crew"] != "yardmaster" || ev.Data["waited"] != nil ||
+		!strings.Contains(fmt.Sprint(ev.Data["hint"]), "yardr leaves this dialog to you") {
+		t.Fatalf("on the pass that found the menu: nudge_held %d times, want once with the dialog, its line and the hint that leaves it to the person: %+v", n, ev.Data)
 	}
 	// A second nudge into the same menu, and ten minutes of it, say nothing more.
 	must(t, s.Mail(ctx, "yardmaster", "second", "chris"))
