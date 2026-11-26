@@ -3083,7 +3083,7 @@ since="since $base ($said), from $fromshort"
 # the embed skips (names beginning with . or _).
 # The . on the contrib rows is the root package, whose test reads every .go
 # file of the repository (main_test.go) and holds every package's imports to
-# docs/architecture.md (arch_test.go): a package the binary imports runs it as
+# docs/contracts/core.md (arch_test.go): a package the binary imports runs it as
 # an importer does, and contrib's programs are imported by nothing. The test
 # helpers and generators under internal/ (previewtest, scripttest, standin,
 # storetest, rpc/gen, rpc/clientgen) are no dependency of the

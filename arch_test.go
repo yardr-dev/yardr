@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-// docs/architecture.md names which internal package may import which;
+// docs/contracts/core.md names which internal package may import which;
 // this test holds the code to that page. The page is the norm and this
 // test its check: the two change together, so a new import that breaks
 // the rules fails the gate here. It lives in the root package because
@@ -121,7 +121,7 @@ func TestImportRules(t *testing.T) {
 	}
 }
 
-// TestLayersMatchCode holds docs/architecture.md's Layers section to what
+// TestLayersMatchCode holds docs/contracts/core.md's Layers section to what
 // go list measures: every internal package named in its proper layer,
 // each layer's list exactly matching its measured set, and the header,
 // layer, store and CLI counts true. Recounted at 4bee454 by yardr-6dzk:
@@ -164,7 +164,7 @@ func TestLayersMatchCode(t *testing.T) {
 		}
 	}
 
-	raw, err := os.ReadFile("docs/architecture.md")
+	raw, err := os.ReadFile("docs/contracts/core.md")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,7 @@ func layersSection(t *testing.T, page string) string {
 			return strings.Join(lines[start:i], "\n")
 		}
 	}
-	t.Fatal("docs/architecture.md has no ## Layers section")
+	t.Fatal("docs/contracts/core.md has no ## Layers section")
 	return ""
 }
 
