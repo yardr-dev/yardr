@@ -127,3 +127,12 @@ func (s *Server) AgeFreshPending(d time.Duration) {
 		s.freshPending[st] = ch
 	}
 }
+
+// ReadAsks is readAsks: a bead's notes read as the page and the history say
+// their asks, for a test that needs notes no call of the store writes.
+func ReadAsks(notes []store.Note, now time.Time, marks map[string]string) askNotes {
+	return readAsks(notes, now, marks)
+}
+
+// Of is what the note says where a line has room for its words alone.
+func (a askNotes) Of(n store.Note) string { return a.of(n) }

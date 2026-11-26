@@ -354,7 +354,7 @@ func TestPackFilePages(t *testing.T) {
 	}
 
 	// The notes log draws each note's words as letters, as the terminal
-	// does, an ask note's JSON among them (yardr-we6y): the trojan name
+	// does, an ask note's words among them (yardr-we6y): the trojan name
 	// stands lettered in the notes region, and no mark of direction or
 	// control character stands there. The ask note's weight line reads as
 	// its file page's heading does; a plain note's words keep their line

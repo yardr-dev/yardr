@@ -13,7 +13,9 @@ import (
 )
 
 // Change is one event of a bead's history: the event as the feed words it,
-// and under an update that changed the body, what it changed.
+// except that a note of an ask, or of an answer to one, is said in words as the
+// bead's notes say it (askNotes) and not as the JSON it is stored as; and under
+// an update that changed the body, what it changed.
 type Change struct {
 	Entry
 	// Diff is the body before the update and after it as a unified diff,
@@ -68,6 +70,9 @@ func History(ctx context.Context, st store.API, bead, viewer string) ([]Change, 
 	evs = kept
 	rd := readerOf(st, evs)
 	rd.titles[b.ID], rd.byBead[b.ID] = b.Title, evs
+	// The bead's notes draw an ask as words, so its history says it in the
+	// same words and not as the JSON it is stored as.
+	rd.askWords = true
 	out := make([]Change, len(evs))
 	// From the newest back: an update says what the body was, and what it
 	// became is what the next update of the body says it was, or the bead.

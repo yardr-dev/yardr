@@ -1843,6 +1843,25 @@ writes nothing, makes no blob or copy of the pack, and ends with the ask. The
 page is not live and has no approval. The card approves on its bead's page, as
 above.
 
+**An ask in the notes.** A note of kind ask is JSON in its text, and so is the
+answer to it, which no one reads. The notes read as words on every view, one
+that acts beside its card and one that only reads: an ask stands as `yardr
+prime` words it, with the question, whom it is to and who asked it, the
+context, the options with what each does and the recommendation, and how it
+stands now (open, answered with the pick, put aside, declined or taken back; a
+run ask shows its command as text). An answer stands inside the ask it
+answers, as it does in `yardr prime`, and not as a note of its own. A note of
+kind ask whose text does not parse is drawn as it was written, and so is an
+answer that names no ask of the bead. Where an ask can still be answered, its
+words end on the line that says how in the terminal, `answer with: yardr bead
+answer …`, as `yardr prime` prints it: the words give a view that only reads
+no way to answer. The JSON keeps every note as stored, so `notes` carries the
+ask's own JSON in `text`. The history, which `yardr bead history` prints as
+well, says an ask in the same words, in the `note` of its entry, and an
+answer to it by the first line of them, which names the ask and says how it
+stands, each cut at 280 bytes as every `note` is. Only the history does:
+[the feed](#the-feed) and the stream say a note as it was stored.
+
 A note's files are what `yardr bead note --file` or `--page` attached to it
 (a page made with `--page` is dressed in a frame before it is a blob, so it
 is served as any page is). Each
@@ -1993,7 +2012,8 @@ author.
   [the feed](#the-feed), none left out, and under an update that changed
   the body, `diff`: the body before and after as a unified diff by line. An
   update logged before events kept the previous values has no `diff`. The
-  history starts where pruning left the log
+  `note` of an ask, or of an answer to one, is in words, as the notes say
+  it. The history starts where pruning left the log
   ([configuration.md](configuration.md#retention-keeping-yarddb-bounded)):
   nothing else keeps what a bead was.
 - `warnings` say what could not be read (a broken flow, an ambiguous

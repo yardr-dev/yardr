@@ -95,6 +95,11 @@ type BeadPage struct {
 	// board. HTML-only like Missing: the JSON names the files as the
 	// notes have them.
 	Board []BoardEntry `json:"-"`
+	// AskNotes are the words of the notes that hold an ask, and the answers
+	// those asks take in: the notes' text is JSON, which the notes log draws
+	// as words instead. HTML-only like Missing: the JSON names the notes as
+	// stored.
+	AskNotes askNotes `json:"-"`
 	// RunBase is the sandbox origin the page's run links open on, as the
 	// reader reaches it, without a scheme. HTML-only, as Missing is.
 	RunBase string `json:"-"`
@@ -276,14 +281,14 @@ func (s *Server) beadPage(ctx context.Context, id, hostport string) (*BeadPage, 
 	d.Notes = append(d.Notes, notes...)
 	// The terminal reads a note's words as letters (store.NoteLetters),
 	// and so does the page, so the two readings show the same text: the
-	// notes log draws each note's Text as it stands, an ask note's JSON
-	// with the pack plan's file names among them, and html/template
+	// notes log draws each note's Text as it stands, and html/template
 	// escapes it but leaves a mark of direction as it is, which would
 	// reorder what is drawn around it. The board carries the same notes
 	// and the image alt text the same words, so the one place covers all
-	// three surfaces. Stored bytes stay the record: nothing is written
-	// back, and the ask the page carries as a card keeps its own bytes
-	// (yardr-0wp5).
+	// three surfaces. An ask note is drawn as the words below, not as its
+	// text, and those are letters too. Stored bytes stay the record:
+	// nothing is written back, and the ask the page carries as a card
+	// keeps its own bytes (yardr-0wp5).
 	for i := range d.Notes {
 		d.Notes[i].Text = store.NoteLetters(d.Notes[i].Text)
 	}
@@ -296,6 +301,11 @@ func (s *Server) beadPage(ctx context.Context, id, hostport string) (*BeadPage, 
 	} else {
 		d.Marks = store.TrustedAs(peers)
 	}
+	// An ask note and the answers to it are JSON, which no person reads:
+	// the notes log draws the words the store reads from the stored notes,
+	// not from the letters above. A view that acts has the card above and
+	// one that does not has these words alone, so both read them here.
+	d.AskNotes = readAsks(notes, time.Now(), d.Marks)
 	// The page draws each note's files below its words: an image, a page's
 	// links, a file's download link; one the yard no longer holds is a
 	// line saying so, never a broken icon or link. The board above the

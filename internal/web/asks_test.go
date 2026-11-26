@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
@@ -880,5 +881,222 @@ func TestWebQuestionWithoutWeightMark(t *testing.T) {
 	}
 	if !strings.Contains(text, `<div class="ask-question"><p>outside: nothing changes</p>`) {
 		t.Errorf("/line lacks the stripped question:\n%s", text)
+	}
+}
+
+// section is the part of a bead's page from the first from to the next to
+// after it, as text: what a person reads there, with the page's escapes
+// undone.
+func section(t *testing.T, page, from, to string) string {
+	t.Helper()
+	at := strings.Index(page, from)
+	if at < 0 {
+		t.Fatalf("the page has no %s:\n%s", from, page)
+	}
+	end := strings.Index(page[at:], to)
+	if end < 0 {
+		t.Fatalf("the page has no %s after %s:\n%s", to, from, page[at:])
+	}
+	return html.UnescapeString(page[at : at+end])
+}
+
+// A note of kind ask is JSON in its text, and so is the answer to it. The
+// bead's page reads them as words, as `yardr prime` does, on a view that does
+// not act and on one that does: the question, whom it is to, the context, the
+// options by label and how the ask stands (open, answered with the pick, put
+// aside, declined, taken back, a run ask's command as text), in the notes and
+// in the history line. An answer is read inside its ask. The page's JSON keeps
+// the notes as stored, and home's feed, whose entries are made by the reader
+// the history's are, keeps saying them as stored.
+func TestBeadPageReadsAsksAsWords(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	f := askFixture(t)
+	_, key, err := ed25519.GenerateKey(nil)
+	must(t, err)
+	_, err = f.st.AddPeer(ctx, store.Peer{Name: "airy", Key: store.Public(key), Calls: "yardr"}, "mckean")
+	must(t, err)
+	_, err = f.st.PutCrew(ctx, store.CrewMember{Name: "yardmaster", Runner: "herdr", Config: map[string]any{"kind": "claude"}}, "mckean")
+	must(t, err)
+	answer := func(ans store.Answer) func(id string, seq uint64) {
+		return func(id string, seq uint64) {
+			t.Helper()
+			ans.Ask = seq
+			must(t, f.st.AddAnswer(ctx, id, ans, "mckean"))
+		}
+	}
+	// "#" stands for the ask's seq, which is the note's.
+	pick := []string{
+		"The links file declares the new source.", "The old source goes away Friday.",
+		"1. Move them now - all links point at the new source tonight (recommended: the test passed)",
+		"2. After Friday - keep the old source until the release is out",
+	}
+	cases := []struct {
+		name  string
+		ask   store.Ask
+		after func(id string, seq uint64)
+		// head starts the ask's words, and the history line of each note
+		// of it: the answer's says the ask it belongs to.
+		head string
+		// notes are what else the notes log reads, and answers how many
+		// notes an ask has beside its own.
+		notes   []string
+		answers int
+	}{
+		{name: "open", ask: pickAsk(), head: "ask # · open · to mckean · asked by yardmaster", notes: pick},
+		{name: "answered", ask: pickAsk(), after: answer(store.Answer{Option: 2, Words: "the release is out"}),
+			head: "ask # · answered · to mckean", answers: 1, notes: append([]string{"mckean picked 2 (After Friday): the release is out"}, pick...)},
+		{name: "put aside", ask: pickAsk(), after: answer(store.Answer{Later: true}),
+			head: "ask # · put aside until ", answers: 1, notes: []string{"back sooner if yardmaster writes"}},
+		{name: "declined", ask: pickAsk(), after: answer(store.Answer{Decline: true, Words: "not this week"}),
+			head: "ask # · declined · to mckean", answers: 1, notes: []string{"mckean declined to decide this: not this week"}},
+		{name: "taken back", ask: pickAsk(), head: "ask # · taken back · to mckean", answers: 1,
+			after: func(id string, seq uint64) { must(t, f.st.TakeBackAsk(ctx, id, seq, "asked in error", "yardmaster")) },
+			notes: []string{"taken back by yardmaster: asked in error"}},
+		{name: "run", ask: store.Ask{Question: "Take more?", To: "mckean", Context: []string{"airy's yard was refused 4 mails in the last hour."},
+			Run: &store.AskRun{Argv: []string{"peer allow airy --mail-limit 300"}}},
+			head: "ask # · open · to mckean", notes: []string{
+				"yardmaster says: airy's yard was refused 4 mails in the last hour.",
+				"when you approve, the yard runs this as mckean, and nothing else:", "yardr peer allow airy --mail-limit 300"}},
+	}
+	views := []struct {
+		name string
+		f    *fixture
+	}{{"a view that does not act", f}, {"a view that acts", f.as(t, "mckean")}}
+	for _, c := range cases {
+		b := askBead(t, f, c.name, "new")
+		seq := askOn(t, f, b.ID, c.ask)
+		if c.after != nil {
+			c.after(b.ID, seq)
+		}
+		at := func(s string) string { return strings.ReplaceAll(s, "#", strconv.FormatUint(seq, 10)) }
+		for _, v := range views {
+			page := v.f.get("/beads/" + b.ID).body
+			// No JSON of an ask or of an answer stands anywhere on the page.
+			for _, raw := range []string{`{"question"`, `{"ask"`} {
+				if strings.Contains(html.UnescapeString(page), raw) {
+					t.Errorf("%s, %s: the page carries %s", c.name, v.name, raw)
+				}
+			}
+			notes := section(t, page, `id="notes"`, `id="sessions"`)
+			wants := append([]string{at(c.head), c.ask.Question}, c.notes...)
+			for _, want := range wants {
+				if !strings.Contains(notes, at(want)) {
+					t.Errorf("%s, %s: the notes lack %q:\n%s", c.name, v.name, at(want), notes)
+				}
+			}
+			if n := strings.Count(notes, `<article class="note">`); n != 1 {
+				t.Errorf("%s, %s: the notes draw %d notes, want the ask alone with its %d answers in it", c.name, v.name, n, c.answers)
+			}
+			// The ask's note says the ask in the history, and each answer to it
+			// the ask's first line, which says how it stands: the question
+			// stands once.
+			history := section(t, page, `id="history"`, `</section>`)
+			if n, want := strings.Count(history, at(c.head)), 1+c.answers; n != want || strings.Count(history, c.ask.Question) != 1 {
+				t.Errorf("%s, %s: the history says %q %d times, want %d, and the question once:\n%s", c.name, v.name, at(c.head), n, want, history)
+			}
+		}
+		// The page's JSON keeps what the yard stored: the ask's own JSON in
+		// the notes, and in the history the words the page draws.
+		var p web.BeadPage
+		r := f.get("/beads/"+b.ID, "Accept", "application/json")
+		if err := json.Unmarshal([]byte(r.body), &p); err != nil || len(p.Notes) != 1+c.answers {
+			t.Fatalf("%s: the page's JSON has %d notes (%v), want %d: %s", c.name, len(p.Notes), err, 1+c.answers, r.body)
+		}
+		if ask, err := store.ParseAsk(p.Notes[0]); err != nil || ask.Question != c.ask.Question {
+			t.Errorf("%s: the page's JSON note is %q (%v), want the stored ask", c.name, p.Notes[0].Text, err)
+		}
+		// In the history the ask's own entry is the one that says its question,
+		// and each answer's is the ask's first line alone.
+		var noted []string
+		for _, ch := range p.History {
+			if ch.Bead == b.ID && ch.Kind == "noted" {
+				noted = append(noted, ch.Note)
+			}
+		}
+		if len(noted) != 1+c.answers {
+			t.Fatalf("%s: %d noted entries in the history, want %d: %q", c.name, len(noted), 1+c.answers, noted)
+		}
+		asked := 0
+		for _, note := range noted {
+			switch {
+			case !strings.HasPrefix(note, at(c.head)):
+				t.Errorf("%s: the history's noted entry says %q, want the ask's words from %q", c.name, note, at(c.head))
+			case strings.Contains(note, c.ask.Question):
+				asked++
+			case strings.Contains(note, "\n"):
+				t.Errorf("%s: the answer's entry says %q, want the ask's first line alone", c.name, note)
+			}
+		}
+		if asked != 1 {
+			t.Errorf("%s: %d noted entries say the question, want the ask's own alone: %q", c.name, asked, noted)
+		}
+		// Home's feed is not the history: it says every note as it was stored, an
+		// ask's JSON and an answer's among them, so what the page draws as words
+		// does not move a value the feed carries.
+		stored := 0
+		for _, e := range homeJSON(t, f, "/").Events {
+			if e.Bead != b.ID || e.Kind != "noted" {
+				continue
+			}
+			stored++
+			if !strings.HasPrefix(e.Note, `{"question"`) && !strings.HasPrefix(e.Note, `{"ask"`) {
+				t.Errorf("%s: home's feed says the note %q, want it as it was stored", c.name, e.Note)
+			}
+		}
+		if stored != 1+c.answers {
+			t.Errorf("%s: home's feed has %d noted entries, want %d", c.name, stored, 1+c.answers)
+		}
+	}
+}
+
+// What the store cannot read as an ask is left as it stands: a note of kind
+// ask whose text does not parse is drawn and said as it was written, never
+// dropped, and an answer that names no ask of the bead is no part of one.
+// An answer an ask takes in is said by its ask, from the pick it holds, with
+// its writer marked as mail is marked, and every mark of direction in the
+// asker's words goes. No call of the store writes such notes, so they are
+// built here.
+func TestReadAsksLeavesWhatItCannotReadAsItStands(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC)
+	note := func(seq uint64, kind, author, text string) store.Note {
+		return store.Note{Seq: seq, Kind: kind, Author: author, At: now, Text: text}
+	}
+	notes := []store.Note{
+		note(1, store.NoteAsk, "yardmaster", `{"question":"Move\u202e the links now?","to":"mckean","context":["The old source goes away."],"options":[{"label":"Now","consequence":"all links move"}]}`),
+		note(2, store.NoteAsk, "yardmaster", "not json at all"),
+		note(3, store.NoteAnswer, "ada@airy", `{"ask":1,"option":1}`),
+		note(4, store.NoteAnswer, "mckean", `{"ask":2,"option":1}`),
+		note(5, store.NoteAnswer, "mckean", `{"ask":99,"option":1}`),
+		note(6, store.NoteAnswer, "mckean", "not json either"),
+		note(7, store.NoteNote, "mckean", "a plain note"),
+	}
+	for _, marks := range []map[string]string{nil, {"ada@airy": "ada"}} {
+		a := web.ReadAsks(notes, now, marks)
+		words := a.Words(1)
+		for _, want := range []string{"ask 1 · answered · to mckean", "Move the links now?", "1. Now - all links move",
+			store.MarkedAuthor("ada@airy", marks) + " picked 1 (Now)"} {
+			if !strings.Contains(words, want) {
+				t.Errorf("marks %v: the ask's words lack %q:\n%s", marks, want, words)
+			}
+		}
+		if strings.ContainsRune(words, '\u202e') || strings.Contains(words, `{"`) {
+			t.Errorf("marks %v: the ask's words carry a mark of direction or its JSON:\n%s", marks, words)
+		}
+		// The answer is in its ask and says its ask's first line; every other
+		// note is said as it was written, an ask that does not parse among
+		// them, and none is dropped from the words that stand for it.
+		if head, _, _ := strings.Cut(words, "\n"); !a.Folded(3) || a.Of(notes[2]) != head || a.Of(notes[0]) != words {
+			t.Errorf("marks %v: the answer 3 is not folded into its ask: folded %v, says %q, want the ask's first line", marks, a.Folded(3), a.Of(notes[2]))
+		}
+		for _, n := range notes[3:] {
+			if a.Folded(n.Seq) || a.Of(n) != n.Text {
+				t.Errorf("marks %v: note %d (%s) is folded (%v) or says %q, want its text as it stands", marks, n.Seq, n.Kind, a.Folded(n.Seq), a.Of(n))
+			}
+		}
+		if a.Words(2) != "" || a.Of(notes[1]) != "not json at all" {
+			t.Errorf("marks %v: the ask that does not parse reads %q and says %q, want it as it stands", marks, a.Words(2), a.Of(notes[1]))
+		}
 	}
 }

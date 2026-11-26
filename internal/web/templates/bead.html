@@ -135,9 +135,14 @@
   <section class="item" id="notes">
     <h3 class="label">notes</h3>
     {{- range .Notes}}
+    {{- /* An ask is JSON in its text, and so is an answer to it: the ask is
+           drawn as words with its answers in it, and an answer an ask has
+           taken in stands there and not here. A note that holds no ask, or
+           one that does not parse, is drawn as it stands. */}}
+    {{- if not ($.Data.AskNotes.Folded .Seq)}}
     <article class="note">
       <header class="entry-head"><span class="label">{{markAuthor .Author $.Data.Marks}}{{if .Via}} (via {{.Via}}){{end}}{{if and .Kind (ne .Kind "note")}} · {{.Kind}}{{end}}</span><time class="label" datetime="{{.At.UTC.Format "2006-01-02T15:04:05Z"}}">{{clock .At}}</time></header>
-      <pre class="text">{{.Text}}</pre>
+      <pre class="text">{{with $.Data.AskNotes.Words .Seq}}{{.}}{{else}}{{.Text}}{{end}}</pre>
       {{- $words := .Text}}
       {{- $seq := .Seq}}
       {{- range $i, $f := .Files}}
@@ -155,6 +160,7 @@
       {{- end}}
       {{- end}}
     </article>
+    {{- end}}
     {{- else}}
     <p class="faint">No note yet.</p>
     {{- end}}

@@ -170,13 +170,24 @@ type reader struct {
 	byName   map[string]store.Group
 	operator string
 	routed   bool
+	// askWords makes an entry say an ask, and the answers to it, in words
+	// (askNotes) instead of the JSON they are stored as. Only a bead's
+	// history turns it on: the feed and the stream say a note as it was
+	// written.
+	askWords bool
+	// asks are the asks among a bead's notes read as words (readAsks), once
+	// a bead, and marks whom the links trust, read when the first is: what
+	// askWords reads.
+	asks   map[string]askNotes
+	marks  map[string]string
+	marked bool
 }
 
 func (s *Server) newReader(evs []store.Event) *reader { return readerOf(s.st, evs) }
 
 func readerOf(st store.API, evs []store.Event) *reader {
 	r := &reader{st: st, events: map[uint64]store.Event{}, titles: map[string]string{}, notes: map[string][]store.Note{},
-		byBead: map[string][]store.Event{}, beads: map[string]*store.Bead{}}
+		byBead: map[string][]store.Event{}, beads: map[string]*store.Bead{}, asks: map[string]askNotes{}}
 	for _, e := range evs {
 		r.events[e.Seq] = e
 	}
@@ -204,7 +215,9 @@ func (r *reader) beadNotes(ctx context.Context, bead string) []store.Note {
 	return ns
 }
 
-// noteOf is the note a `noted` event added, as it was written.
+// noteOf is the note a `noted` event added, as it was written, except where
+// askWords is on: there an ask and the answers to it, which are JSON in the
+// note, are said as the bead's page says them (askNotes).
 func (r *reader) noteOf(ctx context.Context, e store.Event) string {
 	seq, ok := number(e.Data["note"])
 	if !ok || e.Bead == nil {
@@ -212,10 +225,31 @@ func (r *reader) noteOf(ctx context.Context, e store.Event) string {
 	}
 	for _, n := range r.beadNotes(ctx, *e.Bead) {
 		if n.Seq == seq {
+			if r.askWords && (n.Kind == store.NoteAsk || n.Kind == store.NoteAnswer) {
+				return r.asksOf(ctx, *e.Bead).of(n)
+			}
 			return n.Text
 		}
 	}
 	return ""
+}
+
+// asksOf is the asks among a bead's notes read as words, once a bead. A
+// foreign answer is marked as the page marks it, by the trusts the links
+// give, read once; none read, none are trusted.
+func (r *reader) asksOf(ctx context.Context, bead string) askNotes {
+	a, ok := r.asks[bead]
+	if !ok {
+		if !r.marked {
+			r.marked = true
+			if peers, err := r.st.Peers(ctx); err == nil {
+				r.marks = store.TrustedAs(peers)
+			}
+		}
+		a = readAsks(r.beadNotes(ctx, bead), time.Now(), r.marks)
+		r.asks[bead] = a
+	}
+	return a
 }
 
 // beadEvents bounds the events of one bead the reader looks through.
