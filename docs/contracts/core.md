@@ -19,11 +19,13 @@ other kind of file.
 
 **Q1. Does it keep, deliver or move a record of the yard?** A record is a
 bead, note, ask, answer, event, mail, session, flow, route, group, depot,
-source record, peer record, user or setting. Keeping means storing it,
-migrating it and deciding who may change it. Delivering means a subscriber,
-an inbox or a push learning of it. Moving means the flow engine taking a
-bead from stage to stage, or the dispatch pass starting, watching and
-ending a session through the runner interface.
+source record, peer record, user, device, timer or setting. Keeping means
+storing it, migrating it and deciding who may change it. Delivering means a
+subscriber, an inbox or a push learning of it. Moving means the flow engine
+taking a bead from stage to stage, or the dispatch pass starting, watching
+and ending a session through the runner interface. A subscription, a
+preview and a delegation are not in the list of records, because each has a
+part that is how-and-what. The two lists below sort them by part.
 
 **Q2. Does it know something that changes when something outside yardr's
 own model changes?** That means a harness program and its versions,
@@ -33,7 +35,9 @@ yardr command, or the layout of one page, window or terminal view.
 A file is **core** when Q1 is yes and Q2 is no. It is **how-and-what** when
 Q2 is yes. A file where both answers are no is a **library** (config,
 version, otel, yardkey, the rpc transport). A library sits with whoever
-imports it, and with the core when the core imports it.
+imports it, and with the core when the core imports it. Device enrolment
+(`internal/store/devicepair.go`) is a library, as the pairing wire between
+yards is.
 
 By this rule these are core:
 
@@ -51,6 +55,11 @@ By this rule these are core:
 - the runner interface
 - peering as delivery
 - the store API with its socket
+- timers (`internal/store/timers.go`)
+- subscriptions as generic delivery state
+- the preview registry, its states and its two permission gates (`internal/store/previews.go`, `previewwatch.go`, `previewpolicy.go`)
+- the delegation gate and its kept record (`internal/store/delegation.go`'s gate, `delegation_repo.go`, `delegation_view.go`)
+- the device record (`internal/store/devices.go`)
 
 These are how-and-what:
 
@@ -64,6 +73,20 @@ These are how-and-what:
 - onboarding (`init`, `setup`, `guide`)
 - upgrade and release
 - the daemon's housekeeping passes that know about the machine (`gocache.go`, `diskkeep`, `telemetry.go`)
+- the per-source parts of `internal/store/subscriptions.go` (who a crew member is in a source, the `--where` matching)
+- the preview supervisor (`internal/preview/preview.go`)
+- delegated pack imports (`internal/store/delegation_pack.go`, `delegation_pack_record.go`, `delegation_pack_target.go`)
+- ETA cells (`internal/store/eta.go`)
+
+Three of these stand on a side the code does not show yet:
+
+- The per-source parts of subscriptions still sit in
+  `internal/store/subscriptions.go`, beside the generic state, and moving
+  them out is **planned**.
+- The core still writes ETA cells inside a bead's move, and taking them out
+  of it is **planned**.
+- Device enrolment still sits in the store, and moving it out is
+  **planned**.
 
 ### Where the rule cannot decide
 
