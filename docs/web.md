@@ -2691,7 +2691,8 @@ A page is one template and one handler, in `internal/web`.
    same request. `TestNoOtherHost` walks every link from Home, so a new
    page is checked for other hosts and inline styles once the bar or a
    page links to it; add the page to those the walk must reach.
-6. **This file**: the row in Pages, and the JSON's shape.
+6. **This file**: the row in Pages (`TestWebPagesListEveryRoute` fails
+   while a GET route has none), and the JSON's shape.
 
 A template that is a part of a page and no page (`shell`, `aside`, `entry`,
 `card`) is named in `partial` (`server.go`), and every page is parsed with

@@ -177,13 +177,28 @@ func rulesTable(page string) (rows [][]string, problem string) {
 // sectionTable returns the cells of each row of the table in a page's
 // ## <heading> section, or the one problem that keeps it from reading them:
 // the page has no such section or has two, or the section does not hold
-// exactly one table with the header cols and a row. The section runs to the
-// next heading of level one or two, and what stands in a code fence, a
-// heading or a table shown as an example, is no part of the page's structure.
-// The Rules tables and core.md's own tables (Core types, Line ceilings, Names
-// the core may not name, Files the name scan does not read) are read with it,
-// so that a page's tables are one form.
+// exactly one table with the header cols and a row. The Rules tables and
+// core.md's own tables (Core types, Line ceilings, Names the core may not
+// name, Files the name scan does not read) are read with it, so that a page's
+// tables are one form.
 func sectionTable(page, heading string, cols []string) (rows [][]string, problem string) {
+	rows, second, problem := sectionFirstTable(page, heading, cols)
+	if second {
+		return nil, "## " + heading + " holds a second table, want one"
+	}
+	return rows, problem
+}
+
+// sectionFirstTable returns the cells of each row of the first table in a
+// page's ## <heading> section, or the one problem that keeps it from reading
+// them: the page has no such section or has two, or the first table does not
+// have the header cols or a row. It reads no later table; second says that
+// the section holds one, which sectionTable refuses and a section that is
+// meant to hold several (the lists under docs/web.md's Pages, in a ###
+// subsection of it) does not. The section runs to the next heading of level
+// one or two, and what stands in a code fence, a heading or a table shown as
+// an example, is no part of the page's structure.
+func sectionFirstTable(page, heading string, cols []string) (rows [][]string, second bool, problem string) {
 	var section []string
 	var sections int
 	fenced, in := false, false
@@ -209,9 +224,9 @@ func sectionTable(page, heading string, cols []string) (rows [][]string, problem
 	}
 	switch {
 	case sections == 0:
-		return nil, "has no ## " + heading + " section"
+		return nil, false, "has no ## " + heading + " section"
 	case sections > 1:
-		return nil, "has " + strconv.Itoa(sections) + " ## " + heading + " sections, want one"
+		return nil, false, "has " + strconv.Itoa(sections) + " ## " + heading + " sections, want one"
 	}
 
 	// The table is the run of lines that start with a pipe: its header, its
@@ -233,24 +248,24 @@ func sectionTable(page, heading string, cols []string) (rows [][]string, problem
 		switch state {
 		case before:
 			if !slices.Equal(tableCells(line), cols) {
-				return nil, "the " + heading + " table's header is " + line + ", want | " + strings.Join(cols, " | ") + " |"
+				return nil, false, "the " + heading + " table's header is " + line + ", want | " + strings.Join(cols, " | ") + " |"
 			}
 			state = header
 		case header:
 			if !separatorRow.MatchString(line) {
-				return nil, "the " + heading + " table's header is not followed by a separator row of dashes"
+				return nil, false, "the " + heading + " table's header is not followed by a separator row of dashes"
 			}
 			state = body
 		case body:
 			rows = append(rows, tableCells(line))
 		case after:
-			return nil, "## " + heading + " holds a second table, want one"
+			second = true
 		}
 	}
 	if len(rows) == 0 {
-		return nil, "## " + heading + " holds no table row"
+		return nil, second, "## " + heading + " holds no table row"
 	}
-	return rows, ""
+	return rows, second, ""
 }
 
 // separatorRow is the line under a table's header: cells of dashes, with the
@@ -570,10 +585,24 @@ func TestContractChecksRefuse(t *testing.T) {
 		{"another header", "# A contract\n\n## Rules\n\n| rule | check |\n|---|---|\n| a rule | unchecked |\n", []string{"header", "| # | rule | check |"}},
 		{"no separator row", "# A contract\n\n## Rules\n\n| # | rule | check |\n| 1 | a rule | unchecked |\n", []string{"separator"}},
 		{"a second table", "# A contract\n\n## Rules\n\n| # | rule | check |\n|---|---|---|\n| 1 | a rule | unchecked |\n\n| # | rule | check |\n|---|---|---|\n| 1 | a rule | unchecked |\n", []string{"second table"}},
+		{"a second table after a first with no row", "# A contract\n\n## Rules\n\n| # | rule | check |\n|---|---|---|\n\n| # | rule | check |\n|---|---|---|\n| 1 | a rule | unchecked |\n", []string{"second table"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			refused(t, contractProblems(tc.page, tests, gate), tc.want)
 		})
+	}
+
+	// sectionFirstTable reads the first table of a section that holds more and
+	// says there is another, which sectionTable refuses: the later table is no
+	// concern of it, so it has no header to be held to.
+	rows, second, problem := sectionFirstTable("# A page\n\n## Pages\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n### Lists\n\n| c |\n|---|\n| 3 |\n",
+		"Pages", []string{"a", "b"})
+	if len(rows) != 1 || !slices.Equal(rows[0], []string{"1", "2"}) || !second || problem != "" {
+		t.Errorf("the first table of a section of two is %q, second %v, problem %q, want its one row, true and none", rows, second, problem)
+	}
+	rows, second, problem = sectionFirstTable("# A page\n\n## Pages\n\n| a | b |\n|---|---|\n| 1 | 2 |\n", "Pages", []string{"a", "b"})
+	if len(rows) != 1 || second || problem != "" {
+		t.Errorf("the one table of a section is %q, second %v, problem %q, want its one row, false and none", rows, second, problem)
 	}
 
 	// What go test runs as a test, and so what a page may name.
