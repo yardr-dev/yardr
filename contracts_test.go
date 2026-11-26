@@ -321,28 +321,17 @@ func checkProblems(cell string, tests map[string]bool, gate string) []string {
 	return problems
 }
 
-// linePages are the pages of docs/contracts/ that still cite code by line
-// number, the form TestContractPagesCiteDeclaredSymbols refuses on any other
-// page. Each is converted to file and symbol in turn and then comes off this
-// list. The list only shrinks: a page on it that holds no line number fails
-// the test, so a converted page cannot go back to line numbers unseen. The
-// conversion that empties the list deletes it and the code that reads it.
-var linePages = map[string]bool{
-	"runner.md": true,
-}
-
 // A page of docs/contracts/ cites the code it is about as file and symbol,
 // <path>.go:<Symbol> in one span of backticks on one line, and never by line
 // number, which goes stale with every edit above it while nothing goes red.
 // This test holds each citation to the code: the path, read from the
 // repository root, names a Go file that go/parser reads, and the file declares
 // the symbol at its top level, a func, type, var or const by its name or a
-// method as Type.Method. It also fails a line number on every page that
-// linePages does not list, and a span that breaks across two lines. It does
-// not hold that the symbol is what its sentence says, which the page's author
-// and its reviewer read. The form is the Rules section of
-// docs/contracts/core.md, which names this test as the check of its fifth
-// rule. It reads files and starts no process.
+// method as Type.Method. It also fails a line number on any page, and a span
+// that breaks across two lines. It does not hold that the symbol is what its
+// sentence says, which the page's author and its reviewer read. The form is
+// the Rules section of docs/contracts/core.md, which names this test as the
+// check of its fifth rule. It reads files and starts no process.
 func TestContractPagesCiteDeclaredSymbols(t *testing.T) {
 	t.Parallel()
 	// The test runs in the repository root, the root package's directory.
@@ -359,7 +348,7 @@ func TestContractPagesCiteDeclaredSymbols(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, problem := range citationProblems(string(page), linePages[filepath.Base(path)], declared) {
+		for _, problem := range citationProblems(string(page), declared) {
 			t.Errorf("%s: %s", filepath.ToSlash(path), problem)
 		}
 	}
@@ -392,13 +381,10 @@ var brokenCitation = regexp.MustCompile("(?m)`([A-Za-z0-9_./-]*\\.go:[^`\n]*)$")
 // citationProblems reads a page's text and says what is wrong with the code
 // it cites, one sentence for each fault, each naming its line and the
 // citation. declared says what a file declares at its top level. A line number
-// is a fault, unless the page is listed as still to convert. A listed page
-// that holds no line number is a fault too, so that a converted page is taken
-// off the list. A span left open at the end of its line, the start of a
-// citation broken across two lines, is a fault on every page.
-func citationProblems(page string, listed bool, declared func(path string) (map[string]bool, error)) []string {
+// is a fault. A span left open at the end of its line, the start of a citation
+// broken across two lines, is a fault too.
+func citationProblems(page string, declared func(path string) (map[string]bool, error)) []string {
 	var problems []string
-	var lined bool
 	n := 0
 	for line := range strings.Lines(page) {
 		n++
@@ -412,19 +398,12 @@ func citationProblems(page string, listed bool, declared func(path string) (map[
 				}
 			}
 		}
-		// The list excuses a page its line numbers, not a span left open.
 		for _, span := range brokenCitation.FindAllStringSubmatch(line, -1) {
 			add(span[1], "a citation breaks across lines: keep its span on one line")
 		}
 		for _, cite := range lineCitation.FindAllString(line, -1) {
-			lined = true
-			if !listed {
-				add(cite, "a line number goes stale with every edit above it: cite the symbol, as <path>.go:<Symbol>")
-			}
+			add(cite, "a line number goes stale with every edit above it: cite the symbol, as <path>.go:<Symbol>")
 		}
-	}
-	if listed && !lined {
-		problems = append(problems, "no line number is left: take the page off linePages in contracts_test.go")
 	}
 	return problems
 }
@@ -721,49 +700,44 @@ const (
 	}
 	declared := declaredIn(files)
 	for _, tc := range []struct {
-		name   string
-		page   string
-		listed bool     // the page is on linePages
-		want   []string // parts of the first problem; none means the page is right
+		name string
+		page string
+		want []string // parts of the first problem; none means the page is right
 	}{
-		{"a func", "`internal/x/x.go:F`", false, nil},
-		{"a type", "`internal/x/x.go:T`", false, nil},
-		{"a type of a group", "`internal/x/x.go:U`", false, nil},
-		{"a var", "`internal/x/x.go:V`", false, nil},
-		{"the second name of a var", "`internal/x/x.go:W`", false, nil},
-		{"a const", "`internal/x/x.go:C`", false, nil},
-		{"a const of a group", "`internal/x/x.go:B`", false, nil},
-		{"a method", "`internal/x/x.go:T.Value`", false, nil},
-		{"a method on a pointer", "`internal/x/x.go:T.Pointer`", false, nil},
-		{"a method on a generic type", "`internal/x/x.go:G.Generic`", false, nil},
-		{"a method on a type of two parameters", "`internal/x/x.go:H.Two`", false, nil},
-		{"a file at the root", "`main.go:main`", false, nil},
-		{"a citation in a sentence", "A type `x.T` (`internal/x/x.go:T`) has a method `T.Value` (`internal/x/x.go:T.Value`).", false, nil},
-		{"a placeholder is no citation", "A citation is `<path>.go:<Symbol>`, as `internal/x/x.go:F`.", false, nil},
-		{"no citation", "A page with no citation at all.", false, nil},
-		{"a line number on a listed page", "`internal/x/x.go:12`", true, nil},
-		{"a missing file", "`internal/x/nosuch.go:F`", false, []string{"line 1: ", "`internal/x/nosuch.go:F`", "does not exist"}},
-		{"a bare file name", "`x.go:F`", false, []string{"`x.go:F`", "does not exist", "repository root"}},
-		{"a path from the working directory", "`./internal/x/x.go:F`", false, []string{"`./internal/x/x.go:F`", "does not exist"}},
-		{"a path that is not clean", "`internal/../internal/x/x.go:F`", false, []string{"`internal/../internal/x/x.go:F`", "does not exist"}},
-		{"a missing symbol", "`internal/x/x.go:Nosuch`", false, []string{"line 1: ", "`internal/x/x.go:Nosuch`", "named Nosuch"}},
-		{"a method cited as a func", "`internal/x/x.go:Value`", false, []string{"`internal/x/x.go:Value`", "named Value", "Type.Method"}},
-		{"a func cited as a method", "`internal/x/x.go:T.F`", false, []string{"`internal/x/x.go:T.F`", "no method F on T"}},
-		{"a missing method", "`internal/x/x.go:T.Nosuch`", false, []string{"no method Nosuch on T"}},
-		{"a method of another type", "`internal/x/x.go:G.Value`", false, []string{"no method Value on G"}},
-		{"a file that does not parse", "`internal/x/broken.go:F`", false, []string{"`internal/x/broken.go:F`", "cannot be read"}},
-		{"the line of the fault", "Text.\n\nText `internal/x/x.go:F` and `internal/x/x.go:Nosuch`.\n", false, []string{"line 3: ", "`internal/x/x.go:Nosuch`"}},
-		{"a line number", "`internal/x/x.go:12`", false, []string{"line 1: ", "`internal/x/x.go:12`", "cite the symbol"}},
-		{"a line number of a bare file name", "`x.go:12`", false, []string{"`x.go:12`", "cite the symbol"}},
-		{"a line number outside backticks", "See internal/x/x.go:12 for it.", false, []string{"line 1: ", "`internal/x/x.go:12`", "cite the symbol"}},
-		{"a citation broken across lines", "Text `internal/x/x.go:\nNosuch` text.\n", false, []string{"line 1: ", "breaks across lines"}},
-		{"a line number broken across lines", "Text `internal/x/x.go:\n12` text.\n", false, []string{"line 1: ", "breaks across lines"}},
-		{"a listed page with no line number", "`internal/x/x.go:F`", true, []string{"no line number is left", "take the page off linePages"}},
-		{"a listed page with a missing symbol", "`internal/x/x.go:Nosuch` and `internal/x/x.go:12`", true, []string{"`internal/x/x.go:Nosuch`"}},
-		{"a listed page with a broken citation", "`internal/x/x.go:12` and `internal/x/x.go:\nF` text.\n", true, []string{"line 1: ", "breaks across lines"}},
+		{"a func", "`internal/x/x.go:F`", nil},
+		{"a type", "`internal/x/x.go:T`", nil},
+		{"a type of a group", "`internal/x/x.go:U`", nil},
+		{"a var", "`internal/x/x.go:V`", nil},
+		{"the second name of a var", "`internal/x/x.go:W`", nil},
+		{"a const", "`internal/x/x.go:C`", nil},
+		{"a const of a group", "`internal/x/x.go:B`", nil},
+		{"a method", "`internal/x/x.go:T.Value`", nil},
+		{"a method on a pointer", "`internal/x/x.go:T.Pointer`", nil},
+		{"a method on a generic type", "`internal/x/x.go:G.Generic`", nil},
+		{"a method on a type of two parameters", "`internal/x/x.go:H.Two`", nil},
+		{"a file at the root", "`main.go:main`", nil},
+		{"a citation in a sentence", "A type `x.T` (`internal/x/x.go:T`) has a method `T.Value` (`internal/x/x.go:T.Value`).", nil},
+		{"a placeholder is no citation", "A citation is `<path>.go:<Symbol>`, as `internal/x/x.go:F`.", nil},
+		{"no citation", "A page with no citation at all.", nil},
+		{"a missing file", "`internal/x/nosuch.go:F`", []string{"line 1: ", "`internal/x/nosuch.go:F`", "does not exist"}},
+		{"a bare file name", "`x.go:F`", []string{"`x.go:F`", "does not exist", "repository root"}},
+		{"a path from the working directory", "`./internal/x/x.go:F`", []string{"`./internal/x/x.go:F`", "does not exist"}},
+		{"a path that is not clean", "`internal/../internal/x/x.go:F`", []string{"`internal/../internal/x/x.go:F`", "does not exist"}},
+		{"a missing symbol", "`internal/x/x.go:Nosuch`", []string{"line 1: ", "`internal/x/x.go:Nosuch`", "named Nosuch"}},
+		{"a method cited as a func", "`internal/x/x.go:Value`", []string{"`internal/x/x.go:Value`", "named Value", "Type.Method"}},
+		{"a func cited as a method", "`internal/x/x.go:T.F`", []string{"`internal/x/x.go:T.F`", "no method F on T"}},
+		{"a missing method", "`internal/x/x.go:T.Nosuch`", []string{"no method Nosuch on T"}},
+		{"a method of another type", "`internal/x/x.go:G.Value`", []string{"no method Value on G"}},
+		{"a file that does not parse", "`internal/x/broken.go:F`", []string{"`internal/x/broken.go:F`", "cannot be read"}},
+		{"the line of the fault", "Text.\n\nText `internal/x/x.go:F` and `internal/x/x.go:Nosuch`.\n", []string{"line 3: ", "`internal/x/x.go:Nosuch`"}},
+		{"a line number", "`internal/x/x.go:12`", []string{"line 1: ", "`internal/x/x.go:12`", "cite the symbol"}},
+		{"a line number of a bare file name", "`x.go:12`", []string{"`x.go:12`", "cite the symbol"}},
+		{"a line number outside backticks", "See internal/x/x.go:12 for it.", []string{"line 1: ", "`internal/x/x.go:12`", "cite the symbol"}},
+		{"a citation broken across lines", "Text `internal/x/x.go:\nNosuch` text.\n", []string{"line 1: ", "breaks across lines"}},
+		{"a line number broken across lines", "Text `internal/x/x.go:\n12` text.\n", []string{"line 1: ", "breaks across lines"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			refused(t, citationProblems(tc.page, tc.listed, declared), tc.want)
+			refused(t, citationProblems(tc.page, declared), tc.want)
 		})
 	}
 }

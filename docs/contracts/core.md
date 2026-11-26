@@ -454,11 +454,8 @@ own can be renamed or moved, and nothing goes red.
 
 The check of rule 8 reads each page and fails a citation whose file does not
 exist or does not declare the symbol, and a citation whose span breaks across
-lines. It also fails a line number on any page that `linePages` in
-`contracts_test.go` does not list. The list holds the pages that still cite by
-line and wait to be converted. A listed page that holds no line number fails
-until it comes off the list, so the list only shrinks. The check does not
-judge whether the symbol is what the sentence says. The page's author and its
+lines. It also fails a line number on any page. The check does not judge
+whether the symbol is what the sentence says. The page's author and its
 reviewer read that.
 
 | # | rule | check |

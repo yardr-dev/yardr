@@ -4,47 +4,47 @@ A runner is how a session starts. What crosses the core's edge here is the `Runn
 
 ## Form
 
-**The interface.** `dispatch.Runner` (`internal/dispatch/dispatch.go:94`) has three methods. `Start(ctx, job)` starts the work for a `dispatch.Job` (`internal/dispatch/dispatch.go:26`) and returns the handle. `Alive(ctx, handle)` says whether the work still runs, and an error from it means unknown and never ends a session. `Stop(ctx, handle)` tears down what the runner made once the session has ended. A `Start` error may say whose fault it is: `dispatch.Runtime` marks the runtime's (herdr missing or down), `dispatch.Blocked` the session's own configuration's (an `env_file` that is missing or open to others), and `dispatch.BeadBlocked` the bead's own, for which a person must act (`internal/dispatch/runerrors.go:20`, `:44` and `:67`).
+**The interface.** `dispatch.Runner` (`internal/dispatch/dispatch.go:Runner`) has three methods. `Start(ctx, job)` starts the work for a `dispatch.Job` (`internal/dispatch/dispatch.go:Job`) and returns the handle. `Alive(ctx, handle)` says whether the work still runs, and an error from it means unknown and never ends a session. `Stop(ctx, handle)` tears down what the runner made once the session has ended. A `Start` error may say whose fault it is: `dispatch.Runtime` marks the runtime's (herdr missing or down), `dispatch.Blocked` the session's own configuration's (an `env_file` that is missing or open to others), and `dispatch.BeadBlocked` the bead's own, for which a person must act (`internal/dispatch/runerrors.go:Runtime`, `internal/dispatch/runerrors.go:Blocked` and `internal/dispatch/runerrors.go:BeadBlocked`).
 
-**The registry.** `runner.All` (`internal/runner/runner.go:41`) returns the runners by the name a group refers to them by: `manual`, `exec`, `herdr` and `store.PeerRunner`, which is `peer`. The daemon builds its runners with it (`internal/cli/ops.go:98`), and `yardr down` asks each about its agent with it (`internal/cli/updown.go:139`).
+**The registry.** `runner.All` (`internal/runner/runner.go:All`) returns the runners by the name a group refers to them by: `manual`, `exec`, `herdr` and `store.PeerRunner`, which is `peer`. The daemon builds its runners with it (`internal/cli/ops.go:daemonRunners`), and `yardr down` asks each about its agent with it (`internal/cli/updown.go:yardRunners`).
 
 **The optional interfaces.** A runner implements any of the interfaces below that it can answer, and the dispatcher asks each question only of a runner that does; one that implements none is a complete runner. The interfaces are the exported interface types of the non-test files of `internal/dispatch`, 29 with `Runner`. The herdr runner implements all of them but `Waiter`, which the peer runner implements; `manual` and `exec` implement `Runner` alone.
 
 | interface | declared in `internal/dispatch/` | the question it answers | implemented by |
 |---|---|---|---|
-| `Runner` | `dispatch.go:94` | How does the work start, does it still run, and how is it stopped? | manual, exec, herdr, peer |
-| `CrewRunner` | `crew.go:18` | Start an always-on session that is tied to no bead? | herdr |
-| `CrewFinder` | `crew.go:32` | Which agent of the runtime is already a crew member's, though the yard did not start it? | herdr |
-| `CrewCloser` | `crew.go:46` | What did an ended crew session leave open in the runtime, so that the next start can close it? | herdr |
-| `Nudger` | `crew.go:58` | Deliver a short message to a running session, and wait for the agent to start on it? | herdr |
-| `DirectNudger` | `crew.go:67` | Submit a short message to a running session without waiting for the agent to start on it? | herdr |
-| `Notifier` | `crewblocked.go:13` | Show a notification to a person at this machine? | herdr |
-| `ContextReader` | `crewcontext.go:16` | How much context does the session's agent hold, in tokens? | herdr |
-| `Statuser` | `dispatch.go:562` | Is the session's agent working, idle or blocked, which is more than alive or dead? | herdr |
-| `Waiter` | `dispatch.go:574` | Is the session a wait for work done elsewhere, with what limit, and how is that work read? | peer |
-| `Finisher` | `dispatch.go:583` | What did the session leave behind (a worktree), and remove it once the bead closes? | herdr |
-| `Waker` | `dispatch.go:594` | Can the runtime push an event that wakes a pass? | herdr |
-| `Forgetter` | `forget.go:59` | Make the agent's harness forget a session that ended? | herdr |
-| `FirstPrompter` | `harness.go:125` | What was the session's agent first told? | herdr |
-| `Versioner` | `harness_dialog.go:36` | Which version of the kind's harness is installed? | herdr |
-| `OnboardingMarker` | `harnesslogin.go:955` | Mark the harness's own onboarding done where its sessions find it? | herdr |
-| `Modeler` | `model.go:36` | Which model does the session's agent report it runs? | herdr |
-| `SessionIDer` | `model.go:51` | Which session id does the agent keep in its own session file? | herdr |
-| `PromptWatcher` | `prompt.go:45` | Did a prompt reach the session's agent? | herdr |
-| `PromptSubmitter` | `prompt.go:53` | Is a prompt typed in the agent's input and not yet submitted, and if so, submit it? | herdr |
-| `ScreenWatcher` | `prompt.go:65` | Has the harness drawn its own screen yet? | herdr |
-| `TrustAcceptor` | `prompt.go:80` | Answer the folder-trust, API-key and onboarding dialogs that a harness draws at a start? | herdr |
-| `InputReader` | `prompt.go:124` | What is typed in the agent's input and not sent? | herdr |
-| `DialogReader` | `prompt.go:133` | Is the agent at a question the harness draws in place of its input, and which? | herdr |
-| `LoginReader` | `prompt.go:141` | Is the agent at the harness's login screen, and at which line? | herdr |
-| `InputMarker` | `prompt.go:318` | Does the runner know the mark this agent's harness begins its input with? | herdr |
-| `Tailer` | `stall.go:49` | What did the agent last print? | herdr |
-| `Worker` | `stall.go:56` | Has the session changed anything where it works since it started? | herdr |
-| `UsageReader` | `usage.go:48` | What did a stopped session's agent use, in tokens? | herdr |
+| `Runner` | `internal/dispatch/dispatch.go:Runner` | How does the work start, does it still run, and how is it stopped? | manual, exec, herdr, peer |
+| `CrewRunner` | `internal/dispatch/crew.go:CrewRunner` | Start an always-on session that is tied to no bead? | herdr |
+| `CrewFinder` | `internal/dispatch/crew.go:CrewFinder` | Which agent of the runtime is already a crew member's, though the yard did not start it? | herdr |
+| `CrewCloser` | `internal/dispatch/crew.go:CrewCloser` | What did an ended crew session leave open in the runtime, so that the next start can close it? | herdr |
+| `Nudger` | `internal/dispatch/crew.go:Nudger` | Deliver a short message to a running session, and wait for the agent to start on it? | herdr |
+| `DirectNudger` | `internal/dispatch/crew.go:DirectNudger` | Submit a short message to a running session without waiting for the agent to start on it? | herdr |
+| `Notifier` | `internal/dispatch/crewblocked.go:Notifier` | Show a notification to a person at this machine? | herdr |
+| `ContextReader` | `internal/dispatch/crewcontext.go:ContextReader` | How much context does the session's agent hold, in tokens? | herdr |
+| `Statuser` | `internal/dispatch/dispatch.go:Statuser` | Is the session's agent working, idle or blocked, which is more than alive or dead? | herdr |
+| `Waiter` | `internal/dispatch/dispatch.go:Waiter` | Is the session a wait for work done elsewhere, with what limit, and how is that work read? | peer |
+| `Finisher` | `internal/dispatch/dispatch.go:Finisher` | What did the session leave behind (a worktree), and remove it once the bead closes? | herdr |
+| `Waker` | `internal/dispatch/dispatch.go:Waker` | Can the runtime push an event that wakes a pass? | herdr |
+| `Forgetter` | `internal/dispatch/forget.go:Forgetter` | Make the agent's harness forget a session that ended? | herdr |
+| `FirstPrompter` | `internal/dispatch/harness.go:FirstPrompter` | What was the session's agent first told? | herdr |
+| `Versioner` | `internal/dispatch/harness_dialog.go:Versioner` | Which version of the kind's harness is installed? | herdr |
+| `OnboardingMarker` | `internal/dispatch/harnesslogin.go:OnboardingMarker` | Mark the harness's own onboarding done where its sessions find it? | herdr |
+| `Modeler` | `internal/dispatch/model.go:Modeler` | Which model does the session's agent report it runs? | herdr |
+| `SessionIDer` | `internal/dispatch/model.go:SessionIDer` | Which session id does the agent keep in its own session file? | herdr |
+| `PromptWatcher` | `internal/dispatch/prompt.go:PromptWatcher` | Did a prompt reach the session's agent? | herdr |
+| `PromptSubmitter` | `internal/dispatch/prompt.go:PromptSubmitter` | Is a prompt typed in the agent's input and not yet submitted, and if so, submit it? | herdr |
+| `ScreenWatcher` | `internal/dispatch/prompt.go:ScreenWatcher` | Has the harness drawn its own screen yet? | herdr |
+| `TrustAcceptor` | `internal/dispatch/prompt.go:TrustAcceptor` | Answer the folder-trust, API-key and onboarding dialogs that a harness draws at a start? | herdr |
+| `InputReader` | `internal/dispatch/prompt.go:InputReader` | What is typed in the agent's input and not sent? | herdr |
+| `DialogReader` | `internal/dispatch/prompt.go:DialogReader` | Is the agent at a question the harness draws in place of its input, and which? | herdr |
+| `LoginReader` | `internal/dispatch/prompt.go:LoginReader` | Is the agent at the harness's login screen, and at which line? | herdr |
+| `InputMarker` | `internal/dispatch/prompt.go:InputMarker` | Does the runner know the mark this agent's harness begins its input with? | herdr |
+| `Tailer` | `internal/dispatch/stall.go:Tailer` | What did the agent last print? | herdr |
+| `Worker` | `internal/dispatch/stall.go:Worker` | Has the session changed anything where it works since it started? | herdr |
+| `UsageReader` | `internal/dispatch/usage.go:UsageReader` | What did a stopped session's agent use, in tokens? | herdr |
 
-**The session handle.** `Session.Handle` (`internal/store/routing.go:1730`) and `CrewSession.Handle` (`internal/store/crew.go:158`) hold the map. What is in it is the runner's, except for the few keys that the store and the dispatcher read or write besides (see Stored data).
+**The session handle.** `Session.Handle` (`internal/store/routing.go:Session`) and `CrewSession.Handle` (`internal/store/crew.go:CrewSession`) hold the map. What is in it is the runner's, except for the few keys that the store and the dispatcher read or write besides (see Stored data).
 
-**The herdr program.** Herdr is reached by its command line and its socket (`internal/runner/herdr_api.go`, `internal/runner/herdr_events.go`). What yardr asks of it is herdr 0.9's, and the oldest herdr yardr starts agents with is `herdrOldest` (`internal/cli/needs.go:459`), checked by `yardr doctor` and `yardr up` (`herdrTooOld`, `internal/cli/needs.go:475`), not by the runner.
+**The herdr program.** Herdr is reached by its command line and its socket (`internal/runner/herdr_api.go`, `internal/runner/herdr_events.go`). What yardr asks of it is herdr 0.9's, and the oldest herdr yardr starts agents with is `herdrOldest` (`internal/cli/needs.go:herdrOldest`), checked by `yardr doctor` and `yardr up` (`herdrTooOld`, `internal/cli/needs.go:herdrTooOld`), not by the runner.
 
 ## Owner
 
@@ -64,12 +64,12 @@ Sessions and their handles. Live sessions survive a restart of the server and an
 
 Each runner builds its handle in `Start`:
 
-- `manual` (`internal/runner/notify.go:45`) writes `manual`, and `notify` and `session` when it shows a notification.
-- `exec` (`internal/runner/exec.go:148`) writes `pid`, `log` and `start`, the start time that tells the process from a later one with its pid.
-- `peer` (`internal/runner/peer.go:45`) writes `peer`, `bead` and, once the message is sent, `message`.
-- `herdr` writes for a bead's session `agent`, `branch`, `repo`, `workspace`, `worktree`, `tab`, `pane`, `brief`, and `pull` and `pull_head` or `head` for a pull request (`internal/runner/herdr.go:212` to `:356`), and the pane's shell as `shell_pid`, `shell_start` and `herdr_session` (`internal/runner/herdr.go:650`). For a bead of a dir depot it writes `agent`, `dir`, `depot`, `bead`, `workspace`, `tab` and `pane` (`internal/runner/herdr_dir.go:36`), and for a crew member `agent`, `workspace`, `tab`, `pane`, `dir` and `for` (`internal/runner/herdr_crew.go:258`).
+- `manual` (`internal/runner/notify.go:Manual.Start`) writes `manual`, and `notify` and `session` when it shows a notification.
+- `exec` (`internal/runner/exec.go:Exec.Start`) writes `pid`, `log` and `start`, the start time that tells the process from a later one with its pid.
+- `peer` (`internal/runner/peer.go:Peer.Start`) writes `peer`, `bead` and, once the message is sent, `message`.
+- `herdr` writes for a bead's session `agent`, `branch`, `repo`, `workspace`, `worktree`, `tab`, `pane`, `brief`, and `pull` and `pull_head` or `head` for a pull request (`internal/runner/herdr.go:Herdr.Start`, `internal/runner/herdr.go:Herdr.brief`), and the pane's shell as `shell_pid`, `shell_start` and `herdr_session` (`internal/runner/herdr.go:Herdr.shellOn`). For a bead of a dir depot it writes `agent`, `dir`, `depot`, `bead`, `workspace`, `tab` and `pane` (`internal/runner/herdr_dir.go:Herdr.startDir`), and for a crew member `agent`, `workspace`, `tab`, `pane`, `dir` and `for` (`internal/runner/herdr_crew.go:Herdr.StartCrew`).
 
-The store names the keys it reads or writes itself where it declares the record: `pending_prompt` (`internal/store/routing.go:1782`), `snooze_until` and `snooze_count` (`internal/store/routing.go:1790`), `count_due` (`internal/store/routing.go:1801`), `agent_session` and `kind` (`internal/store/crew.go:228`), `harness_login` and `harness_login_ask` (`internal/store/crew.go:241`) and `herdr_session` (`internal/store/settings.go:943`). The dispatcher names the keys it writes in `internal/dispatch/dispatch.go`: `prompt_unconfirmed`, `prompt_started` and `prompt_look` (`:525` to `:537`), and the keys of the harness passes that [harness.md](harness.md) lists.
+The store names the keys it reads or writes itself where it declares the record: `pending_prompt` (`internal/store/routing.go:PendingPrompt`), `snooze_until` and `snooze_count` (`internal/store/routing.go:SnoozeUntil`, `internal/store/routing.go:SnoozeCount`), `count_due` (`internal/store/routing.go:CountDue`), `agent_session` and `kind` (`internal/store/crew.go:HandleAgentSession`, `internal/store/crew.go:HandleKind`), `harness_login` and `harness_login_ask` (`internal/store/crew.go:HarnessLoginKey`, `internal/store/crew.go:HarnessLoginAskKey`) and `herdr_session` (`internal/store/settings.go:HandleHerdrSession`). The dispatcher names the keys it writes in `internal/dispatch/dispatch.go`: `prompt_unconfirmed`, `prompt_started` and `prompt_look` (`internal/dispatch/dispatch.go:PromptUnconfirmed`, `internal/dispatch/dispatch.go:PromptStarted`, `internal/dispatch/dispatch.go:PromptLook`), and the keys of the harness passes that [harness.md](harness.md) lists.
 
 ## Rules
 
