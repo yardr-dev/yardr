@@ -4,21 +4,21 @@ A harness is the agent program that a herdr session runs (Claude Code, Codex, Ki
 
 ## Form
 
-A harness file is YAML. `harnesses/harnesses.go:16` embeds every `*.yaml` of its directory in the binary as `harnesses.FS`, and `agents.Load(harnesses.FS)` (`internal/agents/harness.go:43`) is the one place the files are read, once, when the program starts. `agents.Load` (`internal/agents/harness.go:87`) takes the kind from the file's name (`claude.yaml` is the kind `claude`), decodes the file into `store.Harness` (`internal/store/harness.go:24`) with every key that type does not name refused (`KnownFields(true)`, `internal/agents/harness.go:101`), and holds the result to `Harness.Check` (`internal/store/harness.go:756`). A kind with no file is the zero `Harness`, which knows nothing. [groups.md](../groups.md#what-yardr-knows-of-a-kind) says what each key means and which code reads it, and this page does not repeat it.
+A harness file is YAML. `harnesses/harnesses.go:FS` embeds every `*.yaml` of its directory in the binary as `harnesses.FS`, and `agents.Load(harnesses.FS)` (`internal/agents/harness.go:Harnesses`) is the one place the files are read, once, when the program starts. `agents.Load` (`internal/agents/harness.go:Load`) takes the kind from the file's name (`claude.yaml` is the kind `claude`), decodes the file into `store.Harness` (`internal/store/harness.go:Harness`) with every key that type does not name refused (`KnownFields(true)`, `internal/agents/harness.go:Load`), and holds the result to `Harness.Check` (`internal/store/harness.go:Harness.Check`). A kind with no file is the zero `Harness`, which knows nothing. [groups.md](../groups.md#what-yardr-knows-of-a-kind) says what each key means and which code reads it, and this page does not repeat it.
 
 The questions the core asks of a session's program, and the keys that answer them today:
 
 | the core asks | the file answers with | read by |
 |---|---|---|
 | Is the agent at its prompt? | `marks`, `background` | the herdr runner's pane reading (`ScreenWatcher`, `InputReader`, `PromptWatcher`), dispatch's idle pass |
-| Did it stop on an error the yard knows, and which? | `errors` (a `reason` of `store.Reasons`, `internal/store/harness.go:688`) and `marks.error` | `dispatch.HarnessError` (`internal/dispatch/harness.go:167`) |
-| Which dialog is on the screen, and may the yard answer it? | `trust`, `api_key` and `onboarding` are answered; `dialogs` and `login` are told of | the herdr runner (`TrustAcceptor`, `DialogReader`, `LoginReader`), `dispatch.HarnessDialog` (`internal/dispatch/harness_dialog.go:44`) |
+| Did it stop on an error the yard knows, and which? | `errors` (a `reason` of `store.Reasons`, `internal/store/harness.go:Reasons`) and `marks.error` | `dispatch.HarnessError` (`internal/dispatch/harness.go:HarnessError`) |
+| Which dialog is on the screen, and may the yard answer it? | `trust`, `api_key` and `onboarding` are answered; `dialogs` and `login` are told of | the herdr runner (`TrustAcceptor`, `DialogReader`, `LoginReader`), `dispatch.HarnessDialog` (`internal/dispatch/harness_dialog.go:HarnessDialog`) |
 | Which model is it using, how much context, how many tokens did it use? | `model`, `context`, `usage` | the daemon, through the herdr runner (`Modeler`, `ContextReader`, `UsageReader`) |
 | What arguments start it, unattended, with a model and an effort? | `flags` | the herdr runner at start, and the checks and forms that hold a group's kind, model, effort and permission preset (`internal/store`, `internal/cli`) |
 | How does the yard make it forget a session it started? | `forget` | the daemon, through the herdr runner (`Forgetter`) |
-| Which version is installed, and is the program the harness? | `flags.version`, `flags.version_contains` | `agents.HarnessVersion` (`internal/agents/harness.go:284`), `yardr doctor` |
+| Which version is installed, and is the program the harness? | `flags.version`, `flags.version_contains` | `agents.HarnessVersion` (`internal/agents/harness.go:HarnessVersion`), `yardr doctor` |
 
-The other keys (`label`, `provider`, `aliases`, `install`, `fetch`, `offers`, `login_recipe`, `login_env`, `hints`) say what a person is shown, offered or led through. The herdr runner sends Esc to two of the `dialogs`, the ones its code names `auto_mode_setup` and `rate_limit_switch` (`internal/runner/herdr_screen.go:453`), and sends no key for any other: `InputDialog` (`internal/runner/herdr_screen.go:429`) gives its word and first line, and the daemon holds back what it would type there and says why (`dialogAt`, `internal/dispatch/prompt.go:257`).
+The other keys (`label`, `provider`, `aliases`, `install`, `fetch`, `offers`, `login_recipe`, `login_env`, `hints`) say what a person is shown, offered or led through. The herdr runner sends Esc to two of the `dialogs`, the ones its code names `auto_mode_setup` and `rate_limit_switch` (`internal/runner/herdr_screen.go:CancelsDialog`), and sends no key for any other: `InputDialog` (`internal/runner/herdr_screen.go:Herdr.InputDialog`) gives its word and first line, and the daemon holds back what it would type there and says why (`dialogAt`, `internal/dispatch/prompt.go:Dispatcher.dialogAt`).
 
 ## Owner
 
@@ -26,26 +26,26 @@ The core owns the format and the questions, and so `store.Harness` and `Harness.
 
 ## Version
 
-A file's `version` is the format's one number, `store.FileVersion` (`internal/store/harness.go:17`), 1 today. `Harness.Check` refuses a file at another number, or at none, with the number this build reads, as `version 2: this yardr reads version 1`. An optional key added to the format keeps the number. A key removed or given another meaning raises it, and every file the build carries moves in the same commit.
+A file's `version` is the format's one number, `store.FileVersion` (`internal/store/harness.go:FileVersion`), 1 today. `Harness.Check` refuses a file at another number, or at none, with the number this build reads, as `version 2: this yardr reads version 1`. An optional key added to the format keeps the number. A key removed or given another meaning raises it, and every file the build carries moves in the same commit.
 
 ## Change rule
 
-A change to the format is made in `store.Harness` and `Harness.Check` and in every file of `harnesses/` it touches, in one commit. A new kind needs, today, its file `harnesses/<kind>.yaml`; the kind in `store.HerdrKinds` (`internal/store/harness_kinds.go:5`), the list of kinds herdr starts, which a file's kind must be among; a model lister for it in `modelLists` (`internal/agents/harness.go:26`); and its entries in the tables of `internal/store/harness_kinds.go` that copy what its file says. `TestHarnessFiles` and `TestStoreTablesMatchCatalogue` fail until they agree. A kind is also a name the core may not name, so it joins the harness kinds row of the list in [core.md](core.md#names-the-core-may-not-name) in the same commit, and `TestHarnessFilesNameOnlyListedKinds` fails until it does; each file that already names the kind then gets a row in that page's allow-list, at the hits it has that day. A new kind as a file with fixtures and no Go is planned.
+A change to the format is made in `store.Harness` and `Harness.Check` and in every file of `harnesses/` it touches, in one commit. A new kind needs, today, its file `harnesses/<kind>.yaml`; the kind in `store.HerdrKinds` (`internal/store/harness_kinds.go:HerdrKinds`), the list of kinds herdr starts, which a file's kind must be among; a model lister for it in `modelLists` (`internal/agents/harness.go:modelLists`); and its entries in the tables of `internal/store/harness_kinds.go` that copy what its file says. `TestHarnessFiles` and `TestStoreTablesMatchCatalogue` fail until they agree. A kind is also a name the core may not name, so it joins the harness kinds row of the list in [core.md](core.md#names-the-core-may-not-name) in the same commit, and `TestHarnessFilesNameOnlyListedKinds` fails until it does; each file that already names the kind then gets a row in that page's allow-list, at the hits it has that day. A new kind as a file with fixtures and no Go is planned.
 
 ## Stored data
 
-A group's config keys that a file bounds (`kind`, `model`, `effort`, `args`), the kind and model a session was started with (`Session.Kind` and `Session.Model`, `internal/store/routing.go:1717`), and the handle keys below, which the daemon keeps on a session's or a crew member's handle so that a daemon that replaces itself neither tells again nor forgets a wait. No harness file is stored: a file is read from the build at start.
+A group's config keys that a file bounds (`kind`, `model`, `effort`, `args`), the kind and model a session was started with (`Session.Kind` and `Session.Model`, `internal/store/routing.go:Session`), and the handle keys below, which the daemon keeps on a session's or a crew member's handle so that a daemon that replaces itself neither tells again nor forgets a wait. No harness file is stored: a file is read from the build at start.
 
 | key | declared at | what it holds |
 |---|---|---|
-| `harness_error` | `internal/dispatch/harness.go:76` | the reason of the `session_harness_error` raised in the current idle spell |
-| `harness_dialog` | `internal/dispatch/harness_dialog.go:30` | the kind of the `session_harness_dialog` raised in the current idle spell |
-| `harness_login`, `harness_login_ask` | `internal/store/crew.go:241` | the line of the harness's login screen the agent sits at, and the ask of a login the yard leads for it |
-| `harness_retries`, `harness_retry_at` | `internal/dispatch/harness.go:91` | how often the yard prompted the agent again, and when its pane is next looked at |
-| `harness_reset_at`, `harness_reset_window`, `harness_reset_model`, `harness_prompted` | `internal/dispatch/harness.go:95` | the wait for a usage limit's window to reset: when it is asked about again, the window, the model that waits and what was typed at the reset |
-| `harness_fallback_model`, `harness_fallback_return_at` | `internal/dispatch/harness.go:101` | the fallback model a crew member runs on while its own model's window is used up, and when it goes back |
-| `snooze_until`, `snooze_count` | `internal/store/routing.go:1790` | when a snooze the agent asked for ends, and how many it took in a row |
-| `trust_accepted`, `key_accepted`, `onboarding_accepted_<n>` | `internal/dispatch/dispatch.go:542` | that the yard answered the folder-trust dialog, the API-key dialog and the nth onboarding screen |
+| `harness_error` | `internal/dispatch/harness.go:HarnessErrorKey` | the reason of the `session_harness_error` raised in the current idle spell |
+| `harness_dialog` | `internal/dispatch/harness_dialog.go:HarnessDialogKey` | the kind of the `session_harness_dialog` raised in the current idle spell |
+| `harness_login`, `harness_login_ask` | `internal/store/crew.go:HarnessLoginKey` | the line of the harness's login screen the agent sits at, and the ask of a login the yard leads for it |
+| `harness_retries`, `harness_retry_at` | `internal/dispatch/harness.go:harnessRetries` | how often the yard prompted the agent again, and when its pane is next looked at |
+| `harness_reset_at`, `harness_reset_window`, `harness_reset_model`, `harness_prompted` | `internal/dispatch/harness.go:harnessResetAt` | the wait for a usage limit's window to reset: when it is asked about again, the window, the model that waits and what was typed at the reset |
+| `harness_fallback_model`, `harness_fallback_return_at` | `internal/dispatch/harness.go:harnessFallbackModel` | the fallback model a crew member runs on while its own model's window is used up, and when it goes back |
+| `snooze_until`, `snooze_count` | `internal/store/routing.go:SnoozeUntil` | when a snooze the agent asked for ends, and how many it took in a row |
+| `trust_accepted`, `key_accepted`, `onboarding_accepted_<n>` | `internal/dispatch/dispatch.go:TrustAccepted` | that the yard answered the folder-trust dialog, the API-key dialog and the nth onboarding screen |
 
 ## Rules
 

@@ -21,37 +21,40 @@ An HTTP protocol between two yards, each on its own build.
 - **The requests.** A yard takes its peers' requests on its listener under
   `/peers/`. `POST /peers/messages` posts one message, and
   `GET /peers/messages?after=<seq>` asks for what waits in the other yard's
-  outbox for the asker (`yards.Path`, `internal/yards/receiver.go:47`). A
+  outbox for the asker (`yards.Path`, `internal/yards/receiver.go:Path`). A
   question may add `refused`, the messages it got and did not take with the
   reason, and `wait`, to have the answer held until there is something to hand
   over. A pairing is three more requests, `POST /peers/pair/hello`, `reveal`
-  and `confirm` (`internal/pairing/pairing.go:10`), which a yard that is no
-  peer yet makes to one that opened a pairing. Their bytes are
+  and `confirm` (`internal/pairing/pairing.go:PathHello`), which a yard that is
+  no peer yet makes to one that opened a pairing. Their bytes are
   [peers.md, The requests](../peers.md#the-requests).
 - **The signature and the seal.** Each request and each answer carries an
   HTTP Message Signature (RFC 9421) of the sender's ed25519 key, and each body
   crosses sealed with HPKE (RFC 9180) to the receiver's X25519 key, in the
-  envelope `{"v","enc","ct"}` and nothing else (`internal/store/peersealed.go:34`).
-  The kind of a message and the name of its sender are inside the seal.
+  envelope `{"v","enc","ct"}` and nothing else
+  (`internal/store/peersealed.go:encEnvelope`). The kind of a message and the
+  name of its sender are inside the seal.
 - **The message.** `PeerMessage` is `{id, kind, re, body, seq}`
-  (`internal/store/peers.go:216`): the id the sender mints, by which the
+  (`internal/store/peers.go:PeerMessage`): the id the sender mints, by which the
   receiver takes it once, its kind, the id of the message it answers, a JSON
   body, and the place in the sender's outbox, set where a question hands it
-  over. A link carries the kinds of `PeerKinds` (`peers.go:54`): `ask`, `bead`,
-  `file`, `mail`, `ping` and `thread`, each direction allowed on its own.
-  `bead-return` goes with the kind `bead`, and `bead-event`, `bead-read` and
-  `bead-note` with `thread`.
+  over. A link carries the kinds of `PeerKinds`
+  (`internal/store/peers.go:PeerKinds`): `ask`, `bead`, `file`, `mail`, `ping`
+  and `thread`, each direction allowed on its own. `bead-return` goes with the
+  kind `bead`, and `bead-event`, `bead-read` and `bead-note` with `thread`.
 - **What a yard says of itself.** With every signed request and every signed
   answer a yard says what its build understands: `PeerSays`
-  (`internal/store/peersaid.go:19`) holds the kinds it knows (`understands`),
-  its build (`yardr`) and whom it exposes to the other (`roster`). The other
-  yard keeps it by the key, as the peer's word, and refuses nothing by it.
+  (`internal/store/peersaid.go:PeerSays`) holds the kinds it knows
+  (`understands`), its build (`yardr`) and whom it exposes to the other
+  (`roster`). The other yard keeps it by the key, as the peer's word, and
+  refuses nothing by it.
 - **A refusal.** The receiver answers a message it does not take with a reason
-  (`RefusedUnknownKind`, `internal/store/peermail.go:107`, `RefusedVersion`,
-  `internal/store/peerbeads.go:62`, and the others beside them), logs it as
-  `peer_message_refused`, and tells the sender in the 403 of a post or with the
-  next question. The sender words it in its own words (`PeerRefusal`,
-  `peermail.go:125`) and gives the message up, never dropping it silently.
+  (`RefusedUnknownKind`, `internal/store/peermail.go:RefusedUnknownKind`,
+  `RefusedVersion`, `internal/store/peerbeads.go:RefusedVersion`, and the others
+  beside them), logs it as `peer_message_refused`, and tells the sender in the
+  403 of a post or with the next question. The sender words it in its own words
+  (`PeerRefusal`, `internal/store/peermail.go:PeerRefusal`) and gives the
+  message up, never dropping it silently.
 
 ## Owner
 
@@ -67,12 +70,12 @@ so a new kind needs no day on which both yards change.
 
 | message | body | `v` |
 |---|---|---|
-| the seal | `{"v","enc","ct"}` | 2 (`internal/store/peersealed.go:97`) |
+| the seal | `{"v","enc","ct"}` | 2 (`internal/store/peersealed.go:SealBody`) |
 | `ping` | none | none |
 | `mail` | `to`, `from`, `text`, `files` | none |
 | `file` | the blob's reference and its bytes | none |
-| `ask`: an ask, its answer, its settle | `peerAsk`, `peerAnswer` | 1 (`PeerAskVersion`, `internal/store/peerasks.go:27`) |
-| `bead`, `bead-return`, `bead-event`, `bead-read`, `bead-note` | `PeerBeadMessage` and the bodies beside it | 1 (`PeerBeadVersion`, `internal/store/peerbeads.go:41`) |
+| `ask`: an ask, its answer, its settle | `peerAsk`, `peerAnswer` | 1 (`PeerAskVersion`, `internal/store/peerasks.go:PeerAskVersion`) |
+| `bead`, `bead-return`, `bead-event`, `bead-read`, `bead-note` | `PeerBeadMessage` and the bodies beside it | 1 (`PeerBeadVersion`, `internal/store/peerbeads.go:PeerBeadVersion`) |
 | a pairing's requests | `hello`, `reveal`, `confirm` | none |
 
 The table holds a row for each kind. A kind or a body added to the protocol
@@ -144,13 +147,14 @@ rows 13 to 17 of the table above.
   `socket-close` and `ack`, and sends `push-intent` and `push-remove` up, which
   the edge answers with `push-ack`. Either end sends `ping` and `pong`. The
   list, with every field of each, is the comment at the head of
-  `internal/edgelink/link.go:37`.
+  `internal/edgelink/link.go:LinkPath`.
 - **The pin.** The key of the edge is fetched once and pinned in the `edge`
-  setting (`store.Edge`, `internal/store/settings_edge.go:28`). It is
+  setting (`store.Edge`, `internal/store/settings_edge.go:Edge`). It is
   never taken from the edge again, and a different key at the same address is a
   different edge.
 - **The calls beside it.** The yard also calls the edge's own paths, signed
-  with its key and answered signed by the edge's (`internal/edgelink/edgelink.go:18`).
+  with its key and answered signed by the edge's
+  (`internal/edgelink/edgelink.go:Client.call`).
 
 ### Owner
 
@@ -170,7 +174,7 @@ linked yard follows the core.
 
 The pinned edge (`store.Edge`) with the yard's handle and name at the edge. The
 link keeps no record of its own: its state (`State`,
-`internal/edgelink/link.go:186`) is what `yardr status` and `yardr doctor`
+`internal/edgelink/link.go:State`) is what `yardr status` and `yardr doctor`
 show, and a link that goes down is told as an `edge_link_down` event.
 
 ## Planned
