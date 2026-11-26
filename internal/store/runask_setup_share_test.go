@@ -81,7 +81,7 @@ func TestSetupCardListsCandidateWithAddress(t *testing.T) {
 			t.Errorf("the card lacks %q:\n%s", want, joined)
 		}
 	}
-	lines := strings.Join(y.asked(t, seq).Lines(), "\n")
+	lines := strings.Join(y.asked(t, seq).Lines(testCatalogue()), "\n")
 	if !strings.Contains(lines, "answer with: yardr bead answer "+y.bead+" "+itoa(seq)+" <n> --secret, or <n> --account <source>") {
 		t.Errorf("the terminal card lacks the --account answer:\n%s", lines)
 	}
@@ -535,7 +535,7 @@ func TestSetupApprovalTakesCandidate(t *testing.T) {
 	if _, ok := y.takeSetupSecret(carryKey(y.bead, seq)); ok {
 		t.Error("a picked approval handed values to the memory")
 	}
-	lines := strings.Join(y.asked(t, seq).Lines(), "\n")
+	lines := strings.Join(y.asked(t, seq).Lines(testCatalogue()), "\n")
 	if !strings.Contains(lines, "approved, to be carried out: setup of pack setupmail, preset read to crew yardmaster; took setupcal") {
 		t.Errorf("the approved card reads:\n%s", lines)
 	}

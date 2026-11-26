@@ -67,9 +67,11 @@ flags:
     - label: yolo
       args: [--yolo]
       description: never asks, no sandbox, trusts the workspace for the run
+      strong: true
     - label: no approval
       args: [--disable-approval]
       description: no approval prompts; the sandbox still applies
+      strong: true
 
 # The models to pick from: the yard's own (muse-spark-1.3-contributor:
 # model muse-spark-1.3 with contributor mode on,

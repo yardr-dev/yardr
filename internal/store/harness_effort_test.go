@@ -12,7 +12,10 @@ import (
 // spelling of the flag that carries settings.
 func TestEffortWordsAndHeld(t *testing.T) {
 	t.Parallel()
-	claude, codex, muse := HarnessEfforts["claude"], HarnessEfforts["codex"], HarnessEfforts["muse"]
+	cat := testCatalogue()
+	claude, _ := cat.effort("claude")
+	codex, _ := cat.effort("codex")
+	muse, _ := cat.effort("muse")
 	for _, c := range []struct {
 		name   string
 		effort Effort
@@ -98,6 +101,7 @@ func TestEffortCheck(t *testing.T) {
 // config that names no kind is claude's, which is what the runner starts.
 func TestEffortProblems(t *testing.T) {
 	t.Parallel()
+	cat := testCatalogue()
 	for _, c := range []struct {
 		name     string
 		cfg, old map[string]any
@@ -123,7 +127,7 @@ func TestEffortProblems(t *testing.T) {
 		{"the effort changed", map[string]any{"kind": "pi", "effort": "high"}, map[string]any{"kind": "pi", "effort": "low"}, "and pi is not"},
 		{"the args changed", map[string]any{"kind": "claude", "effort": "low", "args": []any{"--effort", "max"}}, map[string]any{"kind": "claude", "effort": "low"}, `its args already pass "--effort"`},
 	} {
-		got := effortProblems("group g", c.cfg, c.old)
+		got := effortProblems(cat, "group g", c.cfg, c.old)
 		switch {
 		case c.want == "" && len(got) != 0:
 			t.Errorf("%s: %v, want none", c.name, got)

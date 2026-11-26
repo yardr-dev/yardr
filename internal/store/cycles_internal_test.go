@@ -13,7 +13,7 @@ import (
 // first, so the walk passes every bead before it refuses.
 func BenchmarkAddDepCycleWalk(b *testing.B) {
 	const n = 5000
-	s, err := Open(filepath.Join(b.TempDir(), "y.db"))
+	s, err := openStore(b, filepath.Join(b.TempDir(), "y.db"))
 	if err != nil {
 		b.Fatal(err)
 	}

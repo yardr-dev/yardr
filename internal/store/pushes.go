@@ -159,7 +159,7 @@ func (w *wtx) queue(p Push) error {
 // openAsk is the ask p is about as a row of its user's queue, nil when it
 // is not open any more or not there: read as UserAsks reads it, so what is
 // told is what the queue shows.
-func (p *Push) openAsk(tx *bolt.Tx, at time.Time) (*OpenAsk, error) {
+func (p *Push) openAsk(tx *bolt.Tx, cat Catalogue, at time.Time) (*OpenAsk, error) {
 	if p.AskKey != "" {
 		var rec foreignAsk
 		if ok, err := get(tx, bPeerAsks, p.AskKey, &rec); err != nil || !ok || rec.To != p.User || rec.Outcome != "" {
@@ -169,7 +169,7 @@ func (p *Push) openAsk(tx *bolt.Tx, at time.Time) (*OpenAsk, error) {
 		if err != nil || peer == nil {
 			return nil, err
 		}
-		row := rec.row(peer)
+		row := rec.row(peer, cat)
 		if rec.resolved(row.Bead, row.Asker, at).State != AskOpen || rec.asided(at) {
 			return nil, nil
 		}
@@ -188,7 +188,7 @@ func (p *Push) openAsk(tx *bolt.Tx, at time.Time) (*OpenAsk, error) {
 			return &OpenAsk{
 				Bead: b.ID, BeadTitle: b.Title, Topic: topicOf(b.Bead),
 				Ask: r.Note.Seq, Question: r.Ask.Question, Turn: r.Turn(),
-				Asker: r.Note.Author, Since: r.Note.At, Secret: r.Ask.asked(), Concealed: r.Ask.concealed(),
+				Asker: r.Note.Author, Since: r.Note.At, Secret: r.Ask.asked(cat), Concealed: r.Ask.concealed(),
 			}, nil
 		}
 	}
@@ -268,7 +268,7 @@ func (s *Store) Pushes(ctx context.Context) ([]Push, error) {
 					p.Note = &n
 				}
 			case PushAsk:
-				ask, err := p.openAsk(tx, at)
+				ask, err := p.openAsk(tx, s.cat, at)
 				if err != nil {
 					return err
 				}

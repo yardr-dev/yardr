@@ -12,7 +12,6 @@ import (
 
 	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/dispatch"
-	"yardr.dev/yardr/internal/store"
 )
 
 var _ dispatch.Forgetter = (*Herdr)(nil)
@@ -35,7 +34,7 @@ const forgetStopWait = 5 * time.Second
 const forgetLine = 200
 
 // Forget makes the agent's harness forget the session handle names: it runs the
-// kind's own program (store.Executable) with the arguments of the kind's
+// kind's own program (agents.Executable) with the arguments of the kind's
 // forget, the id the dispatcher kept on the handle (agent_session) put where
 // {session} stands. It is the session's record in the harness that goes, by the
 // harness's own command, since removing the session file alone leaves what the
@@ -67,7 +66,7 @@ func (h *Herdr) Forget(ctx context.Context, handle map[string]any) (missing stri
 	if !plainSessionID(id) || strings.HasPrefix(id, "-") {
 		return missingNoID, nil
 	}
-	program := store.Executable(kind.Kind)
+	program := agents.Executable(kind.Kind)
 	runCtx, cancel := context.WithTimeout(ctx, forgetTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(runCtx, program, kind.Forget.ArgsFor(id)...)

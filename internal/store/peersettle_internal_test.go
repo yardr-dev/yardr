@@ -516,7 +516,7 @@ func pair(t *testing.T) (a, b *linked) {
 	clock = func() time.Time { at = at.Add(time.Second); return at }
 	t.Cleanup(func() { clock = time.Now })
 	open := func(name string) *linked {
-		s, err := Open(filepath.Join(t.TempDir(), name+".db"))
+		s, err := openStore(t, filepath.Join(t.TempDir(), name+".db"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -598,7 +598,7 @@ func carry(t *testing.T, from, to *linked) []string {
 func linkCopy(t *testing.T, a *linked, name string) *linked {
 	t.Helper()
 	ctx := context.Background()
-	s, err := Open(filepath.Join(t.TempDir(), name+".db"))
+	s, err := openStore(t, filepath.Join(t.TempDir(), name+".db"))
 	if err != nil {
 		t.Fatal(err)
 	}

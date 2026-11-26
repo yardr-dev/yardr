@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/yardkey"
 )
@@ -35,7 +36,7 @@ type pairYard struct {
 func newPairYard(t *testing.T) *pairYard {
 	t.Helper()
 	ctx := context.Background()
-	st, err := store.Open(filepath.Join(t.TempDir(), "yard.db"))
+	st, err := store.Open(filepath.Join(t.TempDir(), "yard.db"), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

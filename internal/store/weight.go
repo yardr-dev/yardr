@@ -324,7 +324,7 @@ func (w *wtx) freshMappingRefusal(seq uint64, stored []AskWeight, actor string) 
 func (w *wtx) weighAsk(a Ask) ([]AskWeight, error) {
 	switch {
 	case a.Secret != nil:
-		return secretWeight(*a.Secret), nil
+		return secretWeight(w.catalogue(), *a.Secret), nil
 	case a.DepotPush != nil:
 		return depotPushWeight(*a.DepotPush), nil
 	case a.Run != nil && a.Run.General != nil:
@@ -368,8 +368,8 @@ func storedWeight(notes []Note, seq uint64) []AskWeight {
 // secretWeight is a secret ask's weight: every form gives the yard a
 // value, and one for a user's own credential is read when a call is made
 // as them.
-func secretWeight(sec AskSecret) []AskWeight {
-	out := []AskWeight{weighs(WeightCredential, strings.TrimPrefix(sec.Line(), "a secret: "))}
+func secretWeight(cat Catalogue, sec AskSecret) []AskWeight {
+	out := []AskWeight{weighs(WeightCredential, strings.TrimPrefix(sec.Line(cat), "a secret: "))}
 	// A login's input goes to the login that waits, and no call reads it.
 	if sec.Google != "" && sec.As != "" {
 		out = append(out, weighs(WeightAsUser, fmt.Sprintf("a Google call made --as %s reads the sign-in for %s's own account", sec.As, sec.Google)))

@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/edgelink"
 	"yardr.dev/yardr/internal/rpc"
@@ -38,7 +39,7 @@ const hookToken = "s3cret-token"
 func edgeYard(t *testing.T, c *config.Config, edge *standin.Edge, srv *httptest.Server, connect bool) (string, string) {
 	t.Helper()
 	ctx := context.Background()
-	st, err := store.Open(c.DBPath())
+	st, err := store.Open(c.DBPath(), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"testing"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/peer"
 	"yardr.dev/yardr/internal/rpc"
@@ -25,7 +26,7 @@ import (
 // with no caller are served.
 func TestSocketServesTheDaemonsWritesToTheDaemonAlone(t *testing.T) {
 	home := t.TempDir()
-	st, err := store.Open(filepath.Join(home, "yard.db"))
+	st, err := store.Open(filepath.Join(home, "yard.db"), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/peer"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
@@ -133,7 +134,7 @@ func walkSessionIndexes(t *testing.T, seed int64, steps int) {
 			t.Fatal(err)
 		}
 	}
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	must(err)
 	defer func() { _ = s.Close(ctx) }()
 	must(s.PutGroup(ctx, store.Group{Name: "g", Runner: "fake", Limit: 1000}, "me"))
@@ -310,7 +311,7 @@ func walkSessionIndexes(t *testing.T, seed int64, steps int) {
 			must(s.DropPaneAndPendingIndexes())
 			must(s.DropSessionOrderIndexes())
 			must(s.Close(ctx))
-			s, err = store.Open(path)
+			s, err = store.Open(path, agents.Catalogue())
 			must(err)
 			same(fmt.Sprintf("step %d, opening the store without the indexes", step))
 		}
@@ -370,7 +371,7 @@ func TestPaneAndPendingIndexesBuiltForOldStore(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "yard.db")
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

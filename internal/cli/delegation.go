@@ -19,6 +19,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -222,10 +223,10 @@ func (a *app) presetWords(c *cobra.Command, path []string, args []string) ([]str
 			kind = setting.Default
 		}
 	}
-	p, ok := store.HarnessPreset(kind, label)
+	p, ok := agents.Preset(kind, label)
 	if !ok {
 		return nil, fmt.Errorf("preset=%s: %s has no such permission preset (it has: %s)", label, or(kind, "this kind"),
-			or(strings.Join(store.HarnessPresetLabels(kind), ", "), "none"))
+			or(strings.Join(agents.PresetLabels(kind), ", "), "none"))
 	}
 	flags, err := json.Marshal(p.Args)
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -42,7 +43,7 @@ func primeNoteBlocks(id string, notes []store.Note, as map[string]string, home s
 		bounded[i].Text = strings.Join(lines[:primeNoteTextLines], "\n") +
 			fmt.Sprintf("\n... and %d %s: yardr bead show %s has the note whole", more, noun, id)
 	}
-	blocks := store.NoteBlocksMarked(bounded, time.Now(), as, home)
+	blocks := store.NoteBlocksMarked(agents.Catalogue(), bounded, time.Now(), as, home)
 	slices.Reverse(blocks)
 	return blocks
 }

@@ -17,7 +17,7 @@ func TestMigratePeerSince(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "yard.db")
-	s, err := Open(path)
+	s, err := openStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestMigratePeerSince(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s, err = Open(path)
+	s, err = openStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}

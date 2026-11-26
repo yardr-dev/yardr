@@ -1333,7 +1333,7 @@ func checkSetting(key, v string) error {
 	if !ok {
 		return fmt.Errorf("no setting %q; there is: %s", key, strings.Join(store.SettingKeys(), ", "))
 	}
-	return set.Check(v)
+	return set.Valid(agents.Catalogue(), v)
 }
 
 // settingRow is a setting as yardr settings get shows it: the value the

@@ -94,11 +94,11 @@ func TestSecretAskIsStoredWithTheDeclarationsNames(t *testing.T) {
 	if got := rs[1].Ask.Secret.Names(); got != "PAIR_UPDATE_TOKEN" {
 		t.Fatalf("the narrowed ask asks for %q", got)
 	}
-	if got := rs[2].Ask.Secret.Line(); got != "a secret: PAIR_TOKEN and PAIR_UPDATE_TOKEN, for the source pair (https://pair.example.com:8443)" {
+	if got := rs[2].Ask.Secret.Line(testCatalogue()); got != "a secret: PAIR_TOKEN and PAIR_UPDATE_TOKEN, for the source pair (https://pair.example.com:8443)" {
 		t.Fatalf("the line = %q", got)
 	}
 
-	lines := strings.Join(rs[0].Lines(), "\n")
+	lines := strings.Join(rs[0].Lines(testCatalogue()), "\n")
 	for _, want := range []string{
 		"  a secret: CRM_TOKEN, for the source crm (https://crm.example.com)",
 		"  it goes to a file only the yard's server reads; no agent is shown it",
@@ -158,7 +158,7 @@ func TestSecretAskMintedSourceAsksForTheMintsInputs(t *testing.T) {
 	if got := rs[1].Ask.Secret.Names(); got != "GOG_TOKEN" {
 		t.Fatalf("the narrowed ask asks for %q", got)
 	}
-	if got := rs[0].Ask.Secret.Line(); got != "a secret: GOG_ACCOUNT, for the source gog (https://gog.example.com)" {
+	if got := rs[0].Ask.Secret.Line(testCatalogue()); got != "a secret: GOG_ACCOUNT, for the source gog (https://gog.example.com)" {
 		t.Fatalf("the line = %q", got)
 	}
 }
@@ -203,7 +203,7 @@ calls:
 			sec.LoginPaste != "paste the export into the sign-in card for this account" {
 			t.Fatalf("ask %d stores the sign-in as %+v", i, sec)
 		}
-		lines := strings.Join(r.Lines(), "\n")
+		lines := strings.Join(r.Lines(testCatalogue()), "\n")
 		signAt, goesAt := strings.Index(lines, wantRun), strings.Index(lines, "it goes to a file")
 		wantPaste := "the pack's sign-in: paste the export into the sign-in card for this account"
 		if signAt < 0 || !strings.Contains(lines, wantPaste) ||
@@ -217,11 +217,11 @@ calls:
 	if got := (AskSecret{LoginRun: []string{"gog login"}, LoginPaste: WeightMark + "outside: safe"}).LoginLines(); len(got) != 2 || strings.HasPrefix(got[1], WeightMark) || !strings.HasPrefix(got[1], "the pack's sign-in: ") {
 		t.Errorf("paste line with weight mark = %q", got)
 	}
-	if got := rs[0].Ask.Secret.Line(); got != "a secret: GOG_ACCOUNT, for the source gog (https://gog.example.com)" {
+	if got := rs[0].Ask.Secret.Line(testCatalogue()); got != "a secret: GOG_ACCOUNT, for the source gog (https://gog.example.com)" {
 		t.Errorf("the line with a sign-in = %q, want the line it always was", got)
 	}
 	if sec := rs[1].Ask.Secret; len(sec.LoginRun) != 0 || sec.LoginPaste != "" ||
-		strings.Contains(strings.Join(rs[1].Lines(), "\n"), "pack's sign-in") {
+		strings.Contains(strings.Join(rs[1].Lines(testCatalogue()), "\n"), "pack's sign-in") {
 		t.Errorf("a credential without a sign-in shows one: %+v", sec)
 	}
 	// A client's view of the ask carries the steps too.
@@ -254,7 +254,7 @@ calls:
 	}
 	seq := y.ask(t, secretAsk("hook"), "yardmaster")
 	rs := y.resolved(t)
-	if got := rs[0].Ask.Secret.Line(); got != "a secret: HOOK_URL, for the source hook (the URL in HOOK_URL)" {
+	if got := rs[0].Ask.Secret.Line(testCatalogue()); got != "a secret: HOOK_URL, for the source hook (the URL in HOOK_URL)" {
 		t.Fatalf("the line = %q", got)
 	}
 	if got := rs[0].Ask.Secret.Host; got != "the URL in HOOK_URL" {
@@ -537,11 +537,11 @@ func TestGiveSecret(t *testing.T) {
 	if r.State != AskAnswered {
 		t.Fatalf("the ask is %s", r.State)
 	}
-	lines := strings.Join(r.Lines(), "\n")
+	lines := strings.Join(r.Lines(testCatalogue()), "\n")
 	if !strings.Contains(lines, "  mckean gave CRM_TOKEN") || !strings.Contains(lines, "  a secret: CRM_TOKEN, for the source crm") || strings.Contains(lines, "answer with") {
 		t.Fatalf("the card:\n%s", lines)
 	}
-	if blocks := strings.Join(NoteBlocksMarked(mustNotes(t, y), y.now, nil, ""), "\n"); !strings.Contains(blocks, "mckean gave CRM_TOKEN") || strings.Contains(blocks, `"given"`) {
+	if blocks := strings.Join(NoteBlocksMarked(testCatalogue(), mustNotes(t, y), y.now, nil, ""), "\n"); !strings.Contains(blocks, "mckean gave CRM_TOKEN") || strings.Contains(blocks, `"given"`) {
 		t.Fatalf("the notes read:\n%s", blocks)
 	}
 
@@ -654,7 +654,7 @@ func TestGiveSecretTakesExactlyTheNamesAsked(t *testing.T) {
 	if strings.Join(keyed.Given, ",") != "PAIR_TOKEN,PAIR_UPDATE_TOKEN" {
 		t.Fatalf("keyed = %+v", keyed)
 	}
-	if lines := strings.Join(y.resolved(t)[0].Lines(), "\n"); !strings.Contains(lines, "mckean gave PAIR_TOKEN and PAIR_UPDATE_TOKEN") {
+	if lines := strings.Join(y.resolved(t)[0].Lines(testCatalogue()), "\n"); !strings.Contains(lines, "mckean gave PAIR_TOKEN and PAIR_UPDATE_TOKEN") {
 		t.Fatalf("the card:\n%s", lines)
 	}
 }
@@ -707,8 +707,8 @@ func TestGiveSecretRefusals(t *testing.T) {
 		t.Fatalf("giving to a declined ask: %v", err)
 	}
 	for _, r := range y.resolved(t) {
-		if r.Note.Seq == declined && !strings.Contains(strings.Join(r.Lines(), "\n"), "  mckean declined to give it") {
-			t.Fatalf("the declined card:\n%s", strings.Join(r.Lines(), "\n"))
+		if r.Note.Seq == declined && !strings.Contains(strings.Join(r.Lines(testCatalogue()), "\n"), "  mckean declined to give it") {
+			t.Fatalf("the declined card:\n%s", strings.Join(r.Lines(testCatalogue()), "\n"))
 		}
 	}
 }

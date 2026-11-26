@@ -15,6 +15,7 @@ import (
 	"golang.org/x/term"
 
 	"io"
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/runner"
 	"yardr.dev/yardr/internal/store"
 )
@@ -205,7 +206,7 @@ func lastNotes(notes []store.Note, n int, as map[string]string, home string) str
 	if as == nil {
 		as = map[string]string{}
 	}
-	blocks := store.NoteBlocksMarked(notes, time.Now(), as, home)
+	blocks := store.NoteBlocksMarked(agents.Catalogue(), notes, time.Now(), as, home)
 	if len(blocks) > n {
 		blocks = blocks[len(blocks)-n:]
 	}

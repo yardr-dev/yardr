@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -30,7 +31,7 @@ func TestMain(m *testing.M) {
 // events of any kind; over the socket a client may log dispatch decisions
 // and nothing else, so it cannot forge a `hook` event.
 func TestSocketCannotForgeEvents(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "yard.db"))
+	st, err := store.Open(filepath.Join(t.TempDir(), "yard.db"), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +98,7 @@ func TestParseFreshWitness(t *testing.T) {
 // it back and witnesses the approval, a stale one is refused there, and a
 // header that names no user and time refuses the call before it is made.
 func TestSocketCarriesAFreshWitness(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "yard.db"))
+	st, err := store.Open(filepath.Join(t.TempDir(), "yard.db"), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

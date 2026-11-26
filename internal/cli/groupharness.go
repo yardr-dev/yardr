@@ -15,7 +15,7 @@ import (
 // group stored before a file changed is so).
 func effortWords(cfg map[string]any) []string {
 	level, _ := cfg["effort"].(string)
-	h, ok := agents.Lookup(store.EffortKind(cfg))
+	h, ok := agents.Lookup(agents.Kind(cfg))
 	if level == "" || !ok || h.Flags.Effort == nil {
 		return nil
 	}
@@ -42,6 +42,6 @@ func harnessLines(w io.Writer, kind string, cfg map[string]any) {
 		fmt.Fprintf(w, "  harness %s always: %s\n", kind, strings.Join(h.Flags.Always, " "))
 	}
 	if words := effortWords(cfg); len(words) > 0 {
-		fmt.Fprintf(w, "  harness %s passes effort %v as: %s\n", store.EffortKind(cfg), cfg["effort"], strings.Join(words, " "))
+		fmt.Fprintf(w, "  harness %s passes effort %v as: %s\n", agents.Kind(cfg), cfg["effort"], strings.Join(words, " "))
 	}
 }

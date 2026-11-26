@@ -241,7 +241,7 @@ func TestHookAskSetup(t *testing.T) {
 		!slices.Equal(secretAsk.Ask.Secret.Env, []string{"LINEAR_SIGNING_SECRET"}) {
 		t.Fatalf("the secret ask stores %+v", secretAsk.Ask.Secret)
 	}
-	if lines := strings.Join(secretAsk.Lines(), "\n"); !strings.Contains(lines, "a secret: the signing secret for the hook linear (POST /hooks/linear), for the source linear (https://api.linear.app)") {
+	if lines := strings.Join(secretAsk.Lines(testCatalogue()), "\n"); !strings.Contains(lines, "a secret: the signing secret for the hook linear (POST /hooks/linear), for the source linear (https://api.linear.app)") {
 		t.Fatalf("the secret card:\n%s", lines)
 	} else {
 		wantReachInCard(t, lines, secretAsk.Ask.Secret)
@@ -294,7 +294,7 @@ func TestHookAskSetup(t *testing.T) {
 	if raw, err := os.ReadFile(file); err != nil || string(raw) != hookSecretValue {
 		t.Fatalf("the secret file holds %q, %v", raw, err)
 	}
-	if lines := strings.Join(y.asked(t, secretSeq).Lines(), "\n"); !strings.Contains(lines, "mckean gave LINEAR_SIGNING_SECRET") {
+	if lines := strings.Join(y.asked(t, secretSeq).Lines(testCatalogue()), "\n"); !strings.Contains(lines, "mckean gave LINEAR_SIGNING_SECRET") {
 		t.Fatalf("the given card:\n%s", lines)
 	}
 
@@ -640,7 +640,7 @@ func TestHookSecretRotation(t *testing.T) {
 		t.Fatal(err)
 	}
 	seq := y.ask(t, hookSecretAsk("linear", "linear"), "yardmaster")
-	if lines := strings.Join(y.asked(t, seq).Lines(), "\n"); !strings.Contains(lines,
+	if lines := strings.Join(y.asked(t, seq).Lines(testCatalogue()), "\n"); !strings.Contains(lines,
 		"replaces: what the file holds; where the hook stands already, deliveries signed with the old secret are refused from then on") {
 		t.Fatalf("the rotation card:\n%s", lines)
 	}

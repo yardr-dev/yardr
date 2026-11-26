@@ -154,3 +154,4 @@ flags:
     - label: always approve
       args: [--dangerously-skip-permissions]
       description: auto-approves all tool permission requests without prompting
+      strong: true

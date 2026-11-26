@@ -11,6 +11,7 @@ import (
 
 	bolt "go.etcd.io/bbolt"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -23,7 +24,7 @@ func TestSchema34StoreDropsRoutePriorities(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "yard.db")
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +111,7 @@ func TestSchema34StoreDropsRoutePriorities(t *testing.T) {
 	want := []string{reserve, named, plain, ownHigh}
 	slices.Sort(want)
 	for _, pass := range []string{"the upgrade", "the next start"} {
-		s, err := store.Open(path)
+		s, err := store.Open(path, agents.Catalogue())
 		if err != nil {
 			t.Fatalf("%s: %v", pass, err)
 		}

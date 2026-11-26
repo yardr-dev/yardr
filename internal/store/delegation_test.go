@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -153,7 +154,7 @@ func (y *delegationYard) body(t *testing.T, id uint64) store.DelegatedBody {
 // terminal's run of it carries and no more.
 func TestDelegatedRuns(t *testing.T) {
 	t.Parallel()
-	accept, _ := store.HarnessPreset("claude", "accept edits")
+	accept, _ := agents.Preset("claude", "accept edits")
 	cases := []struct {
 		name, command, of string
 		run               func(y *delegationYard, ctx context.Context) error
@@ -307,7 +308,7 @@ func itoa(n uint64) string { return strconv.FormatUint(n, 10) }
 func TestDelegatedMailNamesChangedKeys(t *testing.T) {
 	t.Parallel()
 	y := newDelegationYard(t)
-	accept, _ := store.HarnessPreset("claude", "accept edits")
+	accept, _ := agents.Preset("claude", "accept edits")
 	ctx := y.as(y.mail, "yardr group set builders model=opus")
 	if _, err := y.api.SetGroup(ctx, "builders", store.GroupEdit{Set: map[string]any{"model": "opus", "args": accept.Args}}, "yardmaster"); err != nil {
 		t.Fatal(err)
@@ -554,11 +555,12 @@ func TestDelegatedRefusals(t *testing.T) {
 		"hook --as":          {func() error { return hookAdd(store.Hook{Name: "h4", As: "clerk"}) }, "with --as is the operator's"},
 		"hook --secret-file": {func() error { return hookAdd(store.Hook{Name: "h5", SecretFile: secret}) }, "with --secret-file is the operator's"},
 	}
-	// Every preset the table marks Strong is refused, on a group and on a
+	// Every preset the files mark Strong is refused, on a group and on a
 	// crew member: the leg reads the mark, so a preset added later is held
 	// without a case of its own.
-	for kind, presets := range store.HarnessPresets {
-		for _, p := range presets {
+	for _, h := range agents.Harnesses {
+		kind := h.Kind
+		for _, p := range h.Flags.Permissions {
 			if !p.Strong {
 				continue
 			}
@@ -572,7 +574,7 @@ func TestDelegatedRefusals(t *testing.T) {
 				want string
 			}{func() error {
 				edit := store.GroupEdit{Set: map[string]any{"kind": kind, "args": args}}
-				if store.HarnessNoModelFlag[kind] {
+				if h.Flags.Model == "" {
 					// The group holds a model, which this kind takes no
 					// flag for; the leg carries the unset, as it does model.
 					edit.Unset = []string{"model"}

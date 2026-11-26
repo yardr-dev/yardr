@@ -263,7 +263,7 @@ func harnessNeed(kind, what string) need {
 // missingHarness is the harness of kind as it is when there is none: with
 // where to get it, and how a program that fetches does.
 func missingHarness(kind, what string) need {
-	n := need{Program: store.Executable(kind), For: what, Harness: kind, Get: agents.InstallHint(kind)}
+	n := need{Program: agents.Executable(kind), For: what, Harness: kind, Get: agents.InstallHint(kind)}
 	if h, ok := agents.Lookup(kind); ok {
 		n.HarnessFile = h.Version
 		n.HarnessAlways = h.Flags.Always
@@ -303,7 +303,7 @@ func (n need) getLines() string {
 // onPath reports whether a program named as kind's harness is on PATH. That
 // is all it says: whether the program is the harness is what probe asks.
 func onPath(kind string) bool {
-	_, err := lookPath(store.Executable(kind))
+	_, err := lookPath(agents.Executable(kind))
 	return err == nil
 }
 
@@ -400,7 +400,7 @@ func machineNeeds(ctx context.Context, uses []harnessUse, try bool) []need {
 	}
 	if none {
 		for _, k := range presetKinds() {
-			missing = append(missing, store.Executable(k))
+			missing = append(missing, agents.Executable(k))
 		}
 	}
 	finds := loginShellFinds(ctx, missing)
@@ -411,7 +411,7 @@ func machineNeeds(ctx context.Context, uses []harnessUse, try bool) []need {
 	}
 	if none {
 		for _, k := range presetKinds() {
-			if p := finds[store.Executable(k)]; p != "" && !slices.ContainsFunc(out, func(n need) bool { return n.Harness == k }) {
+			if p := finds[agents.Executable(k)]; p != "" && !slices.ContainsFunc(out, func(n need) bool { return n.Harness == k }) {
 				n := harnessNeed(k, forNewYard)
 				n.Optional, n.LoginPath = true, p
 				out = append(out, n)

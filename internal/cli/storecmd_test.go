@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/server"
 	"yardr.dev/yardr/internal/store"
@@ -25,7 +26,7 @@ func yardWithoutServer(t *testing.T) *config.Config {
 	if err := os.MkdirAll(cfg.Home, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	st, err := store.Open(cfg.DBPath())
+	st, err := store.Open(cfg.DBPath(), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +73,7 @@ func TestCompactWithoutAServer(t *testing.T) {
 	if _, err := os.Stat(cfg.DBPath() + ".compact"); err == nil {
 		t.Error("the compaction's temporary file was left behind")
 	}
-	st, err := store.Open(cfg.DBPath())
+	st, err := store.Open(cfg.DBPath(), agents.Catalogue())
 	if err != nil {
 		t.Fatalf("the compacted store: %v", err)
 	}

@@ -30,7 +30,7 @@ var askNow = time.Date(2026, 10, 12, 12, 0, 0, 0, time.UTC)
 func newAskYard(t *testing.T) *askYard {
 	t.Helper()
 	y := &askYard{ctx: context.Background(), now: askNow}
-	s, err := Open(filepath.Join(t.TempDir(), "y.db"))
+	s, err := openStore(t, filepath.Join(t.TempDir(), "y.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -405,7 +405,7 @@ func TestAnswerDecline(t *testing.T) {
 	if r[0].State != AskDeclined {
 		t.Fatalf("resolved = %+v", r)
 	}
-	lines := strings.Join(r[0].Lines(), "\n")
+	lines := strings.Join(r[0].Lines(testCatalogue()), "\n")
 	if !strings.Contains(lines, "mckean declined to decide this: the release owns Friday") {
 		t.Fatalf("decline reads:\n%s", lines)
 	}
@@ -488,7 +488,7 @@ func TestAskLines(t *testing.T) {
 	y.answer(t, Answer{Ask: seq, Option: 1, Words: "go"}, "mckean")
 
 	r := y.resolved(t)
-	text := strings.Join(r[0].Lines(), "\n")
+	text := strings.Join(r[0].Lines(testCatalogue()), "\n")
 	for _, want := range []string{
 		"ask 1 · answered",
 		"to mckean",
@@ -519,7 +519,7 @@ func TestAskLines(t *testing.T) {
 	o := y2.ask(t, linksAsk(), "yardmaster")
 	y2.now = y2.now.Add(time.Hour)
 	y2.answer(t, Answer{Ask: o, Later: true}, "mckean")
-	text = strings.Join(y2.resolved(t)[0].Lines(), "\n")
+	text = strings.Join(y2.resolved(t)[0].Lines(testCatalogue()), "\n")
 	if !strings.Contains(text, "put aside until "+y2.now.Add(LaterFor).Local().Format("2006-01-02 15:04")) ||
 		!strings.Contains(text, "back sooner if yardmaster writes") {
 		t.Fatalf("aside reads:\n%s", text)
@@ -535,13 +535,13 @@ func TestAskLines(t *testing.T) {
 	w := linksAsk()
 	w.Options, w.Recommend, w.Why = nil, 0, ""
 	wseq := y3.ask(t, w, "yardmaster")
-	text = strings.Join(y3.resolved(t)[0].Lines(), "\n")
+	text = strings.Join(y3.resolved(t)[0].Lines(testCatalogue()), "\n")
 	if !strings.Contains(text, "words wanted") || !strings.Contains(text, "--words - with the words on stdin") {
 		t.Fatalf("a words ask reads:\n%s", text)
 	}
 	_ = wseq
 	broken := ResolvedAsk{Note: Note{Seq: 9, Kind: NoteAsk, Text: "{oops"}, AskErr: errBrokenTest}
-	if text := strings.Join(broken.Lines(), "\n"); !strings.Contains(text, "ask 9") || strings.Contains(text, "{oops") {
+	if text := strings.Join(broken.Lines(testCatalogue()), "\n"); !strings.Contains(text, "ask 9") || strings.Contains(text, "{oops") {
 		t.Fatalf("a corrupt ask reads:\n%s", text)
 	}
 	t.Run("weight mark", testAskWeightMarkNotForgeable)
@@ -558,7 +558,7 @@ func testAskWeightMarkNotForgeable(t *testing.T) {
 	now := time.Date(2026, 10, 12, 12, 0, 0, 0, time.UTC)
 	card := func(ask Ask) []string {
 		r := ResolvedAsk{Note: Note{Seq: 1, Kind: NoteAsk, Author: "yardmaster", At: now}, Ask: ask, State: AskOpen, now: now}
-		return r.Lines()
+		return r.Lines(testCatalogue())
 	}
 	// weighed are the card's lines at the yard's column that start with
 	// the mark: the weight lines it reads as carrying.

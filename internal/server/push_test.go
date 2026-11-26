@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/edgelink"
 	"yardr.dev/yardr/internal/standin"
 	"yardr.dev/yardr/internal/store"
@@ -35,7 +36,7 @@ func pushYard(t *testing.T) *pushTestYard {
 	c := home(t)
 	ctx := context.Background()
 	token, _ := edgeYard(t, c, edge, srv, true)
-	st, err := store.Open(c.DBPath())
+	st, err := store.Open(c.DBPath(), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -83,7 +84,7 @@ func askMovesTakeOverTheQuestion(t *testing.T) {
 	if hand.Note.Seq != seq || hand.State != store.AskTakenBack {
 		t.Fatalf("the question on arrival: ask %d %s, want ask %d taken back", hand.Note.Seq, hand.State, seq)
 	}
-	if lines := strings.Join(hand.Lines(), "\n"); !strings.Contains(lines,
+	if lines := strings.Join(hand.Lines(agents.Catalogue()), "\n"); !strings.Contains(lines,
 		fmt.Sprintf("taken back by yard: asks %d and %d are the question now, with its options", cards[0].Note.Seq, cards[1].Note.Seq)) {
 		t.Fatalf("the question reads:\n%s", lines)
 	}
@@ -126,7 +127,7 @@ func askMovesTakeOverTheQuestion(t *testing.T) {
 	}
 	// The pick moved the bead, so the card says no more of how to answer it: the
 	// yard takes no pick after one that moved it.
-	if lines := strings.Join(after[1].Lines(), "\n"); !strings.Contains(lines, "ada picked 2 (Add a fallback): as you suggest") ||
+	if lines := strings.Join(after[1].Lines(agents.Catalogue()), "\n"); !strings.Contains(lines, "ada picked 2 (Add a fallback): as you suggest") ||
 		strings.Contains(lines, "answer with") {
 		t.Fatalf("the card reads:\n%s\nwant the pick and no way to answer again", lines)
 	}
@@ -223,7 +224,7 @@ func askMovesTakeOverTheQuestion(t *testing.T) {
 	}
 	// A hand ask takes a newer pick whatever moves it names, so it still says
 	// how to give one.
-	if lines := strings.Join(stageAsks(t, y.api, id)[0].Lines(), "\n"); !strings.Contains(lines, fmt.Sprintf("answer with: yardr bead answer %s %d <n> [words]", id, seq)) {
+	if lines := strings.Join(stageAsks(t, y.api, id)[0].Lines(agents.Catalogue()), "\n"); !strings.Contains(lines, fmt.Sprintf("answer with: yardr bead answer %s %d <n> [words]", id, seq)) {
 		t.Fatalf("the hand ask answered early reads:\n%s\nwant its way to answer again", lines)
 	}
 }

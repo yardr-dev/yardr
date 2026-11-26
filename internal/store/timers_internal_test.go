@@ -28,7 +28,7 @@ var timerAt = time.Date(2026, 10, 5, 9, 0, 0, 0, time.UTC)
 func newTimerYard(t *testing.T) *timerYard {
 	t.Helper()
 	y := &timerYard{t: t, at: timerAt}
-	s, err := Open(filepath.Join(t.TempDir(), "y.db"))
+	s, err := openStore(t, filepath.Join(t.TempDir(), "y.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

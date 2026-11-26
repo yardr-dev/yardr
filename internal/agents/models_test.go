@@ -3,8 +3,6 @@ package agents
 import (
 	"slices"
 	"testing"
-
-	"yardr.dev/yardr/internal/store"
 )
 
 // Samples are trimmed from the installed tools' real output.
@@ -127,7 +125,7 @@ func TestParseMuseCatalog(t *testing.T) {
 
 func TestPresetsAreHerdrKinds(t *testing.T) {
 	for _, p := range Harnesses {
-		if !slices.Contains(store.HerdrKinds, p.Kind) {
+		if !slices.Contains(HerdrKinds, p.Kind) {
 			t.Errorf("preset %s is not a kind herdr can start", p.Kind)
 		}
 	}
@@ -148,7 +146,7 @@ func TestUnattendedArgs(t *testing.T) {
 	}
 	// Every kind is offered once, presets first.
 	kinds := Kinds()
-	if len(kinds) != len(store.HerdrKinds) || kinds[0] != "claude" || !IsKind("gemini") || IsKind("nope") {
+	if len(kinds) != len(HerdrKinds) || kinds[0] != "claude" || !IsKind("gemini") || IsKind("nope") {
 		t.Fatalf("kinds = %v", kinds)
 	}
 	for _, p := range Harnesses {

@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -76,7 +77,7 @@ func TestClassAllows(t *testing.T) {
 func TestSocketPeerWithoutCredentialsCanOnlyRead(t *testing.T) {
 	t.Parallel()
 
-	st, err := store.Open(filepath.Join(t.TempDir(), "yard.db"))
+	st, err := store.Open(filepath.Join(t.TempDir(), "yard.db"), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

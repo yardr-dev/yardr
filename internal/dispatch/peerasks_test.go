@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -129,7 +130,7 @@ func TestPeerAskAnswersComeHome(t *testing.T) {
 			if r.State != store.AskAnswered || r.Current.Note.Author != "mckean@airy" || r.Current.Answer.Option != 1 || r.Current.Answer.Words != "tonight" {
 				t.Fatalf("mac's ask after the pick = %+v", r)
 			}
-			if lines := strings.Join(r.Lines(), "\n"); !strings.Contains(lines, "mckean@airy picked 1 (Move them now): tonight") {
+			if lines := strings.Join(r.Lines(agents.Catalogue()), "\n"); !strings.Contains(lines, "mckean@airy picked 1 (Move them now): tonight") {
 				t.Fatalf("mac shows:\n%s", lines)
 			}
 

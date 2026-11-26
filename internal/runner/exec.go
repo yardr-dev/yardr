@@ -15,6 +15,7 @@ import (
 	"strings"
 	"syscall"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/dispatch"
 	"yardr.dev/yardr/internal/peer"
@@ -87,7 +88,7 @@ func (e *Exec) Start(ctx context.Context, job dispatch.Job) (map[string]any, err
 	// The store asks this of every group it writes. Asked again for one
 	// stored before it did, of what the command needs only: a key nothing
 	// reads is doctor's to report, and no reason not to run.
-	for _, err := range store.ConfigProblems(store.GroupConfig, job.Group.Name, "exec", job.Group.Config) {
+	for _, err := range store.ConfigProblems(agents.Catalogue(), store.GroupConfig, job.Group.Name, "exec", job.Group.Config) {
 		if !errors.Is(err, store.ErrUnknownConfigKey) {
 			return nil, err
 		}

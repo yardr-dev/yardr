@@ -913,7 +913,7 @@ func (s *yardState) lines(home string) []docLine {
 		}
 		out = append(out, docLine{tagFault, "crew", fmt.Sprintf("%s is not logged in: run %s in another terminal and log in there; "+
 			"then answer the login in its pane or start it fresh (%s %s)",
-			name, store.Executable(l.Kind), yardr, restart)})
+			name, agents.Executable(l.Kind), yardr, restart)})
 	}
 	if len(s.Held) == 0 {
 		out = append(out, docLine{tagOK, "held", "no bead is held"})
@@ -990,14 +990,14 @@ func configNotes(ctx context.Context, st store.API, crew []store.CrewMember, gro
 	operator := all[store.OperatorSetting]
 	mine := defaultClaudeAccount()
 	for _, g := range groups {
-		for _, err := range store.ConfigProblems(store.GroupConfig, g.Name, g.Runner, g.Config) {
+		for _, err := range store.ConfigProblems(agents.Catalogue(), store.GroupConfig, g.Name, g.Runner, g.Config) {
 			notes = append(notes, fmt.Sprintf("%v. Change it: %s group set %s <key>=<value>, or --unset <key>", err, yardr, g.Name))
 		}
 		notes = append(notes, groupLoginNotes(g, operator, mine, yardr)...)
 		notes = append(notes, presetDriftNotes(g, all[store.DefaultKindSetting], yardr)...)
 	}
 	for _, r := range crew {
-		for _, err := range store.ConfigProblems(store.CrewConfig, r.Name, r.Runner, r.Config) {
+		for _, err := range store.ConfigProblems(agents.Catalogue(), store.CrewConfig, r.Name, r.Runner, r.Config) {
 			notes = append(notes, fmt.Sprintf("%v. Change it: %s crew set %s <key>=<value>, or --unset <key>", err, yardr, r.Name))
 		}
 	}

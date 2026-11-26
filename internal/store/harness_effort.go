@@ -2,7 +2,6 @@ package store
 
 import (
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 )
@@ -128,46 +127,23 @@ func (e *Effort) check() error {
 	return nil
 }
 
-// HarnessEfforts are the kinds that take an effort, as their files say it
-// (flags.effort). The store holds a group's effort to its kind's levels, so
-// that it imports no internal package; a test in agents pins this table to
-// the catalogue, so a file that changes a flag or a level fails until this
-// follows. A kind that is not here takes none. Read-only.
-var HarnessEfforts = map[string]Effort{
-	"agy":    {Args: []string{"--effort", LevelArg}, Levels: []string{"low", "medium", "high", "xhigh", "max"}},
-	"claude": {Args: []string{"--effort", LevelArg}, Levels: []string{"low", "medium", "high", "xhigh", "max"}},
-	"codex":  {Args: []string{"-c", "model_reasoning_effort=" + LevelArg}, Levels: []string{"low", "medium", "high", "xhigh", "max", "ultra"}},
-	"muse": {Args: []string{"--reasoning-effort", LevelArg}, Aliases: []string{"--effort"},
-		Levels: []string{"none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"}},
-}
-
-// EffortKind is the kind that takes the effort of a herdr config: the one it
-// names, else the one the runner starts for a config that names none (claude:
-// agents.DefaultKind, which a test there holds to this).
-func EffortKind(cfg map[string]any) string {
-	if kind, _ := cfg["kind"].(string); kind != "" {
-		return kind
-	}
-	return "claude"
-}
-
 // effortProblems holds the effort of a herdr group's config cfg to its kind:
 // the kind takes one, the level is one of its levels, and the group's args do
 // not already pass it (two words for one setting would leave which wins to the
 // harness). A write that leaves effort, kind and args as old holds them is not
 // judged, so a group stored before a harness file changed can still be
 // changed, one key at a time, as configProblems has it.
-func effortProblems(subject string, cfg, old map[string]any) []error {
+func effortProblems(cat Catalogue, subject string, cfg, old map[string]any) []error {
 	level, ok := cfg["effort"].(string)
 	if !ok {
 		return nil
 	}
-	if was, had := old["effort"].(string); had && was == level && EffortKind(old) == EffortKind(cfg) &&
+	if was, had := old["effort"].(string); had && was == level && cat.configKind(old) == cat.configKind(cfg) &&
 		slices.Equal(argWords(old["args"]), argWords(cfg["args"])) {
 		return nil
 	}
-	kind := EffortKind(cfg)
-	e, takes := HarnessEfforts[kind]
+	kind := cat.configKind(cfg)
+	e, takes := cat.effort(kind)
 	switch {
 	case level == "":
 		// No level is --unset's, which is what returns an agent to its
@@ -180,7 +156,7 @@ func effortProblems(subject string, cfg, old map[string]any) []error {
 		return []error{fmt.Errorf("%s: effort %s is no level: it is the word group set takes to return a group to its harness's own, and is never stored. Leave effort out, or unset it", subject, EffortDefault)}
 	case !takes:
 		return []error{fmt.Errorf("%s: effort is for the kinds that take one (%s), and %s is not: its harness file names no flag for it. Unset effort, or set the group's kind to one that takes it",
-			subject, strings.Join(slices.Sorted(maps.Keys(HarnessEfforts)), ", "), kind)}
+			subject, strings.Join(cat.effortKinds(), ", "), kind)}
 	case !slices.Contains(e.Levels, level):
 		return []error{fmt.Errorf("%s: effort %q is no level %s takes (it takes: %s)", subject, level, kind, strings.Join(e.Levels, ", "))}
 	}

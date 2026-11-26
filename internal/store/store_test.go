@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
 	"yardr.dev/yardr/internal/testload"
@@ -587,7 +588,7 @@ func TestSingleOwnerAndConcurrentWrites(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "yard.db")
 	s := storetest.Open(t, path)
-	if _, err := store.Open(path); !errors.Is(err, store.ErrLocked) {
+	if _, err := store.Open(path, agents.Catalogue()); !errors.Is(err, store.ErrLocked) {
 		t.Fatalf("second open err = %v, want ErrLocked", err)
 	}
 	ctx := context.Background()

@@ -21,3 +21,4 @@ flags:
     - label: auto
       args: [--auto]
       description: auto-approves anything not explicitly denied
+      strong: true

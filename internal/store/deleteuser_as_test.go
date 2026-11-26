@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -56,7 +57,7 @@ func userRemovedAsGrants(t *testing.T, s store.API, ctx context.Context) string 
 func TestDeleteUserRemovesAsGrantAndCredential(t *testing.T) {
 	t.Parallel()
 	home := t.TempDir()
-	s, err := store.Open(filepath.Join(home, "yard.db"))
+	s, err := store.Open(filepath.Join(home, "yard.db"), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +186,7 @@ func TestDeleteUserRemovesAsGrantAndCredential(t *testing.T) {
 func TestDeleteUserRefusesDefaultEnvFileSymlink(t *testing.T) {
 	t.Parallel()
 	home := t.TempDir()
-	s, err := store.Open(filepath.Join(home, "yard.db"))
+	s, err := store.Open(filepath.Join(home, "yard.db"), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +230,7 @@ func TestDeleteUserRefusesDefaultEnvFileSymlink(t *testing.T) {
 func TestDeleteUserSharedFileRefused(t *testing.T) {
 	t.Parallel()
 	home := t.TempDir()
-	s, err := store.Open(filepath.Join(home, "yard.db"))
+	s, err := store.Open(filepath.Join(home, "yard.db"), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -303,7 +304,7 @@ func TestDeleteUserSharedFileRefused(t *testing.T) {
 func TestDeleteUserBlockedByDefaultAndUnclearable(t *testing.T) {
 	t.Parallel()
 	home := t.TempDir()
-	s, err := store.Open(filepath.Join(home, "yard.db"))
+	s, err := store.Open(filepath.Join(home, "yard.db"), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

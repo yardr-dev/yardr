@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/eta"
 	"yardr.dev/yardr/internal/store"
 )
@@ -29,7 +30,7 @@ func newArrivalsTest(t testing.TB) *arrivalsTest {
 	store.SetClockForTest(func() time.Time { return y.now })
 	t.Cleanup(func() { store.SetClockForTest(time.Now) })
 	var err error
-	if y.Store, err = store.Open(filepath.Join(t.TempDir(), "y.db")); err != nil {
+	if y.Store, err = store.Open(filepath.Join(t.TempDir(), "y.db"), agents.Catalogue()); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { y.Close(context.Background()) })

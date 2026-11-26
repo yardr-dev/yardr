@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/scripttest"
 	"yardr.dev/yardr/internal/source"
 	"yardr.dev/yardr/internal/store"
@@ -36,7 +37,7 @@ calls:
 func TestSourceCallRun(t *testing.T) {
 	t.Parallel()
 	home := t.TempDir()
-	s, err := store.Open(filepath.Join(home, "yard.db"))
+	s, err := store.Open(filepath.Join(home, "yard.db"), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

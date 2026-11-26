@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/dispatch"
 	"yardr.dev/yardr/internal/rpc"
@@ -837,7 +838,7 @@ func (y *yard) notesOf(id string) string {
 		y.t.Fatal(err)
 	}
 	var sb strings.Builder
-	for _, block := range store.NoteBlocksMarked(notes, time.Now(), map[string]string{}, y.home) {
+	for _, block := range store.NoteBlocksMarked(agents.Catalogue(), notes, time.Now(), map[string]string{}, y.home) {
 		fmt.Fprintf(&sb, "  %s\n\n", strings.ReplaceAll(block, "\n", "\n  "))
 	}
 	return sb.String()

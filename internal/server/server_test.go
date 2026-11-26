@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/peer"
 	"yardr.dev/yardr/internal/preview"
@@ -192,7 +193,7 @@ func TestNewerClientReplacesTheServer(t *testing.T) {
 		ex.calls = append(ex.calls, env)
 		ex.mu.Unlock()
 		// The store must be closed before the new build opens it.
-		st, err := store.Open(c.DBPath())
+		st, err := store.Open(c.DBPath(), agents.Catalogue())
 		if err != nil {
 			t.Errorf("store still open at exec: %v", err)
 			return err
@@ -727,7 +728,7 @@ func TestStoreOutlivesCallsPastTheShutdownGrace(t *testing.T) {
 	t.Run("preview processes are stopped before the store closes", func(t *testing.T) {
 		c := home(t)
 		ctx := context.Background()
-		st, err := store.Open(c.DBPath())
+		st, err := store.Open(c.DBPath(), agents.Catalogue())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -844,7 +845,7 @@ func TestCallDuringReplaceLandsOnTheNewBuild(t *testing.T) {
 	t.Cleanup(func() { preview.TerminateGrace = oldGrace })
 	c := home(t)
 	ctx := context.Background()
-	st, err := store.Open(c.DBPath())
+	st, err := store.Open(c.DBPath(), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

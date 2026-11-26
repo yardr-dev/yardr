@@ -101,7 +101,7 @@ func packApplyTakeShowsKeptWhole(t *testing.T) {
 			t.Errorf("the card says %q of what it does not take:\n%s", not, joined)
 		}
 	}
-	lines := strings.Join(got.Lines(), "\n")
+	lines := strings.Join(got.Lines(testCatalogue()), "\n")
 	for _, want := range []string{
 		"the change to file roles/b.md (sha256 " + roleSHA("role by hand\n") + " -> " + roleSHA("role by the pack\n") + "), whole as carried:",
 		"-role by hand",

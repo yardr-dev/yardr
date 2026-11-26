@@ -265,7 +265,7 @@ func (w *wtx) ownEntry(name string) (bool, error) {
 // typed (3.2). A preset marked Strong (harness.go) is refused: it skips
 // the agent's permission prompts, which only a card sets (3.5). Args
 // removed are none, which is no preset.
-func presetOnly(subject, kind string, args any, has bool) error {
+func presetOnly(cat Catalogue, subject, kind string, args any, has bool) error {
 	if !has {
 		return nil
 	}
@@ -280,7 +280,7 @@ func presetOnly(subject, kind string, args any, has bool) error {
 		given = append(given, s)
 	}
 	if given != nil {
-		for _, p := range HarnessPresets[kind] {
+		for _, p := range cat.presets(kind) {
 			if !slices.Equal(p.Args, given) {
 				continue
 			}
@@ -291,7 +291,7 @@ func presetOnly(subject, kind string, args any, has bool) error {
 		}
 	}
 	return fmt.Errorf("%s: a delegated run never carries free args: name one of the %s presets as preset=<preset> (%s)",
-		subject, or(kind, "kind's"), or(strings.Join(HarnessPresetLabels(kind), ", "), "it has none"))
+		subject, or(kind, "kind's"), or(strings.Join(cat.presetLabels(kind), ", "), "it has none"))
 }
 
 // kindOf is the harness kind a definition's config starts agents of: the
@@ -328,7 +328,7 @@ func (w *wtx) delegatedDefine(subject string, before, after map[string]any, keys
 	newArgs, hasArgs := a["args"]
 	argsChanged := hadArgs != hasArgs || !reflect.DeepEqual(oldArgs, newArgs)
 	if kindChanged || argsChanged {
-		if err := presetOnly(subject, kind, newArgs, hasArgs); err != nil {
+		if err := presetOnly(w.catalogue(), subject, kind, newArgs, hasArgs); err != nil {
 			return err
 		}
 	}
@@ -346,7 +346,7 @@ func (w *wtx) delegatedDefine(subject string, before, after map[string]any, keys
 				}
 			}
 		case "kind":
-			if k, ok := is.(string); has && (!ok || HarnessLabels[k] == "") {
+			if k, ok := is.(string); has && (!ok || w.catalogue().label(k) == "") {
 				return fmt.Errorf("%s: kind %v is no harness kind the yard knows", subject, is)
 			}
 		}

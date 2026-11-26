@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/scripttest"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
@@ -498,7 +499,7 @@ func TestPeerBeadReturnSettlesOffTheWrite(t *testing.T) {
 		// Serial: it shims git on the process PATH, which parallel tests cannot share.
 		path := filepath.Join(t.TempDir(), "yard.db")
 		// Closed below, not by a cleanup that would close it a second time.
-		first, err := store.Open(path)
+		first, err := store.Open(path, agents.Catalogue())
 		if err != nil {
 			t.Fatal(err)
 		}

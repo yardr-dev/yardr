@@ -24,7 +24,7 @@ func TestPeerMailLimit(t *testing.T) {
 	clock = func() time.Time { return at }
 	t.Cleanup(func() { clock = time.Now })
 
-	s, err := Open(filepath.Join(t.TempDir(), "y.db"))
+	s, err := openStore(t, filepath.Join(t.TempDir(), "y.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func TestPeerMailLimitIsToldAndSet(t *testing.T) {
 	clock = func() time.Time { return at }
 	t.Cleanup(func() { clock = time.Now })
 
-	s, err := Open(filepath.Join(t.TempDir(), "y.db"))
+	s, err := openStore(t, filepath.Join(t.TempDir(), "y.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -294,7 +294,7 @@ func mailLinked(t *testing.T) (a, b *linked, key map[string][]byte) {
 	ctx := context.Background()
 	key = map[string][]byte{}
 	open := func(name string) *linked {
-		s, err := Open(filepath.Join(t.TempDir(), name+".db"))
+		s, err := openStore(t, filepath.Join(t.TempDir(), name+".db"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -508,7 +508,7 @@ func TestPeerMailLimitReachesSenderByPull(t *testing.T) {
 // telling it stores the refusal as now.
 func TestPeerRefusedReadsABareReason(t *testing.T) {
 	t.Parallel()
-	s, err := Open(filepath.Join(t.TempDir(), "y.db"))
+	s, err := openStore(t, filepath.Join(t.TempDir(), "y.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

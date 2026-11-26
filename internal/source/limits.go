@@ -11,7 +11,7 @@ import (
 )
 
 // herdrKinds are the agent kinds herdr 0.9 can start, a copy of
-// store.HerdrKinds: this package cannot import the store until the store
+// agents.HerdrKinds: this package cannot import the store until the store
 // stops importing it (yardr-j8vt), and it cannot import agents since agents
 // imports the store (yardr-8nca). The copy goes away with yardr-j8vt.
 var herdrKinds = []string{"pi", "claude", "codex", "gemini", "cursor", "devin", "agy", "cline", "omp",

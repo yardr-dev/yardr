@@ -233,6 +233,9 @@ type Store struct {
 	// policy says who may do what (SetPolicy, policy.go); nil is
 	// CorePolicy.
 	policy Policy
+	// cat is what the store knows of the harness kinds, given at Open and
+	// complete (Catalogue.check): no read of it asks whether it is there.
+	cat Catalogue
 	// daemonCheck is whether a socket caller's pid is the daemon's
 	// (SetDaemonChecker, users.go); nil where no server owns the store,
 	// and a call with a caller on such a store is refused the daemon's
@@ -298,10 +301,16 @@ func (s *Store) Logger() *slog.Logger { return s.log.Load() }
 // it. The root test pins it to the key config builds.
 const NoSyncEnv = "YARDR_STORE_NOSYNC"
 
-// Open opens (creating if needed) the store file. It fails with ErrLocked
-// if another process holds it, with ErrNewerSchema if a newer yardr wrote
-// it, and with ErrCounterIDs if it is from before beads had UUIDs.
-func Open(path string) (*Store, error) {
+// Open opens (creating if needed) the store file, which reads what the
+// harness files say from cat alone. It fails with ErrNoCatalogue, before it
+// touches the file, if cat is not complete, with ErrLocked if another
+// process holds the file, with ErrNewerSchema if a newer yardr wrote it, and
+// with ErrCounterIDs if it is from before beads had UUIDs.
+func Open(path string, cat Catalogue) (*Store, error) {
+	if err := cat.check(); err != nil {
+		return nil, err
+	}
+	cat = cat.indexed()
 	noSync := os.Getenv(NoSyncEnv) == "1"
 	db, err := bolt.Open(path, 0o600, &bolt.Options{Timeout: time.Second, NoSync: noSync, NoGrowSync: noSync})
 	if errors.Is(err, berrors.ErrTimeout) {
@@ -349,7 +358,7 @@ func Open(path string) (*Store, error) {
 	if noSync {
 		db.MaxBatchDelay = 0
 	}
-	s := &Store{db: db, home: home, nudge: make(chan struct{}, 1), pumped: make(chan struct{}),
+	s := &Store{db: db, home: home, cat: cat, nudge: make(chan struct{}, 1), pumped: make(chan struct{}),
 		settleNudge: make(chan struct{}, 1), settled: make(chan struct{})}
 	s.hub.init()
 	head, err := s.Head(context.Background())

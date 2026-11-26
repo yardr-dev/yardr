@@ -16,7 +16,7 @@ func TestPeerSaidWhen(t *testing.T) {
 	clock = func() time.Time { return at }
 	t.Cleanup(func() { clock = time.Now })
 
-	s, err := Open(filepath.Join(t.TempDir(), "y.db"))
+	s, err := openStore(t, filepath.Join(t.TempDir(), "y.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

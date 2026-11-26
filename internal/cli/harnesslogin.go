@@ -176,7 +176,7 @@ operator the way the machine's own login does.`,
 					return err
 				}
 			}
-			exe := store.Executable(h.Kind)
+			exe := agents.Executable(h.Kind)
 			if !a.json {
 				if r := h.LoginRecipe; r == nil {
 					if group != "" {
@@ -344,7 +344,7 @@ func leadLogin(ctx context.Context, h store.Harness, path string, in io.Reader, 
 	// reference it waits under where the yard has one.
 	prompts := make(chan string, 4)
 	cmd.Stdout, cmd.Stderr = io.MultiWriter(&loginScreen{recipe: r, say: say, secrets: secrets, prompts: prompts, over: over}, &printed), &errs
-	command := store.Executable(h.Kind) + " " + strings.Join(args, " ")
+	command := agents.Executable(h.Kind) + " " + strings.Join(args, " ")
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("%s: %w", command, err)
 	}

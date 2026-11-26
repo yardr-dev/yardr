@@ -242,7 +242,7 @@ func (w *wtx) userLoginCard(argv []string, asking bool) (AskRun, error) {
 	if w.store != nil {
 		home = w.store.home
 	}
-	plan, err := PlanUserLogin(home, name, "claude", groups, routes, depots, users, ymName, ym, exec.LookPath)
+	plan, err := PlanUserLogin(w.catalogue(), home, name, "claude", groups, routes, depots, users, ymName, ym, exec.LookPath)
 	if err != nil {
 		return AskRun{}, err
 	}

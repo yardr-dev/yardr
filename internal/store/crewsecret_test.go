@@ -76,7 +76,7 @@ func TestCrewAskIsStoredWithTheDeclarationsNames(t *testing.T) {
 		t.Fatalf("the unnarrowed ask asks for %q", got)
 	}
 
-	lines := strings.Join(rs[0].Lines(), "\n")
+	lines := strings.Join(rs[0].Lines(testCatalogue()), "\n")
 	for _, want := range []string{
 		"  " + crewSecretLine,
 		"  it goes to a file only the yard's server reads; no agent is shown it",
@@ -202,7 +202,7 @@ func TestGiveSecretGivesACrewMembersOwnCredential(t *testing.T) {
 	if len(answers) != 1 || answers[0].Author != "mckean" || answers[0].Text != `{"ask":`+itoa(seq)+`,"given":["CRM_TOKEN"]}` {
 		t.Fatalf("the answer notes = %+v", answers)
 	}
-	if lines := strings.Join(y.resolved(t)[0].Lines(), "\n"); !strings.Contains(lines, "  mckean gave CRM_TOKEN") || strings.Contains(lines, "answer with") {
+	if lines := strings.Join(y.resolved(t)[0].Lines(testCatalogue()), "\n"); !strings.Contains(lines, "  mckean gave CRM_TOKEN") || strings.Contains(lines, "answer with") {
 		t.Fatalf("the card:\n%s", lines)
 	}
 	e := lastAnswer(t, y)

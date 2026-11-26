@@ -243,7 +243,7 @@ func TestUserAsksKeepsThirtyTwoViewers(t *testing.T) {
 // stage of ada's group people, under the depot shop's flow.
 func waitingCacheYard(t *testing.T) *Store {
 	t.Helper()
-	s, err := Open(filepath.Join(t.TempDir(), "y.db"))
+	s, err := openStore(t, filepath.Join(t.TempDir(), "y.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -216,10 +216,10 @@ calls:
 
 	// Secret asks give a value whatever their form; one for a user's own
 	// credential lets a call made as them read it.
-	if got := weightClasses(secretWeight(AskSecret{Source: "crm", Env: []string{"CRM_TOKEN"}, Host: "https://crm.example.com"})); !slices.Equal(got, []string{WeightCredential}) {
+	if got := weightClasses(secretWeight(testCatalogue(), AskSecret{Source: "crm", Env: []string{"CRM_TOKEN"}, Host: "https://crm.example.com"})); !slices.Equal(got, []string{WeightCredential}) {
 		t.Errorf("a source's credential weighs %v", got)
 	}
-	if got := weightClasses(secretWeight(AskSecret{Source: "crm", Env: []string{"CRM_TOKEN"}, As: "ada"})); !slices.Equal(got, []string{WeightCredential, WeightAsUser}) {
+	if got := weightClasses(secretWeight(testCatalogue(), AskSecret{Source: "crm", Env: []string{"CRM_TOKEN"}, As: "ada"})); !slices.Equal(got, []string{WeightCredential, WeightAsUser}) {
 		t.Errorf("a user's own credential weighs %v", got)
 	}
 	// A mapping card's picks write a user's identity.

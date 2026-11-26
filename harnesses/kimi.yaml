@@ -51,9 +51,11 @@ flags:
     - label: yolo
       args: [--yolo]
       description: auto-approves tool calls; may still ask questions
+      strong: true
     - label: auto
       args: [--auto]
       description: fully autonomous; asks nothing
+      strong: true
 
 # The models to pick from: ~/.kimi-code/config.toml of 2026-10-15 names four
 # under [models.*], of which these three (k3 is its default_model), each

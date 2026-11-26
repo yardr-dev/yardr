@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/store"
 )
@@ -179,7 +180,7 @@ func (c *carrier) carryUserLogin(ctx context.Context, rec *store.Carry, run *sto
 	setup := len(login.Groups) == 0
 	var plan *store.UserLoginPlan
 	if setup {
-		plan, err = store.PlanUserLogin(c.home, name, "claude", groups, routes, depots, users, ymName, ym, exec.LookPath)
+		plan, err = store.PlanUserLogin(agents.Catalogue(), c.home, name, "claude", groups, routes, depots, users, ymName, ym, exec.LookPath)
 		if err != nil {
 			return "", userLoginFail(fmt.Sprintf("ask %d: %s.", rec.Ask, err))
 		}

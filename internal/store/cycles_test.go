@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
 )
@@ -199,7 +200,7 @@ func TestBlockerCyclesInAnOldStore(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "yard.db")
 	ctx := context.Background()
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

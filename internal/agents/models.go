@@ -15,8 +15,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
-	"yardr.dev/yardr/internal/store"
 )
 
 func run(ctx context.Context, name string, args ...string) (string, error) {
@@ -336,7 +334,7 @@ func Kinds() []string {
 	for _, h := range Harnesses {
 		out = append(out, h.Kind)
 	}
-	for _, k := range store.HerdrKinds {
+	for _, k := range HerdrKinds {
 		if _, ok := Lookup(k); !ok {
 			out = append(out, k)
 		}
@@ -346,7 +344,7 @@ func Kinds() []string {
 
 // IsKind reports whether herdr can start kind.
 func IsKind(kind string) bool {
-	for _, k := range store.HerdrKinds {
+	for _, k := range HerdrKinds {
 		if k == kind {
 			return true
 		}

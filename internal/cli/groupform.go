@@ -363,7 +363,7 @@ func (a *app) agentKindModel(ctx context.Context, ans *groupAnswers) error {
 	}
 	if kindPick == otherKind {
 		other := []huh.Option[string]{}
-		for _, k := range store.HerdrKinds {
+		for _, k := range agents.HerdrKinds {
 			if _, ok := agents.Lookup(k); !ok {
 				other = append(other, huh.NewOption(k, k))
 			}

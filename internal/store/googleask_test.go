@@ -42,7 +42,7 @@ func TestGoogleYardSignInByCard(t *testing.T) {
 		!slices.Equal(got.Ask.Secret.Scopes, googleServices) {
 		t.Fatalf("the ask stores %+v", got.Ask.Secret)
 	}
-	lines := strings.Join(got.Lines(), "\n")
+	lines := strings.Join(got.Lines(testCatalogue()), "\n")
 	if !strings.Contains(lines, "the sign-in for the yard's Google account yard@example.com") {
 		t.Fatalf("the card:\n%s", lines)
 	}
@@ -130,7 +130,7 @@ calls:
 		t.Fatal(err)
 	}
 	got := y.asked(t, y.ask(t, googleAsk("yard@example.com", "mckean"), "yardmaster"))
-	lines := strings.Join(got.Lines(), "\n")
+	lines := strings.Join(got.Lines(testCatalogue()), "\n")
 	for _, want := range []string{
 		"the pack's sign-in, shown only and never run by the yard: run gws auth login -s gmail; then gws auth export --unmasked",
 		"the pack's sign-in: paste the whole output of gws auth export --unmasked into the Google sign-in card for this account",

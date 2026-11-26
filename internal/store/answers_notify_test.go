@@ -286,7 +286,7 @@ func TestAskLinesShowReplacedPick(t *testing.T) {
 	y.answer(t, Answer{Ask: seq, Option: 1}, "mckean")
 	y.now = y.now.Add(time.Hour)
 	y.answer(t, Answer{Ask: seq, Option: 2, Words: "after friday"}, "mckean")
-	text := strings.Join(y.resolved(t)[0].Lines(), "\n")
+	text := strings.Join(y.resolved(t)[0].Lines(testCatalogue()), "\n")
 	want := "picked 2 (was 1 until " + y.now.Local().Format("15:04") + ")"
 	if !strings.Contains(text, want) {
 		t.Fatalf("the ask has no %q:\n%s", want, text)
@@ -300,7 +300,7 @@ func TestAskLinesShowReplacedPick(t *testing.T) {
 	pinClock(t, &y2.now)
 	only := y2.ask(t, linksAsk(), "yardmaster")
 	y2.answer(t, Answer{Ask: only, Option: 1}, "mckean")
-	if text := strings.Join(y2.resolved(t)[0].Lines(), "\n"); strings.Contains(text, "was 1 until") {
+	if text := strings.Join(y2.resolved(t)[0].Lines(testCatalogue()), "\n"); strings.Contains(text, "was 1 until") {
 		t.Fatalf("a first pick reads a history:\n%s", text)
 	}
 }

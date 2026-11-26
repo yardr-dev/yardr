@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/pack"
 	"yardr.dev/yardr/internal/source"
@@ -29,7 +30,7 @@ func carryYard(t *testing.T) (*store.Store, string, string) {
 	t.Helper()
 	ctx := context.Background()
 	home := t.TempDir()
-	st, err := store.Open(filepath.Join(home, "y.db"))
+	st, err := store.Open(filepath.Join(home, "y.db"), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +103,7 @@ func resolvedLines(t *testing.T, st *store.Store, bead string, seq uint64) strin
 	}
 	for _, r := range store.ResolveAsks(notes, time.Now()) {
 		if r.Note.Seq == seq {
-			return strings.Join(r.Lines(), "\n")
+			return strings.Join(r.Lines(agents.Catalogue()), "\n")
 		}
 	}
 	t.Fatalf("no ask %d on %s", seq, bead)

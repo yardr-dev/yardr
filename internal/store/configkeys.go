@@ -151,15 +151,15 @@ func ConfigKeysOf(of ConfigOf, runner string) []string {
 // setting the runner must have and has not. PutGroup, SetGroup and PutCrew
 // ask it of what they are about to write, and yardr doctor of what is
 // stored. A runner it does not know has nothing to say.
-func ConfigProblems(of ConfigOf, name, runner string, cfg map[string]any) []error {
-	return configProblems(of, name, runner, cfg, nil)
+func ConfigProblems(cat Catalogue, of ConfigOf, name, runner string, cfg map[string]any) []error {
+	return configProblems(cat, of, name, runner, cfg, nil)
 }
 
 // configProblems is ConfigProblems for a write over a stored config, old:
 // a key the write leaves as it is stored is not the write's to refuse, so
 // a yard set up before keys were checked can still be changed, one key at
 // a time. A setting the runner must have is asked for all the same.
-func configProblems(of ConfigOf, name, runner string, cfg, old map[string]any) []error {
+func configProblems(cat Catalogue, of ConfigOf, name, runner string, cfg, old map[string]any) []error {
 	if !slices.Contains(configRunners, runner) {
 		return nil
 	}
@@ -205,11 +205,11 @@ func configProblems(of ConfigOf, name, runner string, cfg, old map[string]any) [
 		}
 	}
 	if runner == "herdr" && of == GroupConfig {
-		typed = append(typed, effortProblems(subject, cfg, old)...)
-		typed = append(typed, modelProblems(subject, cfg, old)...)
+		typed = append(typed, effortProblems(cat, subject, cfg, old)...)
+		typed = append(typed, modelProblems(cat, subject, cfg, old)...)
 	}
 	if runner == "herdr" && of == CrewConfig {
-		typed = append(typed, fallbackProblems(subject, cfg, old)...)
+		typed = append(typed, fallbackProblems(cat, subject, cfg, old)...)
 	}
 	out := append(typed, unknown...)
 	if cmd, _ := cfg["cmd"].(string); runner == "exec" && of == GroupConfig && cmd == "" && len(typed) == 0 {

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
 	"yardr.dev/yardr/internal/yardkey"
@@ -512,7 +513,7 @@ func TestStageAskHandMove(t *testing.T) {
 	if got[2].State != store.AskTakenBack || got[3].State != store.AskTakenBack {
 		t.Fatalf("aside and open were not taken back: %s, %s", got[2].State, got[3].State)
 	}
-	lines := strings.Join(got[3].Lines(), "\n")
+	lines := strings.Join(got[3].Lines(agents.Catalogue()), "\n")
 	if !strings.Contains(lines, "taken back by yard: moved to approved by ada") {
 		t.Fatalf("take-back reads:\n%s", lines)
 	}
@@ -918,7 +919,7 @@ func TestStageAskSameStage(t *testing.T) {
 	if got[2].State != store.AskOpen || got[2].Ask.Entry == first[0].Ask.Entry {
 		t.Fatalf("fresh ask = %+v", got[2].Ask)
 	}
-	lines := strings.Join(got[0].Lines(), "\n")
+	lines := strings.Join(got[0].Lines(agents.Catalogue()), "\n")
 	if !strings.Contains(lines, "taken back by yard: moved to review by ada") {
 		t.Fatalf("same-stage take-back reads:\n%s", lines)
 	}
@@ -944,7 +945,7 @@ func TestStageAskCloseReopen(t *testing.T) {
 	if len(got) != 2 || got[0].State != store.AskTakenBack {
 		t.Fatalf("after close: %+v", got)
 	}
-	lines := strings.Join(got[0].Lines(), "\n")
+	lines := strings.Join(got[0].Lines(agents.Catalogue()), "\n")
 	if !strings.Contains(lines, "taken back by yard: closed") {
 		t.Fatalf("close take-back reads:\n%s", lines)
 	}
@@ -1400,7 +1401,7 @@ func TestStageAskMovesArrivals(t *testing.T) {
 	}
 	// The pick moved the bead, so the card says no more of how to answer it: the
 	// yard takes no pick after one that moved it.
-	if lines := strings.Join(stageAsks(t, y.api, b.ID)[0].Lines(), "\n"); !strings.Contains(lines, "ada picked 2 (draft): not there yet") ||
+	if lines := strings.Join(stageAsks(t, y.api, b.ID)[0].Lines(agents.Catalogue()), "\n"); !strings.Contains(lines, "ada picked 2 (draft): not there yet") ||
 		strings.Contains(lines, "answer with") {
 		t.Fatalf("the card reads:\n%s\nwant the pick and no way to answer again", lines)
 	}
@@ -1509,7 +1510,7 @@ func TestStageAskMovesYieldToAHandAsk(t *testing.T) {
 	if len(taken) != 2 || taken[0].State != store.AskTakenBack || taken[1].State != store.AskOpen || !taken[1].Ask.Moves {
 		t.Fatalf("a question of options on arrival: %+v, want it taken back and the card of moves open", taken)
 	}
-	if lines := strings.Join(taken[0].Lines(), "\n"); !strings.Contains(lines, fmt.Sprintf("taken back by yard: ask %d is the question now, with its options", taken[1].Note.Seq)) {
+	if lines := strings.Join(taken[0].Lines(agents.Catalogue()), "\n"); !strings.Contains(lines, fmt.Sprintf("taken back by yard: ask %d is the question now, with its options", taken[1].Note.Seq)) {
 		t.Fatalf("the question reads:\n%s", lines)
 	}
 	wantContext := []string{
@@ -1542,7 +1543,7 @@ func TestStageAskMovesYieldToAHandAsk(t *testing.T) {
 	if len(got) != 2 || got[0].State != store.AskTakenBack || got[1].Ask.Question != "Hidden or deleted?" || got[1].State != store.AskOpen {
 		t.Fatalf("after the ask: %+v, want the card taken back and the ask open", got)
 	}
-	if lines := strings.Join(got[0].Lines(), "\n"); !strings.Contains(lines, fmt.Sprintf("taken back by yard: ask %d is on the bead now", seq)) {
+	if lines := strings.Join(got[0].Lines(agents.Catalogue()), "\n"); !strings.Contains(lines, fmt.Sprintf("taken back by yard: ask %d is on the bead now", seq)) {
 		t.Fatalf("the card reads:\n%s", lines)
 	}
 

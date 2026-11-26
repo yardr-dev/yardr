@@ -57,9 +57,11 @@ flags:
     - label: allow all tools
       args: [--trust-tools=*]
       description: every built-in tool without asking; a Hook confirmation is denied
+      strong: true
     - label: trust all tools
       args: [--trust-all-tools]
       description: everything without asking, after one warning acknowledged at every start
+      strong: true
 
 # The models to pick from: auto is Kiro's own router (its docs recommend
 # it; `chat --list-models --format json` serves it as a genuine model with

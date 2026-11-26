@@ -1,10 +1,15 @@
-package store
+package agents
 
 import (
 	"fmt"
+	"io/fs"
 	"slices"
 	"strings"
 	"testing"
+	"testing/fstest"
+
+	"yardr.dev/yardr/harnesses"
+	"yardr.dev/yardr/internal/store"
 )
 
 // skipsPrompts says whether arg is a flag that skips an agent's permission
@@ -26,7 +31,7 @@ func skipsPrompts(arg string) bool {
 // what their flags say: one that passes a flag that skips the agent's
 // permission prompts without the mark, and one marked Strong that passes
 // none.
-func strongMarkProblems(presets map[string][]Permission) []string {
+func strongMarkProblems(presets map[string][]store.Permission) []string {
 	var problems []string
 	for kind, list := range presets {
 		for _, p := range list {
@@ -51,23 +56,27 @@ func strongMarkProblems(presets map[string][]Permission) []string {
 // A preset is Strong exactly when its flags skip the agent's permission
 // prompts, so a preset added later cannot reach a group or a crew member
 // without the card that approves it, by omission or by a mark it does not
-// earn (design yardr-m90n 3.5). The check is run on the table and on a
-// doctored one, which it must fail twice, once for each way to be wrong.
+// earn (design yardr-m90n 3.5). The check is run on the files and on a
+// doctored table, which it must fail twice, once for each way to be wrong.
 func TestHarnessPresetsAreStrongWhenTheirFlagsAskNothing(t *testing.T) {
 	t.Parallel()
-	if problems := strongMarkProblems(HarnessPresets); len(problems) > 0 {
-		t.Errorf("HarnessPresets: %s", strings.Join(problems, "; "))
+	presets := map[string][]store.Permission{}
+	for _, h := range Harnesses {
+		presets[h.Kind] = h.Flags.Permissions
+	}
+	if problems := strongMarkProblems(presets); len(problems) > 0 {
+		t.Errorf("harness files: %s", strings.Join(problems, "; "))
 	}
 	// The lookup the cards use hands the mark on with the preset.
 	for _, c := range []struct {
 		kind, label string
 		strong      bool
 	}{{"claude", "bypass", true}, {"claude", "auto", false}, {"codex", "approve for me", false}, {"kimi", "auto", true}} {
-		if p, ok := HarnessPreset(c.kind, c.label); !ok || p.Strong != c.strong {
-			t.Errorf("HarnessPreset(%q, %q) = %+v, %v, want Strong %v", c.kind, c.label, p, ok, c.strong)
+		if p, ok := Preset(c.kind, c.label); !ok || p.Strong != c.strong {
+			t.Errorf("Preset(%q, %q) = %+v, %v, want Strong %v", c.kind, c.label, p, ok, c.strong)
 		}
 	}
-	doctored := map[string][]Permission{"x": {
+	doctored := map[string][]store.Permission{"x": {
 		{Label: "quiet", Args: []string{"--yolo"}},
 		{Label: "careful", Args: []string{"--permission-mode", "auto"}, Strong: true},
 		{Label: "asks", Args: []string{"--permission-mode", "acceptEdits"}},
@@ -89,5 +98,46 @@ func TestHarnessPresetsAreStrongWhenTheirFlagsAskNothing(t *testing.T) {
 		if skipsPrompts(arg) {
 			t.Errorf("%s is read as skipping the agent's permission prompts", arg)
 		}
+	}
+}
+
+// The strong mark is the weight of the card that approves a preset, so a
+// harness file that is not built into the binary may not set it: it would
+// choose which of its own presets ask for no card. The same bytes load as a
+// built-in file, and a copy that sets none loads as a yard's.
+func TestYardFileMayNotMarkStrong(t *testing.T) {
+	t.Parallel()
+	body, err := fs.ReadFile(harnesses.FS, "claude.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// auto is claude's first preset, and its own file does not mark it.
+	const auto = "      description: Claude judges each action; asks only about risky ones\n"
+	if !strings.Contains(string(body), auto) {
+		t.Fatal("claude.yaml no longer has the auto preset this test marks")
+	}
+	want := "claude.yaml: flags.permissions[0].strong: only yardr's own harness files mark a preset strong"
+	for _, mark := range []struct {
+		value  string
+		strong bool
+	}{{"true", true}, {"false", false}, {"null", false}} {
+		t.Run(mark.value, func(t *testing.T) {
+			marked := strings.Replace(string(body), auto, auto+"      strong: "+mark.value+"\n", 1)
+			files := fstest.MapFS{"claude.yaml": {Data: []byte(marked)}}
+			if _, err := load(files, false); err == nil || err.Error() != want {
+				t.Errorf("a yard's file that sets auto strong to %s: %v, want %q", mark.value, err, want)
+			}
+			hs, err := load(files, true)
+			if err != nil {
+				t.Fatalf("the same bytes as a built-in file: %v", err)
+			}
+			if len(hs) != 1 || hs[0].Flags.Permissions[0].Strong != mark.strong {
+				t.Errorf("a built-in file's mark %s was not read: %+v", mark.value, hs)
+			}
+		})
+	}
+	unmarked := fstest.MapFS{"claude.yaml": {Data: []byte(strings.ReplaceAll(string(body), "      strong: true\n", ""))}}
+	if _, err := load(unmarked, false); err != nil {
+		t.Errorf("a yard's file that marks nothing strong: %v", err)
 	}
 }

@@ -16,7 +16,7 @@ func TestPeerSentSettlesAcrossClose(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "y.db")
-	s, err := Open(path)
+	s, err := openStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestPeerSentSettlesAcrossClose(t *testing.T) {
 	if err := s.Close(ctx); err != nil {
 		t.Fatal(err)
 	}
-	s, err = Open(path)
+	s, err = openStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}

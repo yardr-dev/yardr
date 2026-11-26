@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/peer"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
@@ -130,7 +131,7 @@ func TestDeviceAddAndResolve(t *testing.T) {
 func TestDeviceTokenIsNotStored(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "yard.db")
-	st, err := store.Open(path)
+	st, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,7 +241,7 @@ func TestEnrolEdgeDevice(t *testing.T) {
 func TestEnrolEdgeDeviceHoldsNoToken(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "yard.db")
-	st, err := store.Open(path)
+	st, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

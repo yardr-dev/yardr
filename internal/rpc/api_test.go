@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/telemetry"
 	"yardr.dev/yardr/internal/yardkey"
@@ -1849,7 +1850,7 @@ func apiStore(t *testing.T) (*store.Store, string) {
 	// Nor one git builds in beside the system file (Apple's git brings
 	// a credential.helper of its own).
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
-	st, err := store.Open(filepath.Join(home, "yard.db"))
+	st, err := store.Open(filepath.Join(home, "yard.db"), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

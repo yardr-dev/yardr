@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/eta"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/telemetry"
@@ -33,7 +34,7 @@ import (
 func userYard(t *testing.T) (*store.Store, *UserServer, string) {
 	t.Helper()
 	ctx := context.Background()
-	st, err := store.Open(filepath.Join(t.TempDir(), "yard.db"))
+	st, err := store.Open(filepath.Join(t.TempDir(), "yard.db"), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -924,7 +925,7 @@ func TestUserWritesCarryVia(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if text := strings.Join(store.NoteBlocksMarked(notes, time.Now(), nil, ""), "\n"); !strings.Contains(text, "jo (via phone)]\n  looks right") {
+	if text := strings.Join(store.NoteBlocksMarked(agents.Catalogue(), notes, time.Now(), nil, ""), "\n"); !strings.Contains(text, "jo (via phone)]\n  looks right") {
 		t.Errorf("the notes as they are printed do not say how one came:\n%s", text)
 	}
 }
@@ -1725,7 +1726,7 @@ func TestUserDeviceEventLeavesTheSharedEventAsItWas(t *testing.T) {
 	// In a yard where no user is an operator nobody is sent the whole of it,
 	// the users that are there no more than sam.
 	t.Run("a yard with no operator", func(t *testing.T) {
-		st, err := store.Open(filepath.Join(t.TempDir(), "bare.db"))
+		st, err := store.Open(filepath.Join(t.TempDir(), "bare.db"), agents.Catalogue())
 		if err != nil {
 			t.Fatal(err)
 		}

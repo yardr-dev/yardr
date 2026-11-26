@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
 )
@@ -392,7 +393,7 @@ func TestCrewRefusesASettingTheRunnerCannotRead(t *testing.T) {
 func TestCrewKeepsAKeyNothingReadsAndNeverPrintsIt(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "yard.db")
-	old, err := store.Open(path)
+	old, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -170,7 +170,7 @@ func TestRunAskSourceLimit(t *testing.T) {
 		len(run.Seen) != 1 || run.Seen["source crm"] != seen(runCRM, "", "", "") {
 		t.Fatalf("the ask stores %+v, want %+v", run, want)
 	}
-	card := y.asked(t, seq).Lines()
+	card := y.asked(t, seq).Lines(testCatalogue())
 	for _, line := range []string{
 		"      yardr source set crm calls_per_hour=200",
 		"  what the command does: " + want.Description,
@@ -206,7 +206,7 @@ func TestRunAskSourceLimit(t *testing.T) {
 		t.Fatalf("source_set events = %+v", evs)
 	}
 	y.approved(t, evs[1], seq)
-	if card := y.asked(t, seq).Lines(); !slices.Contains(card, "  only the operator can take it back: yardr source set crm calls_per_hour=60") {
+	if card := y.asked(t, seq).Lines(testCatalogue()); !slices.Contains(card, "  only the operator can take it back: yardr source set crm calls_per_hour=60") {
 		t.Errorf("the approved card:\n%s", strings.Join(card, "\n"))
 	}
 
@@ -746,7 +746,7 @@ func TestRunAskGrant(t *testing.T) {
 	if !slices.Equal(run.Argv, want.Argv) || !slices.Equal(run.Does, want.Does) || run.Back != want.Back || run.BackBy != "" || !sameMap(run.Seen, want.Seen) {
 		t.Fatalf("the ask stores\n%+v\nwant\n%+v", run, want)
 	}
-	if card := y.asked(t, seq).Lines(); !slices.Contains(card, "  anyone can take it back: "+want.Back) || !slices.Contains(card, "  the yard says: "+want.Does[2]) {
+	if card := y.asked(t, seq).Lines(testCatalogue()); !slices.Contains(card, "  anyone can take it back: "+want.Back) || !slices.Contains(card, "  the yard says: "+want.Does[2]) {
 		t.Errorf("the card:\n%s", strings.Join(card, "\n"))
 	}
 
@@ -798,7 +798,7 @@ func TestRunAskGrant(t *testing.T) {
 	for _, e := range evs[1:] {
 		y.approved(t, e, seq)
 	}
-	card := y.asked(t, seq).Lines()
+	card := y.asked(t, seq).Lines(testCatalogue())
 	i := slices.Index(card, "  mckean approved, ran: yardr source grant crm read --group builders --group reviewers --crew yardmaster")
 	if i < 0 || !slices.Equal(card[i+1:i+5], []string{
 		"      group builders may call crm: read",
@@ -1218,7 +1218,7 @@ func TestRunAskSubscribe(t *testing.T) {
 	if !slices.Equal(run.Argv, want.Argv) || !slices.Equal(run.Does, want.Does) || run.Back != want.Back || run.BackBy != want.BackBy || !sameMap(run.Seen, want.Seen) {
 		t.Fatalf("the ask stores\n%+v\nwant\n%+v", run, want)
 	}
-	card := y.asked(t, seq).Lines()
+	card := y.asked(t, seq).Lines(testCatalogue())
 	for _, line := range []string{
 		"  when you approve, the yard runs this as mckean, and nothing else:",
 		"      yardr subscribe mckean yardr --done --where depot=yardr --where label=ui --where label=web",
@@ -1278,7 +1278,7 @@ func TestRunAskSubscribeIsTheUsersOrTheOperators(t *testing.T) {
 		t.Fatalf("an ask of a third user = %v", err)
 	}
 	own := y.ask(t, listAsk("ada", command), "yardmaster")
-	if card := y.asked(t, own).Lines(); !slices.Contains(card, "  when you approve, the yard runs this as ada, and nothing else:") ||
+	if card := y.asked(t, own).Lines(testCatalogue()); !slices.Contains(card, "  when you approve, the yard runs this as ada, and nothing else:") ||
 		!slices.Contains(card, "  ada or the operator can take it back: yardr unsubscribe ada yardr --where state=done") {
 		t.Fatalf("the card:\n%s", strings.Join(card, "\n"))
 	}
@@ -1414,7 +1414,7 @@ func TestRunAskUserTell(t *testing.T) {
 	if !slices.Equal(run.Argv, want.Argv) || !slices.Equal(run.Does, want.Does) || run.Back != want.Back || run.BackBy != want.BackBy || !sameMap(run.Seen, want.Seen) {
 		t.Fatalf("the ask stores\n%+v\nwant\n%+v", run, want)
 	}
-	card := y.asked(t, seq).Lines()
+	card := y.asked(t, seq).Lines(testCatalogue())
 	for _, line := range []string{
 		"  when you approve, the yard runs this as mckean, and nothing else:",
 		"      yardr user set mckean tell=notifications,asks",
@@ -1503,7 +1503,7 @@ func TestRunAskUserTellIsTheUsersOrTheOperators(t *testing.T) {
 		t.Fatalf("an ask of a third user = %v", err)
 	}
 	own := y.ask(t, listAsk("ada", command), "yardmaster")
-	if card := y.asked(t, own).Lines(); !slices.Contains(card, "  when you approve, the yard runs this as ada, and nothing else:") ||
+	if card := y.asked(t, own).Lines(testCatalogue()); !slices.Contains(card, "  when you approve, the yard runs this as ada, and nothing else:") ||
 		!slices.Contains(card, "  ada or the operator can take it back: yardr user set ada tell=") {
 		t.Fatalf("the card:\n%s", strings.Join(card, "\n"))
 	}
@@ -1666,7 +1666,7 @@ func TestRunAskGrantQuotesAKindThatIsNoName(t *testing.T) {
 			t.Errorf("sentence %d is %q, want it to start %q on one line", i, run.Does[i], start)
 		}
 	}
-	if card := y.asked(t, seq).Lines(); len(card) == 0 {
+	if card := y.asked(t, seq).Lines(testCatalogue()); len(card) == 0 {
 		t.Fatal("no card")
 	} else if says := slices.DeleteFunc(card, func(l string) bool { return !strings.Contains(l, "the yard says:") }); len(says) != 3 {
 		t.Errorf("the card has %d lines of the yard's, want 3:\n%s", len(says), strings.Join(card, "\n"))

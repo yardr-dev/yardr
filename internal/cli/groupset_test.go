@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
 )
@@ -223,7 +224,7 @@ func TestGroupShow(t *testing.T) {
 	// The key named like a secret is one no code reads, so it is from a
 	// yard set up before the store refused such a key.
 	path := filepath.Join(t.TempDir(), "yard.db")
-	old, err := store.Open(path)
+	old, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

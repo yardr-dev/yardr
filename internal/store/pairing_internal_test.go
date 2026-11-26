@@ -25,7 +25,7 @@ func newPairHost(t *testing.T) *pairHost {
 	Stretch = 16
 	t.Cleanup(func() { clock, Stretch = time.Now, stretch })
 	var err error
-	if h.Store, err = Open(filepath.Join(t.TempDir(), "y.db")); err != nil {
+	if h.Store, err = openStore(t, filepath.Join(t.TempDir(), "y.db")); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { h.Close(context.Background()) })

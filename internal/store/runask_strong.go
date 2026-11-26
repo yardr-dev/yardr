@@ -115,11 +115,11 @@ func strongChanged(sets map[string]string) []string {
 // one that skips the agent's permission prompts (Permission.Strong): a card
 // is the only door to one. A preset that asks as it did is no card's, and
 // refuses in words that say where it is set instead.
-func strongPreset(subject, kind, label string) (Permission, error) {
-	p, ok := HarnessPreset(kind, label)
+func strongPreset(cat Catalogue, subject, kind, label string) (Permission, error) {
+	p, ok := cat.preset(kind, label)
 	switch {
 	case !ok:
-		return Permission{}, noPreset(subject, kind, label, "a strong one")
+		return Permission{}, noPreset(cat, subject, kind, label, "a strong one")
 	case !p.Strong:
 		return Permission{}, fmt.Errorf("%s: the %s preset %s does not skip the agent's permission prompts, so it is no card of the strong few: %s. A card carries a preset that never asks", subject, kind, p.Label, strongApart)
 	}
@@ -129,8 +129,8 @@ func strongPreset(subject, kind, label string) (Permission, error) {
 // noPreset refuses a permission preset that the kind does not have, in words
 // that name those it has. which says what the card takes of them: "a strong
 // one", or "one" where it takes any.
-func noPreset(subject, kind, label, which string) error {
-	return fmt.Errorf("%s: %s has no permission preset %q (it has: %s): name %s as preset=<preset> in its one-word form (a dash for a space), as yardr harness show %s lists them", subject, kind, label, or(strings.Join(HarnessPresetLabels(kind), ", "), "none"), which, kind)
+func noPreset(cat Catalogue, subject, kind, label, which string) error {
+	return fmt.Errorf("%s: %s has no permission preset %q (it has: %s): name %s as preset=<preset> in its one-word form (a dash for a space), as yardr harness show %s lists them", subject, kind, label, or(strings.Join(cat.presetLabels(kind), ", "), "none"), which, kind)
 }
 
 // promptBefore is the text of the prompt file a definition holds now, as a
@@ -225,20 +225,20 @@ func quotedWords(words []string) string {
 // of the kind they will be, kind (the card of the yardmaster's own entry can
 // change the kind beside it). The sentence that it skips permissions follows
 // the preset's Strong mark, the one rule of the cards and the leg.
-func presetLines(was, kind string, old any, p Permission) []string {
+func presetLines(cat Catalogue, was, kind string, old any, p Permission) []string {
 	words := argWords(old)
 	now := quotedWords(words)
-	for _, q := range HarnessPresets[was] {
+	for _, q := range cat.presets(was) {
 		if len(words) > 0 && slices.Equal(q.Args, words) {
 			now += " (the " + q.Label + " preset)"
 		}
 	}
 	will := "them"
 	if kind != was {
-		will = fmt.Sprintf("%s (%s) agents", kind, or(HarnessLabels[kind], kind))
+		will = fmt.Sprintf("%s (%s) agents", kind, or(cat.label(kind), kind))
 	}
 	lines := []string{
-		fmt.Sprintf("It starts %s (%s) agents with %s now.", was, or(HarnessLabels[was], was), now),
+		fmt.Sprintf("It starts %s (%s) agents with %s now.", was, or(cat.label(was), was), now),
 		fmt.Sprintf("It will start %s with %s: the %s preset, %s.", will, quotedWords(p.Args), p.Label, p.Note),
 	}
 	if p.Strong {

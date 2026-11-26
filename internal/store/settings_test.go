@@ -3,8 +3,10 @@ package store_test
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
 )
@@ -35,6 +37,28 @@ func TestSettings(t *testing.T) {
 	}
 	if err := st.SetSetting(ctx, "Bad Key", "x", "me"); err == nil {
 		t.Fatal("bad key accepted")
+	}
+	// Two settings are held to the catalogue the store was opened with: the
+	// default kind to the kinds herdr starts, a kind with no harness file
+	// among them, and the permission preset to a preset some harness offers,
+	// in either spelling.
+	for _, c := range []struct{ key, value, refused string }{
+		{store.DefaultKindSetting, "nope", `default_kind "nope": herdr starts pi, claude, codex, gemini,`},
+		{store.PermissionsPresetSetting, "nope", `permissions_preset "nope": no harness has a permission preset of that name (there is: accept-edits, allow-all-tools,`},
+	} {
+		if err := st.SetSetting(ctx, c.key, c.value, "me"); err == nil || !strings.Contains(err.Error(), c.refused) {
+			t.Errorf("%s %q: %v, want it refused as %q", c.key, c.value, err, c.refused)
+		}
+	}
+	for _, c := range [][2]string{{store.DefaultKindSetting, "gemini"}, {store.PermissionsPresetSetting, "accept edits"}, {store.PermissionsPresetSetting, "accept-edits"}} {
+		if err := st.SetSetting(ctx, c[0], c[1], "me"); err != nil {
+			t.Errorf("%s %q refused: %v", c[0], c[1], err)
+		}
+	}
+	for _, key := range []string{store.DefaultKindSetting, store.PermissionsPresetSetting} {
+		if err := st.SetSetting(ctx, key, "", "me"); err != nil {
+			t.Fatal(err)
+		}
 	}
 	// auto_upgrade takes off and notify alone: release, the coming
 	// auto-run value, is refused until the follow-up lands.
@@ -71,7 +95,7 @@ func TestMigrateSettings(t *testing.T) {
 	reopen := func(t *testing.T, fill func(*store.Store)) (*store.Store, []store.Event) {
 		t.Helper()
 		path := filepath.Join(t.TempDir(), "yard.db")
-		s, err := store.Open(path)
+		s, err := store.Open(path, agents.Catalogue())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -81,7 +105,7 @@ func TestMigrateSettings(t *testing.T) {
 			t.Fatal(err)
 		}
 		for i := range 2 { // the second open changes nothing
-			if s, err = store.Open(path); err != nil {
+			if s, err = store.Open(path, agents.Catalogue()); err != nil {
 				t.Fatal(err)
 			}
 			if i == 0 {

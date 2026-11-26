@@ -1308,15 +1308,15 @@ func beadNotes(tx *bolt.Tx, uuid string) ([]Note, error) {
 // Lines renders the ask as numbered text: the question, its context, its
 // numbered options with the recommendation marked, and its state. Nobody
 // reads the raw form.
-func (r ResolvedAsk) Lines() []string { return r.lines(nil) }
+func (r ResolvedAsk) Lines(cat Catalogue) []string { return r.lines(cat, nil) }
 
 // LinesMarked renders the ask as Lines does, with an answer's author
 // from another yard marked as mail is: "(as <user>)" where as (from
 // TrustedAs) trusts the address, the foreign line otherwise. Prime,
 // review and chat read asks this way; the socket's decided entries carry
 // no author and need no mark.
-func (r ResolvedAsk) LinesMarked(as map[string]string) []string {
-	return r.lines(func(a string) string { return MarkedAuthor(a, as) })
+func (r ResolvedAsk) LinesMarked(cat Catalogue, as map[string]string) []string {
+	return r.lines(cat, func(a string) string { return MarkedAuthor(a, as) })
 }
 
 // lines renders the ask, marking an answer's author with mark, identity
@@ -1336,7 +1336,7 @@ func (r ResolvedAsk) LinesMarked(as map[string]string) []string {
 // yard's part comes last and together, the command whole, what the yard
 // says it changes and the command that takes it back. The command is never
 // cut or shortened.
-func (r ResolvedAsk) lines(mark func(string) string) []string {
+func (r ResolvedAsk) lines(cat Catalogue, mark func(string) string) []string {
 	if r.AskErr != nil {
 		return []string{fmt.Sprintf("ask %d: not a question any more (%v)", r.Note.Seq, r.AskErr)}
 	}
@@ -1454,7 +1454,7 @@ func (r ResolvedAsk) lines(mark func(string) string) []string {
 		}
 		out = append(out, "  "+strings.ReplaceAll(NoteLetters(r.Ask.DepotPush.TakenBack()), "\n", "\n  "))
 	case r.Ask.Secret != nil:
-		out = append(out, "  "+r.Ask.Secret.Line())
+		out = append(out, "  "+r.Ask.Secret.Line(cat))
 		for _, line := range r.Ask.Secret.cardLines() {
 			out = append(out, "  "+line)
 		}
@@ -1617,12 +1617,12 @@ func (r ResolvedAsk) lines(mark func(string) string) []string {
 // every block the head stands alone at the margin and the writer's
 // words stand further in, as letters only (NoteLetters), where no line
 // of them can be taken for the start of another note.
-func NoteBlocksMarked(notes []Note, now time.Time, as map[string]string, home string) []string {
+func NoteBlocksMarked(cat Catalogue, notes []Note, now time.Time, as map[string]string, home string) []string {
 	mark := func(a string) string { return MarkedAuthor(a, as) }
-	return blocks(notes, now, home, mark)
+	return blocks(cat, notes, now, home, mark)
 }
 
-func blocks(notes []Note, now time.Time, home string, mark func(string) string) []string {
+func blocks(cat Catalogue, notes []Note, now time.Time, home string, mark func(string) string) []string {
 	who := func(a string) string {
 		if mark == nil {
 			return a
@@ -1647,7 +1647,7 @@ func blocks(notes []Note, now time.Time, home string, mark func(string) string) 
 			// An ask carries no files; its question, context and
 			// answers are the writers' words, shown as letters only,
 			// so none forges the marked line a note's files stand on.
-			out = append(out, NoteLetters(strings.Join(r.lines(mark), "\n")))
+			out = append(out, NoteLetters(strings.Join(r.lines(cat, mark), "\n")))
 			continue
 		}
 		if n.Kind == NoteAnswer {

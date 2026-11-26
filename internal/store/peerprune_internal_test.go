@@ -29,7 +29,7 @@ var pruneAt = time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
 func newPruneYard(t *testing.T) *pruneYard {
 	t.Helper()
 	y := &pruneYard{at: pruneAt}
-	s, err := Open(filepath.Join(t.TempDir(), "y.db"))
+	s, err := openStore(t, filepath.Join(t.TempDir(), "y.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

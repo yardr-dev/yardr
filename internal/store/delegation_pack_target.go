@@ -188,7 +188,7 @@ func (w *wtx) packGroupWrite(ctx context.Context, g *Group, actor string) error 
 	if !had {
 		if v, ok := asStored(g.Config)["args"]; ok {
 			kind, _ := asStored(g.Config)["kind"].(string)
-			if err := presetOnly("group "+g.Name, kind, v, true); err != nil {
+			if err := presetOnly(w.catalogue(), "group "+g.Name, kind, v, true); err != nil {
 				return err
 			}
 		}
@@ -369,7 +369,7 @@ func (w *wtx) packCrewWrite(ctx context.Context, def *CrewMember, actor string) 
 	if !had {
 		if v, ok := asStored(def.Config)["args"]; ok {
 			kind, _ := asStored(def.Config)["kind"].(string)
-			if err := presetOnly("crew member "+def.Name, kind, v, true); err != nil {
+			if err := presetOnly(w.catalogue(), "crew member "+def.Name, kind, v, true); err != nil {
 				return err
 			}
 		}

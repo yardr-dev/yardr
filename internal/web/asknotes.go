@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -40,7 +41,7 @@ func readAsks(notes []store.Note, now time.Time, marks map[string]string) askNot
 		}
 		// Letters only, as every note's words are drawn: the asker's words
 		// carry no mark of direction or control character to the page.
-		out.words[r.Note.Seq] = store.NoteLetters(strings.Join(r.LinesMarked(marks), "\n"))
+		out.words[r.Note.Seq] = store.NoteLetters(strings.Join(r.LinesMarked(agents.Catalogue(), marks), "\n"))
 		for _, a := range r.Answers {
 			out.asks[a.Note.Seq] = r.Note.Seq
 		}

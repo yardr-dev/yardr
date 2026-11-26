@@ -10,6 +10,7 @@ import (
 
 	bolt "go.etcd.io/bbolt"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
 )
@@ -88,7 +89,7 @@ func TestMigrateDepotKinds(t *testing.T) {
 	}
 	ctx := context.Background()
 	for range 2 {
-		s, err := store.Open(path)
+		s, err := store.Open(path, agents.Catalogue())
 		if err != nil {
 			t.Fatal(err)
 		}

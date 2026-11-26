@@ -169,7 +169,7 @@ func (w *wtx) settingSetCard(argv []string, asking bool) (AskRun, error) {
 		return AskRun{}, fmt.Errorf("no setting %q; there is: %s", key, strings.Join(SettingKeys(), ", "))
 	}
 	if value != "" {
-		if err := set.Check(value); err != nil {
+		if err := set.Valid(w.catalogue(), value); err != nil {
 			return AskRun{}, err
 		}
 	}
@@ -221,7 +221,7 @@ func (w *wtx) settingSetStale(seq uint64, was, now AskRun) error {
 func runSettingSet(ctx context.Context, w *wtx, argv []string, actor string, by *approvedOn) (string, error) {
 	key, value := argv[2], argv[3]
 	if set, ok := SettingOf(key); ok && value != "" {
-		if err := set.Check(value); err != nil {
+		if err := set.Valid(w.catalogue(), value); err != nil {
 			return "", err
 		}
 	}

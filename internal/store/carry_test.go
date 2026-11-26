@@ -26,8 +26,8 @@ func TestCarryRecordClaimAndComplete(t *testing.T) {
 	if err != nil || rec == nil || rec.State != CarryApproved || rec.Actor != "mckean" {
 		t.Fatalf("the approved ask's record = %+v, %v", rec, err)
 	}
-	if !strings.Contains(strings.Join(y.asked(t, seq).Lines(), "\n"), "approved, being carried out: yardr pack apply wired") {
-		t.Fatalf("the card does not read as being carried out:\n%s", strings.Join(y.asked(t, seq).Lines(), "\n"))
+	if !strings.Contains(strings.Join(y.asked(t, seq).Lines(testCatalogue()), "\n"), "approved, being carried out: yardr pack apply wired") {
+		t.Fatalf("the card does not read as being carried out:\n%s", strings.Join(y.asked(t, seq).Lines(testCatalogue()), "\n"))
 	}
 	claimed, err := y.ClaimCarry(y.ctx, "boot-one", y.now)
 	if err != nil || claimed == nil || claimed.Bead != y.bead || claimed.Ask != seq || claimed.Boot != "boot-one" {
@@ -47,7 +47,7 @@ func TestCarryRecordClaimAndComplete(t *testing.T) {
 	if err != nil || rec.State != CarryDone || rec.Result != "applied pack wired to the yard: 1 created" {
 		t.Fatalf("the completed record = %+v, %v", rec, err)
 	}
-	lines := strings.Join(y.asked(t, seq).Lines(), "\n")
+	lines := strings.Join(y.asked(t, seq).Lines(testCatalogue()), "\n")
 	if !strings.Contains(lines, "approved, ran: yardr pack apply wired") || !strings.Contains(lines, "applied pack wired to the yard: 1 created") {
 		t.Fatalf("the completed card reads:\n%s", lines)
 	}
@@ -84,7 +84,7 @@ func TestCarryResumeAndFail(t *testing.T) {
 	if err := y.FailCarry(y.ctx, y.bead, seq, "boot-two", "boom: nothing further was applied"); err != nil {
 		t.Fatal(err)
 	}
-	lines := strings.Join(y.asked(t, seq).Lines(), "\n")
+	lines := strings.Join(y.asked(t, seq).Lines(testCatalogue()), "\n")
 	if !strings.Contains(lines, "approved, failed: yardr pack apply wired") || !strings.Contains(lines, "boom: nothing further was applied") {
 		t.Fatalf("the failed card reads:\n%s", lines)
 	}

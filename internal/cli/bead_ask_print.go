@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -33,7 +34,7 @@ func printAsk(w, warn io.Writer, ctx context.Context, st store.API, id string, s
 	}
 	for _, r := range store.ResolveAsks(notes, time.Now()) {
 		if r.Note.Seq == seq {
-			fmt.Fprintln(w, strings.Join(r.LinesMarked(as), "\n"))
+			fmt.Fprintln(w, strings.Join(r.LinesMarked(agents.Catalogue(), as), "\n"))
 			return
 		}
 	}

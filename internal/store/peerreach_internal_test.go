@@ -334,7 +334,7 @@ func TestReachAnswerLands(t *testing.T) {
 		t.Fatalf("after the pick: %+v", r)
 	}
 	ps, _ := y.Peers(y.ctx)
-	if lines := strings.Join(r.LinesMarked(TrustedAs(ps)), "\n"); !strings.Contains(lines, "mckean@north (as mckean) picked 1 (Move them now): tonight") {
+	if lines := strings.Join(r.LinesMarked(testCatalogue(), TrustedAs(ps)), "\n"); !strings.Contains(lines, "mckean@north (as mckean) picked 1 (Move them now): tonight") {
 		t.Fatalf("lines:\n%s", lines)
 	}
 	if q := y.queue(t); len(q.Open) != 1 || len(q.Decided) != 1 || q.Decided[0].Ask != seq {

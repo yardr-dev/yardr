@@ -55,7 +55,7 @@ var sidingAt = time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
 func newSidingYard(t *testing.T, fold int, after string) *sidingYard {
 	t.Helper()
 	y := &sidingYard{t: t, at: sidingAt}
-	s, err := Open(filepath.Join(t.TempDir(), "y.db"))
+	s, err := openStore(t, filepath.Join(t.TempDir(), "y.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -71,8 +72,9 @@ func TestRunAskCrewAddApproves(t *testing.T) {
 	if bypass := strings.Join(y.asked(t, hauler).Ask.Run.Does, "\n"); !strings.Contains(bypass, skips) {
 		t.Errorf("card for the bypass preset does not say it skips permissions:\n%s", bypass)
 	}
-	// The mark answers for a preset the table names; a label it does not
+	// The mark answers for a preset the catalogue names; a label it does not
 	// name keeps the flags check, which fails closed.
+	cat := testCatalogue()
 	for _, c := range []struct {
 		kind string
 		p    Permission
@@ -84,7 +86,7 @@ func TestRunAskCrewAddApproves(t *testing.T) {
 		{"codex", Permission{Label: "not in the table", Args: []string{"--approve-for-me"}}, false},
 		{"codex", Permission{Label: "not in the table", Note: "never asks"}, true},
 	} {
-		if got := presetSkips(c.kind, c.p); got != c.want {
+		if got := presetSkips(cat, c.kind, c.p); got != c.want {
 			t.Errorf("presetSkips(%s, %+v) = %v, want %v", c.kind, c.p, got, c.want)
 		}
 	}
@@ -166,10 +168,25 @@ func TestRunAskCrewAddDeniedCreatesNothing(t *testing.T) {
 	}
 }
 
+// reopen closes the yard's store and opens its file again on cat, as a yard
+// comes back on a build whose harness files say something else.
+func (y *askYard) reopen(t *testing.T, cat Catalogue) {
+	t.Helper()
+	path := y.Store.db.Path()
+	if err := y.Store.Close(y.ctx); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(path, cat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close(context.Background()) })
+	y.Store = s
+}
+
 // The carried bytes are what runs, not a file read again at approval.
 func TestRunAskCrewAddUsesCarriedBytes(t *testing.T) {
-	// Sequential: HarnessPresets, the table of every harness's presets, which it
-	// changes to stale a card.
+	t.Parallel()
 	y, _ := runYard(t)
 	role := crewAddRoleText()
 	seq := y.ask(t, crewAddAsk(role, "crew", "add", "porter", "kind=claude", "preset=auto", "dir="+y.Store.home), "yardmaster")
@@ -233,17 +250,19 @@ func TestRunAskCrewAddUsesCarriedBytes(t *testing.T) {
 		t.Errorf("the role symlink changed: %q, %v", got, err)
 	}
 	// A preset changed after the ask makes its card stale, even if its
-	// label and description still look the same.
+	// label and description still look the same: the yard comes back on a
+	// build whose claude file passes other flags for auto.
 	seq3 := y.ask(t, crewAddAsk(role2, "crew", "add", "scribe", "kind=claude", "preset=auto", "dir="+y.Store.home), "yardmaster")
-	presets := HarnessPresets["claude"]
-	changed := slices.Clone(presets)
-	for i := range changed {
-		if changed[i].Label == "auto" {
-			changed[i].Args = []string{"--different-auto-mode"}
+	changed := testCatalogue()
+	claude := slices.IndexFunc(changed.Harnesses, func(h Harness) bool { return h.Kind == "claude" })
+	presets := slices.Clone(changed.Harnesses[claude].Flags.Permissions)
+	for i := range presets {
+		if presets[i].Label == "auto" {
+			presets[i].Args = []string{"--different-auto-mode"}
 		}
 	}
-	HarnessPresets["claude"] = changed
-	defer func() { HarnessPresets["claude"] = presets }()
+	changed.Harnesses[claude].Flags.Permissions = presets
+	y.reopen(t, changed)
 	_, approveErr := y.ApproveAsk(y.ctx, y.bead, seq3, "mckean", true, nil)
 	if approveErr == nil || !strings.Contains(approveErr.Error(), "from before that changed") {
 		t.Errorf("approval after the preset changed = %v, want a stale-card refusal", approveErr)
@@ -251,7 +270,7 @@ func TestRunAskCrewAddUsesCarriedBytes(t *testing.T) {
 	if _, err := y.GetCrew(y.ctx, "scribe"); err == nil {
 		t.Error("a stale preset card created its member")
 	}
-	HarnessPresets["claude"] = presets
+	y.reopen(t, testCatalogue())
 	// A name with a slash is one file in the roles directory, as a group's
 	// is: a symlinked directory of that name redirects nothing, and nothing
 	// is written outside roles.

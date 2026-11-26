@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/notify"
 	"yardr.dev/yardr/internal/rpc"
@@ -33,8 +34,8 @@ func (a *app) upgradeRun(w, warn io.Writer, ctx context.Context, cfg *config.Con
 		return fmt.Errorf("--timeout must be greater than zero")
 	}
 	if fromFlag != "" {
-		if set, ok := store.SettingOf(store.UpgradeFromSetting); ok && set.Check != nil {
-			if err := set.Check(fromFlag); err != nil {
+		if set, ok := store.SettingOf(store.UpgradeFromSetting); ok {
+			if err := set.Valid(agents.Catalogue(), fromFlag); err != nil {
 				return err
 			}
 		}
@@ -463,7 +464,7 @@ func (a *app) upgradeRun(w, warn io.Writer, ctx context.Context, cfg *config.Con
 				continue
 			}
 			needsRestore := false
-			if s, err := store.Open(yc.DBPath()); err != nil {
+			if s, err := store.Open(yc.DBPath(), agents.Catalogue()); err != nil {
 				if errors.Is(err, store.ErrNewerSchema) {
 					needsRestore = true
 				} else if !errors.Is(err, store.ErrLocked) {
@@ -500,7 +501,7 @@ func (a *app) upgradeRun(w, warn io.Writer, ctx context.Context, cfg *config.Con
 				outcome = "restored from the pre-install copy, back on " + prevRev
 				// The old build on the pre-install copy is the bottom:
 				// where even that refuses, the yard stays down.
-				if s, err := store.Open(yc.DBPath()); err != nil {
+				if s, err := store.Open(yc.DBPath(), agents.Catalogue()); err != nil {
 					_ = s
 					outcome = "the old build refuses even the pre-install copy: " + err.Error()
 					outcomes = append(outcomes, config.UpgradeYardOutcome{Home: before.home, Outcome: outcome, Restored: true})

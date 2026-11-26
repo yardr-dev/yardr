@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
@@ -51,7 +52,7 @@ func TestBDPServeRefusesNonLoopbackFromEnvironmentAndSetting(t *testing.T) {
 	env := testEnv(t, home)
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "yard.db")
-	old, err := store.Open(path)
+	old, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

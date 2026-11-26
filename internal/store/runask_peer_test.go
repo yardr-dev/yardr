@@ -109,7 +109,7 @@ func TestRunAskPeerAllowAnyKind(t *testing.T) {
 	if !slices.Equal(run.Argv, want.Argv) || run.Description != want.Description || !slices.Equal(run.Does, want.Does) || run.Back != want.Back || run.BackBy != "" || !sameMap(run.Seen, want.Seen) {
 		t.Fatalf("the ask stores\n%+v\nwant\n%+v", run, want)
 	}
-	card := y.asked(t, seq).Lines()
+	card := y.asked(t, seq).Lines(testCatalogue())
 	for _, line := range []string{
 		"  the yard says: " + want.Does[0],
 		"  the yard says: " + want.Does[1],
@@ -228,7 +228,7 @@ func TestRunAskPeerAllowTrust(t *testing.T) {
 	if want := []AskWeight{{Class: WeightTrust, Line: exposeWeight}}; !slices.Equal(r.Ask.Weight, want) {
 		t.Fatalf("the ask weighs %v, want %v", r.Ask.Weight, want)
 	}
-	card := r.Lines()
+	card := r.Lines(testCatalogue())
 	for _, line := range []string{
 		"  the yard says: " + want.Does[0],
 		"  WEIGHTY · trust: " + exposeWeight,
@@ -522,7 +522,7 @@ func TestRunAskPeerIntake(t *testing.T) {
 	if !slices.Equal(run.Argv, want.Argv) || run.Description != want.Description || !slices.Equal(run.Does, want.Does) || run.Back != want.Back || run.BackBy != "" || !sameMap(run.Seen, want.Seen) {
 		t.Fatalf("the ask stores\n%+v\nwant\n%+v", run, want)
 	}
-	card := y.asked(t, seq).Lines()
+	card := y.asked(t, seq).Lines(testCatalogue())
 	for _, line := range []string{
 		"      yardr peer intake airy --depot web --flow incoming --limit 3",
 		"  what the command does: Say where the beads a peer sends go: the depot and the flow",

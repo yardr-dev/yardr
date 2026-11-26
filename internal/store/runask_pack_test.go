@@ -314,7 +314,7 @@ func packApplyYesShowsEditedWhole(t *testing.T) {
 		if stored.Text != newText || stored.Diff != Unified(oldText, newText) {
 			t.Errorf("%s: the stored object carries text %q and diff %q, want the file whole", c.argv, stored.Text, stored.Diff)
 		}
-		lines := strings.Join(got.Lines(), "\n")
+		lines := strings.Join(got.Lines(testCatalogue()), "\n")
 		for _, want := range []string{
 			"the change to file roles/a.md (sha256 " + oldSHA + " -> " + newSHA + "), whole as carried:",
 			"-role old",
@@ -874,7 +874,7 @@ func TestPackApplyReplacementCard(t *testing.T) {
 			t.Errorf("the card lacks %q:\n%s", want, joined)
 		}
 	}
-	lines := strings.Join(got.Lines(), "\n")
+	lines := strings.Join(got.Lines(testCatalogue()), "\n")
 	if !strings.Contains(lines, "-# thread, as the yard has it") {
 		t.Errorf("the terminal card lacks the diff whole:\n%s", lines)
 	}
@@ -946,8 +946,8 @@ func TestPackApplyCardsOrphanCopyDirectory(t *testing.T) {
 			t.Errorf("the card lacks %q:\n%s", want, joined)
 		}
 	}
-	if !strings.Contains(strings.Join(got.Lines(), "\n"), "left by hand") {
-		t.Fatalf("the terminal card omits the orphan file's text:\n%s", strings.Join(got.Lines(), "\n"))
+	if !strings.Contains(strings.Join(got.Lines(testCatalogue()), "\n"), "left by hand") {
+		t.Fatalf("the terminal card omits the orphan file's text:\n%s", strings.Join(got.Lines(testCatalogue()), "\n"))
 	}
 	if _, err := y.GetSource(y.ctx, "wired"); err == nil {
 		t.Fatal("the orphan directory had a source record")
@@ -1161,8 +1161,8 @@ func TestPackApplyReplacementCardsSymlinksWithoutFollowingThem(t *testing.T) {
 	if removed == nil || !removed.Symlink || removed.Text != "" {
 		t.Fatalf("the symbolic link inventory = %+v", got.Ask.Run.Carried[0].Removed)
 	}
-	if strings.Contains(strings.Join(got.Lines(), "\n"), "outside secret") {
-		t.Fatalf("the card read the link target outside the source copies:\n%s", strings.Join(got.Lines(), "\n"))
+	if strings.Contains(strings.Join(got.Lines(testCatalogue()), "\n"), "outside secret") {
+		t.Fatalf("the card read the link target outside the source copies:\n%s", strings.Join(got.Lines(testCatalogue()), "\n"))
 	}
 
 	other := filepath.Join(t.TempDir(), "other.txt")
@@ -1285,7 +1285,7 @@ func TestPackApplyDepotCardAndStale(t *testing.T) {
 	if got.Ask.Run.Description != "Import a pack into depot yardr: set the yard to what the pack says" {
 		t.Errorf("the card's description = %q", got.Ask.Run.Description)
 	}
-	if lines := strings.Join(got.Lines(), "\n"); !strings.Contains(lines, "-old role") || !strings.Contains(lines, "+new role") {
+	if lines := strings.Join(got.Lines(testCatalogue()), "\n"); !strings.Contains(lines, "-old role") || !strings.Contains(lines, "+new role") {
 		t.Errorf("the terminal card lacks the file's diff whole:\n%s", lines)
 	}
 	done, err := y.ApproveAsk(y.ctx, y.bead, seq, "mckean", true, nil)
@@ -1506,7 +1506,7 @@ func TestPackApplySummaryCard(t *testing.T) {
 		}
 	}
 	// A terminal reads the texts behind the card, as behind a whole one.
-	if lines := strings.Join(got.Lines(), "\n"); !strings.Contains(lines, "the file roles/19.md as the pack would install it") {
+	if lines := strings.Join(got.Lines(testCatalogue()), "\n"); !strings.Contains(lines, "the file roles/19.md as the pack would install it") {
 		t.Errorf("the terminal card lacks a file's text")
 	}
 	if !StrongWeight(got.Ask.Weight) {

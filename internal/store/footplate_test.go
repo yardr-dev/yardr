@@ -27,7 +27,7 @@ var footNow = time.Date(2026, 10, 12, 12, 0, 0, 0, time.UTC)
 func newFootYard(t *testing.T) *footYard {
 	t.Helper()
 	y := &footYard{ctx: context.Background(), now: footNow}
-	s, err := Open(filepath.Join(t.TempDir(), "y.db"))
+	s, err := openStore(t, filepath.Join(t.TempDir(), "y.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

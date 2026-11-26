@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -23,7 +24,7 @@ const stalledHeader = "X-Test-Stalled"
 // waited the timeout, rather than holding the handler in Write for good
 // (past a drain's settle); a reader that keeps up is never cut off.
 func TestStalledStreamReaderIsCutOff(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "yard.db"))
+	st, err := store.Open(filepath.Join(t.TempDir(), "yard.db"), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +114,7 @@ func TestStalledStreamReaderIsCutOff(t *testing.T) {
 // are small enough that no write waits on the reader, so the short timeout
 // is no matter of the machine here.
 func TestQuietStreamIsNotCutOff(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "yard.db"))
+	st, err := store.Open(filepath.Join(t.TempDir(), "yard.db"), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +167,7 @@ func (c heldConn) Read(p []byte) (int, error) {
 // what TestStalledStreamReaderIsCutOff's live subscriber met on a busy
 // machine while that test read from it only at its ends.
 func TestStalledClientSubscriberIsClosed(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "yard.db"))
+	st, err := store.Open(filepath.Join(t.TempDir(), "yard.db"), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -32,7 +32,7 @@ var homeNow = time.Date(2026, 10, 12, 12, 0, 0, 0, time.UTC)
 func newHomeYard(t *testing.T) *homeYard {
 	t.Helper()
 	y := &homeYard{ctx: context.Background(), now: homeNow}
-	s, err := Open(filepath.Join(t.TempDir(), "y.db"))
+	s, err := openStore(t, filepath.Join(t.TempDir(), "y.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +168,7 @@ func TestPeerAnswerLands(t *testing.T) {
 		t.Fatalf("after the pick: %+v", r)
 	}
 	// It is shown as any pick is, by whom it is.
-	if lines := strings.Join(r.Lines(), "\n"); !strings.Contains(lines, "mckean@north picked 1 (Move them now): tonight") {
+	if lines := strings.Join(r.Lines(testCatalogue()), "\n"); !strings.Contains(lines, "mckean@north picked 1 (Move them now): tonight") {
 		t.Fatalf("lines:\n%s", lines)
 	}
 

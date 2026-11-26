@@ -27,7 +27,6 @@ import (
 	"fmt"
 	"maps"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -235,14 +234,12 @@ func (w *wtx) groupAddProposal(run AskRun) (groupAddSpec, error) {
 			config["kind"] = kind
 		}
 	}
-	if ps := configProblems(GroupConfig, name, runner, config, nil); len(ps) > 0 {
+	if ps := configProblems(w.catalogue(), GroupConfig, name, runner, config, nil); len(ps) > 0 {
 		return groupAddSpec{}, ps[0]
 	}
 	if kind, named := sets["kind"]; named {
-		if _, ok := HarnessLabels[kind]; !ok {
-			have := mapsKeys(HarnessLabels)
-			slices.Sort(have)
-			return groupAddSpec{}, fmt.Errorf("group %s: kind %q is no harness kind the yard knows (it knows: %s): name one as --set kind=<kind>", name, kind, strings.Join(have, ", "))
+		if !w.catalogue().known(kind) {
+			return groupAddSpec{}, fmt.Errorf("group %s: kind %q is no harness kind the yard knows (it knows: %s): name one as --set kind=<kind>", name, kind, strings.Join(w.catalogue().harnessKinds(), ", "))
 		}
 	}
 	spec := groupAddSpec{name: name, runner: runner, limit: limit, config: config}
@@ -403,9 +400,9 @@ func (w *wtx) groupAddCard(run AskRun, _ bool) (AskRun, error) {
 		case kind == "":
 			does = append(does, "It starts claude agents, the herdr runner's own default.")
 		case sets["kind"] == "":
-			does = append(does, fmt.Sprintf("It starts %s (%s) agents, the yard's default_kind.", kind, or(HarnessLabels[kind], kind)))
+			does = append(does, fmt.Sprintf("It starts %s (%s) agents, the yard's default_kind.", kind, or(w.catalogue().label(kind), kind)))
 		default:
-			does = append(does, fmt.Sprintf("It starts %s (%s) agents.", kind, HarnessLabels[kind]))
+			does = append(does, fmt.Sprintf("It starts %s (%s) agents.", kind, w.catalogue().label(kind)))
 		}
 		if args := str("args"); args != "" {
 			does = append(does, fmt.Sprintf("It starts them with %s.", strconv.Quote(args)))

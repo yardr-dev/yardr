@@ -27,7 +27,7 @@ func newETATest(t testing.TB) *etaTest {
 	clock = func() time.Time { return y.now }
 	t.Cleanup(func() { clock = time.Now })
 	var err error
-	if y.Store, err = Open(filepath.Join(t.TempDir(), "y.db")); err != nil {
+	if y.Store, err = openStore(t, filepath.Join(t.TempDir(), "y.db")); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { y.Close(context.Background()) })
@@ -334,7 +334,7 @@ func TestETARestartKeepsCellsAndClocks(t *testing.T) {
 	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
 	clock = func() time.Time { return now }
 	t.Cleanup(func() { clock = time.Now })
-	s, err := Open(path)
+	s, err := openStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -383,7 +383,7 @@ func TestETARestartKeepsCellsAndClocks(t *testing.T) {
 	if err := s.Close(ctx); err != nil {
 		t.Fatal(err)
 	}
-	s, err = Open(path)
+	s, err = openStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -415,7 +415,7 @@ func TestETAMigrateFailedMarkerForLiveClaim(t *testing.T) {
 	path := filepath.Join(dir, "y.db")
 	t.Setenv(NoSyncEnv, "1")
 	ctx := context.Background()
-	s, err := Open(path)
+	s, err := openStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -453,7 +453,7 @@ func TestETAMigrateFailedMarkerForLiveClaim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err = Open(path)
+	s, err = openStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -560,7 +560,7 @@ func TestETASeedReplaysTheLog(t *testing.T) {
 	now := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
 	clock = func() time.Time { return now }
 	t.Cleanup(func() { clock = time.Now })
-	s, err := Open(path)
+	s, err := openStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -710,7 +710,7 @@ func TestETASeedReplaysTheLog(t *testing.T) {
 	}
 	now = now.Add(time.Hour)
 	seeded := now
-	s, err = Open(path)
+	s, err = openStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -763,7 +763,7 @@ func TestETASeedUsesDifficultyAtEachExit(t *testing.T) {
 	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
 	clock = func() time.Time { return now }
 	t.Cleanup(func() { clock = time.Now })
-	s, err := Open(path)
+	s, err := openStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -834,7 +834,7 @@ func TestETASeedUsesDifficultyAtEachExit(t *testing.T) {
 		t.Fatal(err)
 	}
 	now = now.Add(time.Hour)
-	s, err = Open(path)
+	s, err = openStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -865,7 +865,7 @@ func TestETASeedPairsLatestClaimAndResetsReopenedClock(t *testing.T) {
 	clock = func() time.Time { return y.now }
 	t.Cleanup(func() { clock = time.Now })
 	var err error
-	y.Store, err = Open(path)
+	y.Store, err = openStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -964,7 +964,7 @@ func TestETASeedPairsLatestClaimAndResetsReopenedClock(t *testing.T) {
 
 	clockAt = base.Add(12 * time.Hour)
 	y.at(clockAt)
-	y.Store, err = Open(path)
+	y.Store, err = openStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1007,7 +1007,7 @@ func TestETAMigrateIgnoresFailureForDifferentBead(t *testing.T) {
 	clock = func() time.Time { return clockAt }
 	t.Cleanup(func() { clock = time.Now })
 	ctx := context.Background()
-	s, err := Open(path)
+	s, err := openStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1036,7 +1036,7 @@ func TestETAMigrateIgnoresFailureForDifferentBead(t *testing.T) {
 	stripETAState(t, path, 21)
 
 	clockAt = clockAt.Add(time.Minute)
-	s, err = Open(path)
+	s, err = openStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -412,7 +413,7 @@ func TestAsksFor(t *testing.T) {
 	if len(grace) != 0 {
 		t.Fatalf("asks for grace: %+v", grace)
 	}
-	if !strings.Contains(strings.Join(got[0].Lines(), "\n"), "Move the links now?") {
-		t.Fatalf("ask lines: %+v", got[0].Lines())
+	if !strings.Contains(strings.Join(got[0].Lines(agents.Catalogue()), "\n"), "Move the links now?") {
+		t.Fatalf("ask lines: %+v", got[0].Lines(agents.Catalogue()))
 	}
 }

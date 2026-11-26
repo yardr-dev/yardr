@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
 )
@@ -641,7 +642,7 @@ func TestBeadAskTakeBack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if text := strings.Join(store.NoteBlocksMarked(notes, time.Now(), nil, ""), "\n"); !strings.Contains(text, "taken back by yardmaster: the design went back to draft") {
+	if text := strings.Join(store.NoteBlocksMarked(agents.Catalogue(), notes, time.Now(), nil, ""), "\n"); !strings.Contains(text, "taken back by yardmaster: the design went back to draft") {
 		t.Errorf("the notes:\n%s", text)
 	}
 

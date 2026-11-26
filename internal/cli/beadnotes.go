@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -56,7 +57,7 @@ func printNotes(w io.Writer, notes []store.Note, home string, as map[string]stri
 		fmt.Fprintf(w, "  %s %s (note %d)%s\n", author, n.At.Local().Format("2006-01-02 15:04:05"), n.Seq, noteTell(n))
 		text := n.Text
 		if r, ok := asks[n.Seq]; ok && r.AskErr == nil {
-			text = strings.Join(r.LinesMarked(as), "\n")
+			text = strings.Join(r.LinesMarked(agents.Catalogue(), as), "\n")
 		}
 		fmt.Fprintf(w, "    %s\n", strings.ReplaceAll(store.NoteLetters(text), "\n", "\n    "))
 		if line := store.NoteFilesLine(home, n.Files); line != "" {

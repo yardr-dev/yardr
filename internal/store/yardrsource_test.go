@@ -10,6 +10,7 @@ import (
 
 	bolt "go.etcd.io/bbolt"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
 )
@@ -597,7 +598,7 @@ func TestYardrSeveralValuesForOneKey(t *testing.T) {
 func TestSubscriptionStoredBeforeSeveralValues(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "yardr.db")
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -642,7 +643,7 @@ func TestSubscriptionStoredBeforeSeveralValues(t *testing.T) {
 	}
 	before := bucketDump(t, path, "crew")
 
-	if s, err = store.Open(path); err != nil {
+	if s, err = store.Open(path, agents.Catalogue()); err != nil {
 		t.Fatal(err)
 	}
 	beads := map[string]string{}

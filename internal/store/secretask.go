@@ -128,7 +128,7 @@ func (s AskSecret) Names() string { return strings.Join(s.Env, " and ") }
 // harness key goes to the operator's key file of the kind, and its line
 // says the reach the person consents to: every session of the kind that
 // burns the operator's login reads it.
-func (s AskSecret) Line() string {
+func (s AskSecret) Line(cat Catalogue) string {
 	if s.Google != "" {
 		if s.As != "" {
 			return fmt.Sprintf("a secret: the sign-in for %s's Google account %s, pasted from gws auth export --unmasked on the machine that signed in (gws auth login -s %s); it is read by the yard's Google calls made as %s",
@@ -149,7 +149,7 @@ func (s AskSecret) Line() string {
 	}
 	if s.Harness != "" {
 		label := s.Harness
-		if l, ok := HarnessLabels[s.Harness]; ok && l != "" {
+		if l := cat.label(s.Harness); l != "" {
 			label = l
 		}
 		return fmt.Sprintf("a secret: %s, the API key %s runs with, asked for crew member %s; it is read by every %s session that burns the operator's login (the crew, groups without login_for, the operator's conversations), from its next start",
@@ -206,11 +206,11 @@ type SecretAsked struct {
 
 // asked is the secret of the ask a as a client shows it, nil for an ask
 // that asks for none.
-func (a Ask) asked() *SecretAsked {
+func (a Ask) asked(cat Catalogue) *SecretAsked {
 	if a.Secret == nil {
 		return nil
 	}
-	return &SecretAsked{Source: a.Secret.Source, Env: a.Secret.Env, User: a.Secret.User, Crew: a.Secret.Crew, As: a.Secret.As, Login: a.Secret.Login, Hook: a.Secret.Hook, Harness: a.Secret.Harness, Google: a.Secret.Google, Scopes: a.Secret.Scopes, LoginRun: a.Secret.LoginRun, LoginPaste: a.Secret.LoginPaste, Reach: a.Secret.Reach(), Line: a.Secret.Line()}
+	return &SecretAsked{Source: a.Secret.Source, Env: a.Secret.Env, User: a.Secret.User, Crew: a.Secret.Crew, As: a.Secret.As, Login: a.Secret.Login, Hook: a.Secret.Hook, Harness: a.Secret.Harness, Google: a.Secret.Google, Scopes: a.Secret.Scopes, LoginRun: a.Secret.LoginRun, LoginPaste: a.Secret.LoginPaste, Reach: a.Secret.Reach(), Line: a.Secret.Line(cat)}
 }
 
 // concealed is the ask's concealment as a client shows it: false where the
@@ -527,10 +527,11 @@ func (w *wtx) askedHarnessKey(sec AskSecret, to string) (*AskSecret, error) {
 	case strings.TrimSpace(sec.Hook) != "":
 		return nil, fmt.Errorf("a harness API key is no hook's signing secret: it takes no hook")
 	}
-	if _, ok := HarnessLabels[kind]; !ok {
+	cat := w.catalogue()
+	if !cat.known(kind) {
 		return nil, fmt.Errorf("harness %s: the yard has no harness file for it (yardr harness list)", kind)
 	}
-	loginEnv := HarnessLoginEnv[kind]
+	loginEnv := cat.loginEnv(kind)
 	if len(loginEnv) == 0 {
 		return nil, fmt.Errorf("harness %s: its file names no login_env, so there is no API key to ask for", kind)
 	}

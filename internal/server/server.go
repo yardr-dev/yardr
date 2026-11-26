@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/hooks"
 	"yardr.dev/yardr/internal/pack"
@@ -131,7 +132,7 @@ func (r *runner) run(ctx context.Context) error {
 // never a stop.
 func (r *runner) serve(ctx context.Context) (string, bool, error) {
 	c, log := r.c, r.log
-	st, err := store.Open(c.DBPath())
+	st, err := store.Open(c.DBPath(), agents.Catalogue())
 	if errors.Is(err, store.ErrLocked) {
 		return "", false, fmt.Errorf("another yardr server owns %s", c.DBPath())
 	} else if err != nil {

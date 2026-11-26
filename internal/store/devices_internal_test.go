@@ -38,7 +38,7 @@ func TestDeviceLastUse(t *testing.T) {
 	at := time.Date(2026, 10, 12, 19, 0, 0, 0, time.UTC)
 	clock = func() time.Time { return at }
 	t.Cleanup(func() { clock = time.Now })
-	s, err := Open(filepath.Join(t.TempDir(), "y.db"))
+	s, err := openStore(t, filepath.Join(t.TempDir(), "y.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestDeviceLastUse(t *testing.T) {
 // write the same way, and leaves no error behind.
 func TestDeviceResolveWhileWriteHeld(t *testing.T) {
 	t.Parallel()
-	s, err := Open(filepath.Join(t.TempDir(), "y.db"))
+	s, err := openStore(t, filepath.Join(t.TempDir(), "y.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +227,7 @@ func TestDeviceResolveWhileWriteHeld(t *testing.T) {
 // case because it finds a device by its token.
 func testDeviceStampOfAMissingDevice(t *testing.T) {
 	t.Helper()
-	s, err := Open(filepath.Join(t.TempDir(), "y.db"))
+	s, err := openStore(t, filepath.Join(t.TempDir(), "y.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -303,7 +303,7 @@ func testDeviceStampOfAMissingDevice(t *testing.T) {
 // only pin then, and the device list keeps its label.
 func TestDevicePinnedReadsPairedByDefault(t *testing.T) {
 	t.Parallel()
-	s, err := Open(filepath.Join(t.TempDir(), "y.db"))
+	s, err := openStore(t, filepath.Join(t.TempDir(), "y.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

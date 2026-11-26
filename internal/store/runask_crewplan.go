@@ -168,7 +168,7 @@ func (w *wtx) crewSetPlan(run AskRun) (RunPlan, crewSetSpec, error) {
 	}
 	kind := was
 	if k, ok := sets["kind"]; ok {
-		if err := checkHarnessKind(subject, k); err != nil {
+		if err := checkHarnessKind(w.catalogue(), subject, k); err != nil {
 			return RunPlan{}, spec, err
 		}
 		spec.set["kind"], kind = k, k
@@ -190,10 +190,10 @@ func (w *wtx) crewSetPlan(run AskRun) (RunPlan, crewSetSpec, error) {
 		var p Permission
 		if own {
 			var found bool
-			if p, found = HarnessPreset(kind, label); !found {
-				return RunPlan{}, spec, noPreset(subject, kind, label, "one")
+			if p, found = w.catalogue().preset(kind, label); !found {
+				return RunPlan{}, spec, noPreset(w.catalogue(), subject, kind, label, "one")
 			}
-		} else if p, err = strongPreset(subject, kind, label); err != nil {
+		} else if p, err = strongPreset(w.catalogue(), subject, kind, label); err != nil {
 			return RunPlan{}, spec, err
 		}
 		args := make([]any, len(p.Args))
@@ -207,7 +207,7 @@ func (w *wtx) crewSetPlan(run AskRun) (RunPlan, crewSetSpec, error) {
 		spec.want.Config = map[string]any{}
 	}
 	maps.Copy(spec.want.Config, spec.set)
-	if ps := configProblems(CrewConfig, name, spec.have.Runner, spec.want.Config, spec.have.Config); len(ps) > 0 {
+	if ps := configProblems(w.catalogue(), CrewConfig, name, spec.have.Runner, spec.want.Config, spec.have.Config); len(ps) > 0 {
 		return RunPlan{}, spec, ps[0]
 	}
 	have, want := asStored(spec.have.Config), asStored(spec.want.Config)
@@ -255,13 +255,13 @@ func crewAgents(p RunPlan) string {
 // agents start as now (the yard's default_kind, where the member names none)
 // and as they will. The flags it holds are not the kind's to translate:
 // where the card sets no preset the card says they stay as they are.
-func crewKindLines(_ *wtx, _ AskRun, p RunPlan, c PlanChange) []string {
+func crewKindLines(w *wtx, _ AskRun, p RunPlan, c PlanChange) []string {
 	was := p.Holds["agents"]
-	now := fmt.Sprintf("It starts %s (%s) agents now", was, or(HarnessLabels[was], was))
+	now := fmt.Sprintf("It starts %s (%s) agents now", was, or(w.catalogue().label(was), was))
 	if c.Before == "" {
 		now += ", the yard's default_kind"
 	}
-	lines := []string{now + ".", fmt.Sprintf("It will start %s (%s) agents.", c.After, or(HarnessLabels[c.After], c.After))}
+	lines := []string{now + ".", fmt.Sprintf("It will start %s (%s) agents.", c.After, or(w.catalogue().label(c.After), c.After))}
 	if _, ok := p.Holds["preset"]; !ok {
 		if words := argWords(heldArgs(p.Holds["args"])); len(words) > 0 {
 			lines = append(lines, fmt.Sprintf("It starts them with %s, and this card does not change those flags.", quotedWords(words)))
@@ -282,10 +282,10 @@ func crewModelLines(_ *wtx, _ AskRun, _ RunPlan, c PlanChange) []string {
 // crewPresetLines are the card's lines for the flags a preset sets: the
 // preset is one of the kind the agents will start as, which the plan read it
 // of.
-func crewPresetLines(_ *wtx, _ AskRun, p RunPlan, c PlanChange) []string {
+func crewPresetLines(w *wtx, _ AskRun, p RunPlan, c PlanChange) []string {
 	kind := crewAgents(p)
-	preset, _ := HarnessPreset(kind, p.Holds["preset"])
-	return presetLines(p.Holds["agents"], kind, heldArgs(c.Before), preset)
+	preset, _ := w.catalogue().preset(kind, p.Holds["preset"])
+	return presetLines(w.catalogue(), p.Holds["agents"], kind, heldArgs(c.Before), preset)
 }
 
 // crewSetWeight weighs a crew set card: the member's sessions run a program

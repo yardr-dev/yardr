@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/hooks"
 	"yardr.dev/yardr/internal/scripttest"
 	"yardr.dev/yardr/internal/source"
@@ -488,7 +489,7 @@ func TestWebhookPackSend(t *testing.T) {
 	needPackTools(t) // the build command is written in jq
 	d, dir, text := webhookParse(t)
 	home := t.TempDir()
-	s, err := store.Open(filepath.Join(home, "yard.db"))
+	s, err := store.Open(filepath.Join(home, "yard.db"), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -214,10 +214,11 @@ type Permission struct {
 	// prompts: a session started with it never stops to ask (design
 	// yardr-m90n 3.5). It reaches a group or a crew member only on a card
 	// its operator approves before it runs, and the delegated leg refuses
-	// it, so this one field is what both sides read. It is set in
-	// HarnessPresets alone, where a test holds it to the flags
-	// (harness_kinds_test.go); the harness files carry none.
-	Strong bool `yaml:"-" json:"-"`
+	// it, so this one field is what both sides read. Only yardr's own
+	// harness files set it, which the loader holds them to (agents.load),
+	// and a test holds it to the flags
+	// (agents.TestHarnessPresetsAreStrongWhenTheirFlagsAskNothing).
+	Strong bool `yaml:"strong,omitempty" json:"-"`
 }
 
 // Offer is one model a harness file suggests: the id the kind's --model
@@ -760,13 +761,12 @@ type Hints struct {
 var harnessEnvKey = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // Check finds what a harness file says that yardr cannot go by, and
-// compiles its error lines.
+// compiles its error lines. What it says against the kinds herdr starts and
+// their programs is the loader's to hold it to (agents.load), which has them.
 func (h *Harness) Check() error {
 	switch {
 	case h.Version != FileVersion:
 		return fmt.Errorf("version %d: this yardr reads version %d", h.Version, FileVersion)
-	case !slices.Contains(HerdrKinds, h.Kind):
-		return fmt.Errorf("%s is no kind herdr starts", h.Kind)
 	case h.Label == "":
 		return fmt.Errorf("no label")
 	case h.Marks.Input == "" && (h.Marks.Message != "" || h.Marks.Edge != "" || h.Marks.Placeholder != "" || len(h.Marks.PlaceholderSGR) > 0):
@@ -795,11 +795,6 @@ func (h *Harness) Check() error {
 				return fmt.Errorf("trust.env: entry %d: want KEY=VALUE", i+1)
 			}
 			t.EnvNames = append(t.EnvNames, k)
-		}
-	}
-	if h.Fetch != nil {
-		if err := h.Fetch.Check(Executable(h.Kind)); err != nil {
-			return fmt.Errorf("fetch: %w", err)
 		}
 	}
 	if h.Flags.Model != "" && !strings.HasPrefix(h.Flags.Model, "-") {

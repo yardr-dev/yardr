@@ -80,7 +80,7 @@ func TestAddressAskIsStoredWithTheNotifyKeysName(t *testing.T) {
 		t.Fatalf("the ask's secret = %s\nwant %s", got, want)
 	}
 	const line = "a secret: PUSHOVER_USER, ada's own address in the source pushover (https://api.pushover.net); ada is told through pushover once it is given and yardr user set ada notify=pushover is run"
-	lines := strings.Join(y.resolved(t)[0].Lines(), "\n")
+	lines := strings.Join(y.resolved(t)[0].Lines(testCatalogue()), "\n")
 	for _, want := range []string{
 		"  " + line,
 		"  it goes to a file only the yard's server reads; no agent is shown it",
@@ -179,7 +179,7 @@ func TestGiveSecretGivesAUsersOwnAddress(t *testing.T) {
 	if len(answers) != 1 || answers[0].Author != "ada" || answers[0].Text != `{"ask":`+itoa(seq)+`,"given":["PUSHOVER_USER"]}` {
 		t.Fatalf("the answer notes = %+v", answers)
 	}
-	if lines := strings.Join(y.resolved(t)[0].Lines(), "\n"); !strings.Contains(lines, "  ada gave PUSHOVER_USER") || strings.Contains(lines, "answer with") {
+	if lines := strings.Join(y.resolved(t)[0].Lines(testCatalogue()), "\n"); !strings.Contains(lines, "  ada gave PUSHOVER_USER") || strings.Contains(lines, "answer with") {
 		t.Fatalf("the card:\n%s", lines)
 	}
 	e := lastAnswer(t, y)

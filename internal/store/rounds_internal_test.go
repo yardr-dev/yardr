@@ -17,7 +17,7 @@ import (
 func TestRoundsOfABeadFromBefore(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	s, err := Open(filepath.Join(t.TempDir(), "y.db"))
+	s, err := openStore(t, filepath.Join(t.TempDir(), "y.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

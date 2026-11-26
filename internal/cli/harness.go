@@ -363,7 +363,7 @@ func printHarness(w io.Writer, h store.Harness, has bool) {
 			days = "1 day"
 		}
 		fmt.Fprintln(w, "\nForgetting a session the yard started, so that the harness does not keep it for ever")
-		fmt.Fprintf(w, "  %s after it ended, once it has stopped and its tokens are counted: %s %s\n", days, store.Executable(h.Kind), strings.Join(f.Args, " "))
+		fmt.Fprintf(w, "  %s after it ended, once it has stopped and its tokens are counted: %s %s\n", days, agents.Executable(h.Kind), strings.Join(f.Args, " "))
 		fmt.Fprintln(w, "  ({session} is the id the agent's session had; a person's own sessions, a session left running (keep) and a manual, peer or exec group's are never forgotten)")
 	}
 	fmt.Fprintln(w, "\nError lines it stops on, in the order they are tried")
@@ -397,7 +397,7 @@ func printHarness(w io.Writer, h store.Harness, has bool) {
 	}
 	if r := h.LoginRecipe; r != nil {
 		fmt.Fprintf(w, "\nLogin led by a program, with no terminal (yardr harness login %s --json)\n", h.Kind)
-		fmt.Fprintf(w, "  the command: %s %s\n", store.Executable(h.Kind), strings.Join(r.Argv, " "))
+		fmt.Fprintf(w, "  the command: %s %s\n", agents.Executable(h.Kind), strings.Join(r.Argv, " "))
 		for _, m := range r.Methods {
 			fmt.Fprintf(w, "  method %q: %s\n", m.Label, strings.Join(m.Args, " "))
 		}

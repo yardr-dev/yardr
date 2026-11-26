@@ -218,7 +218,7 @@ func TestSetupDriftAccountGivenKeep(t *testing.T) {
 			t.Errorf("the drift card lacks %q:\n%s", want, joined)
 		}
 	}
-	lines := strings.Join(y.asked(t, seq).Lines(), "\n")
+	lines := strings.Join(y.asked(t, seq).Lines(testCatalogue()), "\n")
 	if !strings.Contains(lines, "<n>, <n> --secret, or <n> --account <source>") {
 		t.Errorf("the terminal card lacks the bare pick answer:\n%s", lines)
 	}

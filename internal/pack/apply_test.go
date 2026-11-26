@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/pack"
 	"yardr.dev/yardr/internal/store"
@@ -1674,7 +1675,7 @@ func TestFilledFileChangedSinceThePlanIsRefused(t *testing.T) {
 // is carried over as the yard has it and does not stop the import.
 func TestApplyMeetsTheStoresConfigCheck(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "yard.db")
-	old, err := store.Open(path)
+	old, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

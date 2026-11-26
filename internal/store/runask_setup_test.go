@@ -260,7 +260,7 @@ func TestSetupCardShowsDeclarationMintAccountAndPresets(t *testing.T) {
 	if setup.TakenBack() != "the operator can take it back: yardr source rm setupmail; yardr source revoke setupmail <what> --crew yardmaster" {
 		t.Errorf("the card takes it back with %q", setup.TakenBack())
 	}
-	lines := strings.Join(got.Lines(), "\n")
+	lines := strings.Join(got.Lines(testCatalogue()), "\n")
 	for _, want := range []string{
 		"yardmaster says: the yardmaster reads mail to work beads",
 		"when you approve, the yard applies the pack, takes the account, and grants the preset you pick, and nothing else:",
@@ -981,7 +981,7 @@ func TestSetupApprovalRecordsCarryPending(t *testing.T) {
 		t.Error("the values were taken twice")
 	}
 	got := y.asked(t, seq)
-	lines := strings.Join(got.Lines(), "\n")
+	lines := strings.Join(got.Lines(testCatalogue()), "\n")
 	if !strings.Contains(lines, "mckean approved, to be carried out: setup of pack setupmail, preset drafts to crew yardmaster; gave SETUP_ACCOUNT") {
 		t.Errorf("the approved card reads:\n%s", lines)
 	}

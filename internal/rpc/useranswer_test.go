@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -69,7 +70,7 @@ changes: The bead goes back for changes.
 		".yardr/flows/default.flow":      flow,
 		".yardr/flows/default/review.md": review,
 	})
-	st, err := store.Open(filepath.Join(t.TempDir(), "yard.db"))
+	st, err := store.Open(filepath.Join(t.TempDir(), "yard.db"), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

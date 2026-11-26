@@ -55,7 +55,7 @@ func TestSecretReach(t *testing.T) {
 		}
 		// What a client is sent of the ask carries the reach: present on a
 		// secret ask, absent on a harness key and a waiting login's input.
-		if asked := (Ask{Secret: &c.s}).asked(); strings.Join(asked.Reach, "\n") != strings.Join(c.want, "\n") {
+		if asked := (Ask{Secret: &c.s}).asked(testCatalogue()); strings.Join(asked.Reach, "\n") != strings.Join(c.want, "\n") {
 			t.Errorf("%s as a client shows it: %q, want %q", c.name, asked.Reach, c.want)
 		}
 	}
@@ -93,7 +93,7 @@ func TestSecretReachRoutine(t *testing.T) {
 	if got := s.Reach(); strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("Reach:\n got %q\nwant %q", got, want)
 	}
-	if line := s.Line(); !strings.Contains(line, "read by the yard at each message it sends ada through routine") ||
+	if line := s.Line(testCatalogue()); !strings.Contains(line, "read by the yard at each message it sends ada through routine") ||
 		strings.Contains(line, "calls made as") {
 		t.Fatalf("Line = %q", line)
 	}

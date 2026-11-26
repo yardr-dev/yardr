@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/hooks"
 	"yardr.dev/yardr/internal/rpc"
@@ -41,7 +42,7 @@ func freeAddr(t *testing.T) string {
 // for each try.
 func setHookAddr(t *testing.T, c *config.Config, addr string) {
 	t.Helper()
-	st, err := store.Open(c.DBPath())
+	st, err := store.Open(c.DBPath(), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -317,7 +318,7 @@ func TestHookListenerTakesPeers(t *testing.T) {
 // the doc is not there even with it. A yard with no device has no /user/.
 func TestUserDeviceOnTheListener(t *testing.T) {
 	c := home(t)
-	st, err := store.Open(c.DBPath())
+	st, err := store.Open(c.DBPath(), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -385,7 +386,7 @@ func TestUserDeviceOnTheListener(t *testing.T) {
 // code once the pairing was used.
 func TestUserDevicePairedOnTheListener(t *testing.T) {
 	c := home(t)
-	st, err := store.Open(c.DBPath())
+	st, err := store.Open(c.DBPath(), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

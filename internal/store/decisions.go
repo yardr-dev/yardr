@@ -282,7 +282,7 @@ func (s *Store) userAsks(ctx context.Context, name, viewer string) (*AskQueue, t
 				q.Open = append(q.Open, OpenAsk{
 					Bead: b.ID, BeadTitle: b.Title, Topic: topic,
 					Ask: r.Note.Seq, Question: r.Ask.Question, Turn: r.Turn(),
-					Asker: r.Note.Author, Since: r.Note.At, Secret: r.Ask.asked(), Concealed: r.Ask.concealed(), Run: r.Ask.proposed(), Setup: r.Ask.setup(), Identity: r.Ask.identityAsked(), DepotPush: r.Ask.depotPushAsked(), Weight: r.Ask.Weight,
+					Asker: r.Note.Author, Since: r.Note.At, Secret: r.Ask.asked(s.cat), Concealed: r.Ask.concealed(), Run: r.Ask.proposed(), Setup: r.Ask.setup(), Identity: r.Ask.identityAsked(), DepotPush: r.Ask.depotPushAsked(), Weight: r.Ask.Weight,
 				})
 				continue
 			}
@@ -290,7 +290,7 @@ func (s *Store) userAsks(ctx context.Context, name, viewer string) (*AskQueue, t
 				Bead: b.ID, BeadTitle: b.Title, Topic: topic,
 				Ask: r.Note.Seq, Question: r.Ask.Question, Turn: r.Turn(),
 				Asker: r.Note.Author, Since: r.Note.At,
-				State: r.State.String(), Secret: r.Ask.asked(), Concealed: r.Ask.concealed(), Run: r.Ask.proposed(), Setup: r.Ask.setup(), Identity: r.Ask.identityAsked(), DepotPush: r.Ask.depotPushAsked(), Weight: r.Ask.Weight,
+				State: r.State.String(), Secret: r.Ask.asked(s.cat), Concealed: r.Ask.concealed(), Run: r.Ask.proposed(), Setup: r.Ask.setup(), Identity: r.Ask.identityAsked(), DepotPush: r.Ask.depotPushAsked(), Weight: r.Ask.Weight,
 			}
 			// An ask that is not open has the answer its state is from.
 			d.decidedBy(r)
@@ -424,7 +424,7 @@ func (s *Store) foreignAsks(name string, at time.Time) ([]foreignOpen, []decided
 			if err != nil || p == nil {
 				return err
 			}
-			row := rec.row(p)
+			row := rec.row(p, s.cat)
 			d := DecidedAsk{
 				Bead: row.Bead, BeadTitle: row.BeadTitle, Topic: row.Topic,
 				Ask: row.Ask, Question: row.Question, Asker: row.Asker, Since: row.Since,
@@ -728,7 +728,7 @@ func (s *Store) Bead(ctx context.Context, id string, viewer ...string) (*BeadVie
 		a := BeadAsk{
 			Ask: r.Note.Seq, To: r.Ask.To, Asker: r.Note.Author, Since: r.Note.At, Turn: r.Turn(),
 			Question: r.Ask.Question, Context: r.Ask.Context, Options: r.Ask.Options,
-			Recommend: r.Ask.Recommend, Why: r.Ask.Why, State: r.State.String(), Secret: r.Ask.asked(), Concealed: r.Ask.concealed(), Run: r.Ask.proposed(), Setup: r.Ask.setup(), Identity: r.Ask.identityAsked(), DepotPush: r.Ask.depotPushAsked(), Weight: r.Ask.Weight,
+			Recommend: r.Ask.Recommend, Why: r.Ask.Why, State: r.State.String(), Secret: r.Ask.asked(s.cat), Concealed: r.Ask.concealed(), Run: r.Ask.proposed(), Setup: r.Ask.setup(), Identity: r.Ask.identityAsked(), DepotPush: r.Ask.depotPushAsked(), Weight: r.Ask.Weight,
 		}
 		if a.Options == nil {
 			a.Options = []AskOption{}

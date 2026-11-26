@@ -159,7 +159,7 @@ func (w *wtx) deliver(e *Event) error {
 	// without subscribing. The sentence is stored on the event, so the inbox
 	// and the notification read it without another lookup; the text for
 	// mentions was already read, so it cannot match a name in it.
-	if ans := answerOf(w.Tx, row, e); ans != nil {
+	if ans := answerOf(w.Tx, w.catalogue(), row, e); ans != nil {
 		e.Data["answer"] = ans.line
 		// A sentence that names a command whose typed words carry a value or
 		// a path, a depot-push approval, or the words of a login ask taken back when the login ended,
@@ -320,7 +320,7 @@ type answeredAsk struct {
 // pick it replaced, if any. It is nil when the event is no answer, or when
 // either note does not parse: corrupt notes are yardr's own surfaces to
 // show, and the event reads as a note did.
-func answerOf(tx *bolt.Tx, row *beadRow, e *Event) *answeredAsk {
+func answerOf(tx *bolt.Tx, cat Catalogue, row *beadRow, e *Event) *answeredAsk {
 	if e.Kind != "noted" {
 		return nil
 	}
@@ -371,7 +371,7 @@ func answerOf(tx *bolt.Tx, row *beadRow, e *Event) *answeredAsk {
 		}
 	}
 	_, wordsHeld := HeldYardWords(e.Actor, ans.Words)
-	return &answeredAsk{asker: askNote.Author, session: askNote.Session, stage: ask.Stage, line: answerSentence(e.Actor, row.ID, askNote.Author, ans.Ask, ask, ans, n, prev),
+	return &answeredAsk{asker: askNote.Author, session: askNote.Session, stage: ask.Stage, line: answerSentence(cat, e.Actor, row.ID, askNote.Author, ans.Ask, ask, ans, n, prev),
 		held: ans.Ran != nil && (ask.Run != nil && RunHeld(*ask.Run) || ask.DepotPush != nil) || ans.TakeBack && wordsHeld}
 }
 
@@ -385,7 +385,7 @@ func answerOf(tx *bolt.Tx, row *beadRow, e *Event) *answeredAsk {
 // command reads as who approved which ask, and the command the yard ran,
 // whole. An approved setup reads as who approved which ask, the pack with
 // the preset and who it is granted to, and the names given, never a value.
-func answerSentence(actor, bead, asker string, askSeq uint64, ask Ask, ans Answer, n Note, prev int) string {
+func answerSentence(cat Catalogue, actor, bead, asker string, askSeq uint64, ask Ask, ans Answer, n Note, prev int) string {
 	question := fmt.Sprintf("%q", oneLine(ask.Question))
 	label := func(n int) string {
 		if n >= 1 && n <= len(ask.Options) {
@@ -407,7 +407,7 @@ func answerSentence(actor, bead, asker string, askSeq uint64, ask Ask, ans Answe
 		return oneLine(fmt.Sprintf("%s gave %s, %s's own address in the source %s (ask %d on %s)", actor, strings.Join(ans.Given, " and "), ask.Secret.User, ask.Secret.Source, askSeq, bead))
 	case len(ans.Given) > 0 && ask.Secret != nil && ask.Secret.Harness != "":
 		label := ask.Secret.Harness
-		if l, ok := HarnessLabels[ask.Secret.Harness]; ok && l != "" {
+		if l := cat.label(ask.Secret.Harness); l != "" {
 			label = l
 		}
 		return oneLine(fmt.Sprintf("%s gave %s, the API key %s runs with on the operator's login, asked for crew member %s (ask %d on %s)", actor, strings.Join(ans.Given, " and "), label, ask.Secret.Crew, askSeq, bead))

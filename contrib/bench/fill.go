@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -50,7 +51,7 @@ func openStore(path string, noSync bool) (*store.Store, error) {
 	var err error
 	// A server that was just stopped may hold the file a moment longer.
 	for range 10 {
-		if s, err = store.Open(path); err == nil {
+		if s, err = store.Open(path, agents.Catalogue()); err == nil {
 			return s, nil
 		}
 	}

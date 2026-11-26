@@ -12,7 +12,7 @@ import (
 func TestRemoveBeadForeignAskCite(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	s, err := Open(t.TempDir() + "/y.db")
+	s, err := openStore(t, t.TempDir()+"/y.db")
 	if err != nil {
 		t.Fatal(err)
 	}

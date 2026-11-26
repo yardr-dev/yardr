@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -330,7 +331,7 @@ func (m *Model) questions(w int) []string {
 		}
 		// An answer from another yard says whose word it is, as mail
 		// does; m.as is whom the links trust as a user of this yard.
-		for i, line := range m.answerCard(r, m.secretCard(r, r.LinesMarked(m.as))) {
+		for i, line := range m.answerCard(r, m.secretCard(r, r.LinesMarked(agents.Catalogue(), m.as))) {
 			// A card line that wraps continues deeper than any line the
 			// yard prints (at 2, a command at 6), never at the pane's
 			// left edge nor under its own start: a writer who fills a

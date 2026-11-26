@@ -12,6 +12,7 @@ import (
 
 	bolt "go.etcd.io/bbolt"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
 )
@@ -375,7 +376,7 @@ func TestMigrateFlows(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -411,7 +412,7 @@ func TestMigrateFlows(t *testing.T) {
 	s.Close(ctx)
 
 	// Once: reopening leaves the migrated state alone.
-	s2, err := store.Open(path)
+	s2, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -198,9 +198,9 @@ type UserLoginPlan struct {
 // harness's executable: the CLI gives its own, the card and the carrier
 // the system's. ym is the yardmaster crew member named by yardmaster,
 // nil where the yard has none standing under that name.
-func PlanUserLogin(home, user, harness string, groups []Group, routes []Route, depots []Depot, users []User, yardmaster string, ym *CrewMember, lookPath func(string) (string, error)) (*UserLoginPlan, error) {
-	if !slices.Contains(HerdrKinds, harness) {
-		return nil, fmt.Errorf("--login %s is no harness kind; herdr starts: %s", harness, strings.Join(HerdrKinds, ", "))
+func PlanUserLogin(cat Catalogue, home, user, harness string, groups []Group, routes []Route, depots []Depot, users []User, yardmaster string, ym *CrewMember, lookPath func(string) (string, error)) (*UserLoginPlan, error) {
+	if !cat.isKind(harness) {
+		return nil, fmt.Errorf("--login %s is no harness kind; herdr starts: %s", harness, strings.Join(cat.Kinds, ", "))
 	}
 	if _, ok := LoginFolderEnvs[harness]; !ok {
 		return nil, fmt.Errorf("--login %s: only claude is wired (its login folder is one a program names with CLAUDE_CONFIG_DIR, and its sign-in one yardr leads)", harness)
@@ -290,12 +290,12 @@ func PlanUserLogin(home, user, harness string, groups []Group, routes []Route, d
 	}
 	// Found before anything is made: a person made and no sign-in to
 	// lead is the half-made person this plan is for.
-	if _, err := lookPath(Executable(harness)); err != nil {
-		label := HarnessLabels[harness]
+	if _, err := lookPath(cat.Executable(harness)); err != nil {
+		label := cat.label(harness)
 		if label == "" {
 			label = harness
 		}
-		return nil, fmt.Errorf("%s is not on PATH, so there is no sign-in to lead: see %s's own documentation; it must be on PATH as %s", Executable(harness), label, Executable(harness))
+		return nil, fmt.Errorf("%s is not on PATH, so there is no sign-in to lead: see %s's own documentation; it must be on PATH as %s", cat.Executable(harness), label, cat.Executable(harness))
 	}
 	return p, nil
 }

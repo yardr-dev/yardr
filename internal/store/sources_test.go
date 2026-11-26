@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/peer"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
@@ -763,7 +764,7 @@ func TestKeySource(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "yard.db")
 	// Closed by the test itself, which reads the store's file at its end.
-	st, err := store.Open(path)
+	st, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

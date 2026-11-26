@@ -14,6 +14,7 @@ import (
 	"sync"
 	"testing"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/scripttest"
 	"yardr.dev/yardr/internal/source"
 	"yardr.dev/yardr/internal/store"
@@ -58,7 +59,7 @@ func TestSourceCallBuildRoundTripAndRefusals(t *testing.T) {
 		t.Skip("curl is not installed, and the fixture build script calls the stand-in with it")
 	}
 	home := t.TempDir()
-	s, err := store.Open(filepath.Join(home, "yard.db"))
+	s, err := store.Open(filepath.Join(home, "yard.db"), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

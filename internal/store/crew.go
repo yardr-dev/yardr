@@ -496,7 +496,7 @@ func (w *wtx) putCrew(ctx context.Context, def CrewMember, actor string, by *app
 	if r.Runner != def.Runner {
 		kept = nil
 	}
-	if ps := configProblems(CrewConfig, def.Name, def.Runner, def.Config, kept); len(ps) > 0 {
+	if ps := configProblems(w.catalogue(), CrewConfig, def.Name, def.Runner, def.Config, kept); len(ps) > 0 {
 		return nil, ps[0]
 	}
 	if err := w.checkCrewSessionSettings(ctx, def.Name, r.Config, def.Config, actor); err != nil {

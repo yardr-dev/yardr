@@ -10,6 +10,7 @@ import (
 
 	bolt "go.etcd.io/bbolt"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
 )
@@ -178,7 +179,7 @@ func TestGrantAsAUser(t *testing.T) {
 func TestPlainGrantInAnOldStore(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "yard.db")
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +215,7 @@ func TestPlainGrantInAnOldStore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s, err = store.Open(path)
+	s, err = store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

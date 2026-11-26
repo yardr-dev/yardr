@@ -11,6 +11,7 @@ import (
 
 	bolt "go.etcd.io/bbolt"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
 )
@@ -253,7 +254,7 @@ func TestSchema24StoreClearsDanglingUpgradeFrom(t *testing.T) {
 	aged := func(t *testing.T, dangle bool) (string, uint64) {
 		t.Helper()
 		path := filepath.Join(t.TempDir(), "yard.db")
-		s, err := store.Open(path)
+		s, err := store.Open(path, agents.Catalogue())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -296,7 +297,7 @@ func TestSchema24StoreClearsDanglingUpgradeFrom(t *testing.T) {
 	dangling, danglingHead := aged(t, true)
 	kept, keptHead := aged(t, false)
 	for _, pass := range []string{"the upgrade", "the next start"} {
-		s, err := store.Open(dangling)
+		s, err := store.Open(dangling, agents.Catalogue())
 		if err != nil {
 			t.Fatalf("%s: %v", pass, err)
 		}
@@ -333,7 +334,7 @@ func TestSchema24StoreClearsDanglingUpgradeFrom(t *testing.T) {
 		} else if headAfter != danglingHead+1 {
 			t.Fatalf("%s logged %d events", pass, headAfter-danglingHead-1)
 		}
-		s, err = store.Open(kept)
+		s, err = store.Open(kept, agents.Catalogue())
 		if err != nil {
 			t.Fatalf("%s: %v", pass, err)
 		}
@@ -364,7 +365,7 @@ func TestUpgradeFromSettingRefusesLegacyOperatorCrew(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "yard.db")
-	st, err := store.Open(path)
+	st, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -411,7 +412,7 @@ func TestUpgradeFromSettingRefusesLegacyOperatorCrew(t *testing.T) {
 	if closeErr != nil {
 		t.Fatal(closeErr)
 	}
-	st, err = store.Open(path)
+	st, err = store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -451,7 +452,7 @@ func TestMigrateUpgradeTell(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "yard.db")
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -465,7 +466,7 @@ func TestMigrateUpgradeTell(t *testing.T) {
 		t.Fatal(err)
 	}
 	restamp(t, path, 19)
-	s, err = store.Open(path)
+	s, err = store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -483,7 +484,7 @@ func TestMigrateUpgradeTell(t *testing.T) {
 		t.Fatalf("schema after Open = %d; want 37", got)
 	}
 	// Once: a second open adds no other.
-	s, err = store.Open(path)
+	s, err = store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

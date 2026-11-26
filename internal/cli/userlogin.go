@@ -63,7 +63,7 @@ func (a *app) planUserLogin(ctx context.Context, st store.API, user, harness str
 	if err != nil {
 		return nil, fmt.Errorf("the yardmaster talks with %s on their own login, and %w", user, err)
 	}
-	return store.PlanUserLogin(cfg.Home, user, harness, groups, routes, depots, users, crewName, ym, lookPath)
+	return store.PlanUserLogin(agents.Catalogue(), cfg.Home, user, harness, groups, routes, depots, users, crewName, ym, lookPath)
 }
 
 // userLoginOf is what carries user's own login in the yard, read from its
@@ -339,9 +339,9 @@ func (a *app) signIn(c *cobra.Command, st store.API, user, group, bead string) (
 	if err != nil {
 		return fail(err)
 	}
-	path, err := lookPath(store.Executable(h.Kind))
+	path, err := lookPath(agents.Executable(h.Kind))
 	if err != nil {
-		return fail(fmt.Errorf("%s is not on PATH, so there is nothing to log in: %s", store.Executable(h.Kind), agents.InstallHint(h.Kind)))
+		return fail(fmt.Errorf("%s is not on PATH, so there is nothing to log in: %s", agents.Executable(h.Kind), agents.InstallHint(h.Kind)))
 	}
 
 	needs, needsOut := io.Pipe()

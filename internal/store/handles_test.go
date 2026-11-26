@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	bolt "go.etcd.io/bbolt"
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
 )
@@ -165,7 +166,7 @@ func TestCounterIDStoreRefusesToOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = store.Open(path)
+	_, err = store.Open(path, agents.Catalogue())
 	if !errors.Is(err, store.ErrCounterIDs) || !strings.Contains(err.Error(), "v0.4.0") {
 		t.Fatalf("Open = %v; want ErrCounterIDs naming the release that migrates it", err)
 	}
@@ -187,7 +188,7 @@ func TestNewerSchemaStoreRefusesToOpen(t *testing.T) {
 	// An older yardr (a downgrade) must not run its migrations over a store
 	// a newer one wrote (yard-r4z9).
 	path := filepath.Join(t.TempDir(), "yard.db")
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +213,7 @@ func TestNewerSchemaStoreRefusesToOpen(t *testing.T) {
 		t.Fatal("a new store was not stamped with its schema")
 	}
 
-	_, err = store.Open(path)
+	_, err = store.Open(path, agents.Catalogue())
 	if !errors.Is(err, store.ErrNewerSchema) || !strings.Contains(err.Error(), fmt.Sprintf("schema %d", stamped+1)) {
 		t.Fatalf("Open = %v; want ErrNewerSchema naming the schema", err)
 	}

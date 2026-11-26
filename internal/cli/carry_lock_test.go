@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/source"
 	"yardr.dev/yardr/internal/store"
@@ -36,7 +37,7 @@ func carryLockYard(t *testing.T) (*store.Store, string, *app) {
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	st, err := store.Open(filepath.Join(home, "y.db"))
+	st, err := store.Open(filepath.Join(home, "y.db"), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

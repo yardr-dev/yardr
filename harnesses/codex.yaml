@@ -96,6 +96,7 @@ flags:
     - label: bypass
       args: [--dangerously-bypass-approvals-and-sandbox]
       description: never asks, no sandbox
+      strong: true
     # For an agent that reads what a stranger wrote. Inside the sandbox
     # nothing is written but one private directory, and nothing reaches the
     # network or a unix socket but the yard's, which every yardr command of

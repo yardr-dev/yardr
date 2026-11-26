@@ -83,8 +83,47 @@ func Kind(cfg map[string]any) string {
 	return DefaultKind
 }
 
-// Load reads every <kind>.yaml of fsys into a Harness, in display order.
-func Load(fsys fs.FS) ([]store.Harness, error) {
+// guardedKey is a key of a harness file that only the files built into the
+// binary may set: what it makes the yard do must come from reviewed bytes
+// (docs/contracts/harness.md, rule 17), so a file that is not built in is
+// refused for setting it. set names where h sets it, as paths into the file;
+// why is the reason the refusal gives.
+type guardedKey struct {
+	set func(h guardedHarness) []string
+	why string
+}
+
+// guardedHarness keeps the file's permission keys with their presence. A
+// false or null value is still a yard file setting a guarded key.
+type guardedHarness struct {
+	Flags struct {
+		Permissions []map[string]any `yaml:"permissions"`
+	} `yaml:"flags"`
+}
+
+// guardedKeys are the keys of guardedKey: strong, for now. A yard's own
+// harness file is for matchers and models, never for what starts a program or
+// answers its dialogs (design yardr-h5wn 3.2.1, decision 6), and the keys it
+// may not set join this list as that reader lands.
+var guardedKeys = []guardedKey{{
+	set: func(h guardedHarness) (paths []string) {
+		for i, p := range h.Flags.Permissions {
+			if _, ok := p["strong"]; ok {
+				paths = append(paths, fmt.Sprintf("flags.permissions[%d].strong", i))
+			}
+		}
+		return paths
+	},
+	why: "only yardr's own harness files mark a preset strong",
+}}
+
+// Load reads every <kind>.yaml of fsys into a Harness, in display order. Its
+// files are yardr's own, the ones built into the binary.
+func Load(fsys fs.FS) ([]store.Harness, error) { return load(fsys, true) }
+
+// load is Load for the files of fsys, which are yardr's own (builtIn) or are
+// not: a file that is not built in may not set a guarded key (guardedKeys).
+func load(fsys fs.FS, builtIn bool) ([]store.Harness, error) {
 	files, err := fs.Glob(fsys, "*.yaml")
 	if err != nil {
 		return nil, err
@@ -102,8 +141,31 @@ func Load(fsys fs.FS) ([]store.Harness, error) {
 		if err := dec.Decode(&h); err != nil {
 			return nil, fmt.Errorf("%s: %w", file, err)
 		}
+		if !builtIn {
+			var presence guardedHarness
+			guardDec := yaml.NewDecoder(bytes.NewReader(body))
+			if err := guardDec.Decode(&presence); err != nil {
+				return nil, fmt.Errorf("%s: %w", file, err)
+			}
+			for _, key := range guardedKeys {
+				if paths := key.set(presence); len(paths) > 0 {
+					return nil, fmt.Errorf("%s: %s: %s", file, paths[0], key.why)
+				}
+			}
+		}
 		if err := h.Check(); err != nil {
 			return nil, fmt.Errorf("%s: %w", file, err)
+		}
+		// What the store cannot hold a file to, having no kinds of its own: the
+		// kind is one herdr starts, and a program fetched for it is named as
+		// herdr runs it.
+		if !slices.Contains(HerdrKinds, h.Kind) {
+			return nil, fmt.Errorf("%s: %s is no kind herdr starts", file, h.Kind)
+		}
+		if h.Fetch != nil {
+			if err := h.Fetch.Check(Executable(h.Kind)); err != nil {
+				return nil, fmt.Errorf("%s: fetch: %w", file, err)
+			}
 		}
 		for _, n := range append([]string{h.Kind}, h.Aliases...) {
 			if other, taken := names[n]; taken {
@@ -288,7 +350,7 @@ func HarnessVersion(ctx context.Context, kind string) string {
 	}
 	ctx, cancel := context.WithTimeout(ctx, harnessVersionTimeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, store.Executable(kind), h.Flags.Version...).Output()
+	out, err := exec.CommandContext(ctx, Executable(kind), h.Flags.Version...).Output()
 	if err != nil {
 		return ""
 	}
@@ -330,5 +392,5 @@ func InstallHint(kind string) string {
 	if ok {
 		name = h.Label
 	}
-	return "see " + name + "'s own documentation; it must be on PATH as " + store.Executable(kind)
+	return "see " + name + "'s own documentation; it must be on PATH as " + Executable(kind)
 }

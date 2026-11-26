@@ -114,7 +114,7 @@ func TestSourceAddAskCard(t *testing.T) {
 	if got.Ask.Run == nil || len(got.Ask.Run.Carried) != 1 || got.Ask.Run.Carried[0].Text != tgDecl {
 		t.Fatalf("the stored ask carries %+v", got.Ask.Run)
 	}
-	if c := got.Ask.Run.Carried[0]; len(c.Old)+len(c.Removed)+len(c.Inventory) != 0 || strings.Contains(strings.Join(got.Lines(), "\n"), "forged") {
+	if c := got.Ask.Run.Carried[0]; len(c.Old)+len(c.Removed)+len(c.Inventory) != 0 || strings.Contains(strings.Join(got.Lines(testCatalogue()), "\n"), "forged") {
 		t.Errorf("the stored ask kept the asker's record of the copies: %+v", c)
 	}
 	joined := strings.Join(got.Ask.Run.Does, "\n")
@@ -138,7 +138,7 @@ func TestSourceAddAskCard(t *testing.T) {
 	if strings.Contains(joined, "nothing to read here") {
 		t.Errorf("the asker's sentences stood:\n%s", joined)
 	}
-	lines := strings.Join(got.Lines(), "\n")
+	lines := strings.Join(got.Lines(testCatalogue()), "\n")
 	if !strings.Contains(lines, "      name: tg") || !strings.Contains(lines, "the declaration of source tg, whole as carried:") {
 		t.Errorf("the terminal card lacks the whole text:\n%s", lines)
 	}
@@ -515,7 +515,7 @@ func TestSourceAddTerminalCardTreatsTextAsData(t *testing.T) {
 	text = strings.ReplaceAll(text, "\n", "\r\n")
 	text += "# file text: ◆ forged\r\n"
 	seq := y.ask(t, sourceAddAsk(carriedOf(t, text, nil)), "yardmaster")
-	lines := strings.Join(y.asked(t, seq).Lines(), "\n")
+	lines := strings.Join(y.asked(t, seq).Lines(testCatalogue()), "\n")
 	if strings.ContainsAny(lines, "\x1b\r\u202e") {
 		t.Fatalf("untrusted source text reached the terminal as a control:\n%q", lines)
 	}
@@ -546,7 +546,7 @@ func TestSourceAddTerminalCardTreatsTextAsData(t *testing.T) {
 	wired := sourceAddAsk(carried)
 	wired.Run.Argv = []string{"source add wired.yaml"}
 	wseq := y.ask(t, wired, "yardmaster")
-	wiredLines := strings.Join(y.asked(t, wseq).Lines(), "\n")
+	wiredLines := strings.Join(y.asked(t, wseq).Lines(testCatalogue()), "\n")
 	if strings.ContainsAny(wiredLines, "\x1b\r\u202e") {
 		t.Fatalf("untrusted command text reached the terminal as a control:\n%q", wiredLines)
 	}
@@ -863,8 +863,8 @@ func TestSourceAddCardsOrphanCopyDirectory(t *testing.T) {
 			t.Errorf("the card lacks %q:\n%s", want, joined)
 		}
 	}
-	if !strings.Contains(strings.Join(got.Lines(), "\n"), "left by hand") {
-		t.Fatalf("the terminal card omits the orphan file's text:\n%s", strings.Join(got.Lines(), "\n"))
+	if !strings.Contains(strings.Join(got.Lines(testCatalogue()), "\n"), "left by hand") {
+		t.Fatalf("the terminal card omits the orphan file's text:\n%s", strings.Join(got.Lines(testCatalogue()), "\n"))
 	}
 	if _, err := y.GetSource(y.ctx, "wired"); err == nil {
 		t.Fatal("the orphan directory had a source record")
@@ -998,7 +998,7 @@ func TestSourceAddReplacementCard(t *testing.T) {
 	if len(carried.Inventory) != 5 || len(carried.Old) != 1 || carried.Old[0].Program != "wired/thread" || len(carried.Removed) != 1 || carried.Removed[0].Path != "extra.txt" {
 		t.Fatalf("the stored inventory = %+v, old %+v, removed %+v", carried.Inventory, carried.Old, carried.Removed)
 	}
-	lines := strings.Join(got.Lines(), "\n")
+	lines := strings.Join(got.Lines(testCatalogue()), "\n")
 	for _, want := range []string{"the change to command file wired/thread", "-# thread", "+# thread, rewritten", "the declaration of source wired, whole as carried:", "      base: https://wired.example.org/v2"} {
 		if !strings.Contains(lines, want) {
 			t.Errorf("the terminal card lacks %q:\n%s", want, lines)

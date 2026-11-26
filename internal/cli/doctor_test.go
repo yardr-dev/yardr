@@ -743,7 +743,7 @@ func TestDoctorMissingDependency(t *testing.T) {
 	// A manual group runs on no harness, whatever its config says: a kind
 	// is no key of one, so this one is from before the store refused it.
 	path := filepath.Join(t.TempDir(), "yard.db")
-	old, err := store.Open(path)
+	old, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -837,7 +837,7 @@ func TestDoctorVersionCheck(t *testing.T) {
 	// of who it is, and a kind with no such text takes any answer.
 	as := func(kind, body string, want versionCheck) {
 		t.Helper()
-		scripttest.Write(t, filepath.Join(dir, store.Executable(kind)), body)
+		scripttest.Write(t, filepath.Join(dir, agents.Executable(kind)), body)
 		check(kind, want)
 	}
 	as("claude", toolAnswers, versionCheck{versionNotHarness, "tool 1.2.3"})
@@ -1965,7 +1965,7 @@ func TestDoctorBlockerCycle(t *testing.T) {
 	answeredTools(t, "git", "herdr", "claude")
 	path := filepath.Join(t.TempDir(), "yard.db")
 	ctx := context.Background()
-	old, err := store.Open(path)
+	old, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/dispatch"
 	"yardr.dev/yardr/internal/rpc"
@@ -172,7 +173,7 @@ func daemonUp(t *testing.T) *daemonTrial {
 		t.Fatal(err)
 	}
 	cfg := config.At(home)
-	local, err := store.Open(cfg.DBPath())
+	local, err := store.Open(cfg.DBPath(), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

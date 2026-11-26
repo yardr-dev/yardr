@@ -19,7 +19,7 @@ func TestOperatorUserOfAnOlderYard(t *testing.T) {
 	older := func(t *testing.T, operator string, crew ...string) string {
 		t.Helper()
 		path := filepath.Join(t.TempDir(), "y.db")
-		s, err := Open(path)
+		s, err := openStore(t, path)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -45,7 +45,7 @@ func TestOperatorUserOfAnOlderYard(t *testing.T) {
 	}
 	open := func(t *testing.T, path string) *Store {
 		t.Helper()
-		s, err := Open(path)
+		s, err := openStore(t, path)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -55,7 +55,7 @@ func TestOperatorUserOfAnOlderYard(t *testing.T) {
 
 	t.Run("gets the user", func(t *testing.T) {
 		path := older(t, "jo", "yardmaster")
-		s, err := Open(path)
+		s, err := openStore(t, path)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -124,7 +124,7 @@ func TestOperatorRoleOfAnOlderYard(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "y.db")
-	s, err := Open(path)
+	s, err := openStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +154,7 @@ func TestOperatorRoleOfAnOlderYard(t *testing.T) {
 	if err := s.Close(ctx); err != nil {
 		t.Fatal(err)
 	}
-	s, err = Open(path)
+	s, err = openStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,7 +193,7 @@ func TestUserMailIsIndexedAsMail(t *testing.T) {
 func TestSendMailRefusesUnreadableUserRecord(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	s, err := Open(filepath.Join(t.TempDir(), "yard.db"))
+	s, err := openStore(t, filepath.Join(t.TempDir(), "yard.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

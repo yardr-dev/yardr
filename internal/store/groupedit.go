@@ -93,7 +93,7 @@ func putGroup(ctx context.Context, w *wtx, g *Group, actor string, limitExplicit
 	if old.Runner != g.Runner {
 		kept = nil
 	}
-	if ps := configProblems(GroupConfig, g.Name, g.Runner, g.Config, kept); len(ps) > 0 {
+	if ps := configProblems(w.catalogue(), GroupConfig, g.Name, g.Runner, g.Config, kept); len(ps) > 0 {
 		return ps[0]
 	}
 	if len(g.Subscriptions) > 0 && g.Runner != "manual" {

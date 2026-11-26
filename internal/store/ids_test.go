@@ -76,7 +76,7 @@ func TestHandleSuffixUsesRandomBits(t *testing.T) {
 // A handle is lengthened only when its shorter forms are taken.
 func TestMintHandleLengthensOnCollision(t *testing.T) {
 	t.Parallel()
-	s, err := Open(filepath.Join(t.TempDir(), "yard.db"))
+	s, err := openStore(t, filepath.Join(t.TempDir(), "yard.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

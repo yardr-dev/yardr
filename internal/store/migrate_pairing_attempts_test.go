@@ -9,6 +9,7 @@ import (
 
 	bolt "go.etcd.io/bbolt"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -20,7 +21,7 @@ func TestSchema36StoreGainsPairingAttempts(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "yard.db")
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +53,7 @@ func TestSchema36StoreGainsPairingAttempts(t *testing.T) {
 	}
 	offer := store.PairOffer{Name: "home", Key: peerKey(t), URL: "http://10.0.0.5:8790", As: "laptop", Card: true}
 	for i, pass := range []string{"the upgrade", "the next start"} {
-		s, err := store.Open(path)
+		s, err := store.Open(path, agents.Catalogue())
 		if err != nil {
 			t.Fatalf("%s: %v", pass, err)
 		}

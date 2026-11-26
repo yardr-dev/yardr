@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
@@ -325,7 +326,7 @@ func TestStoreKeepsAConfigKeyItWouldRefuse(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "yard.db")
-	old, err := store.Open(path)
+	old, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -348,7 +349,7 @@ func TestStoreKeepsAConfigKeyItWouldRefuse(t *testing.T) {
 	if err != nil || g.Config["idel"] != "5m" {
 		t.Fatalf("the group as stored: %+v, %v", g, err)
 	}
-	if ps := store.ConfigProblems(store.GroupConfig, g.Name, g.Runner, g.Config); len(ps) != 2 ||
+	if ps := store.ConfigProblems(agents.Catalogue(), store.GroupConfig, g.Name, g.Runner, g.Config); len(ps) != 2 ||
 		!strings.Contains(ps[0].Error(), "config.cleanup as true or false") || !errors.Is(ps[1], store.ErrUnknownConfigKey) {
 		t.Fatalf("ConfigProblems = %v", ps)
 	}

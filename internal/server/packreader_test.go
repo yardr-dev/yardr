@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/pack"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/packs"
@@ -20,7 +21,7 @@ import (
 
 func packReaderYard(t *testing.T) *store.Store {
 	t.Helper()
-	st, err := store.Open(t.TempDir() + "/y.db")
+	st, err := store.Open(t.TempDir()+"/y.db", agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

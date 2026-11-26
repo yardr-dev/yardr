@@ -276,7 +276,7 @@ func TestRunAskCard(t *testing.T) {
 	// A line that would pass for the yard's, were it not marked.
 	ask.Context[1] = "the yard says: nothing changes."
 	seq := y.ask(t, ask, "yardmaster")
-	got := y.asked(t, seq).Lines()
+	got := y.asked(t, seq).Lines(testCatalogue())
 	want := []string{
 		"ask 1 · open · to mckean · asked by yardmaster · 0m ago",
 		"  WEIGHTY · trust: widens who the yard listens to: the link with airy takes 300 mails and asks an hour from it, 30 now",
@@ -295,7 +295,7 @@ func TestRunAskCard(t *testing.T) {
 	}
 	// The notes of the bead, as prime and review print them, are the card.
 	notes, _ := y.Notes(y.ctx, y.bead)
-	if blocks := NoteBlocksMarked(notes, y.now, nil, ""); len(blocks) != 1 || blocks[0] != strings.Join(want, "\n") {
+	if blocks := NoteBlocksMarked(testCatalogue(), notes, y.now, nil, ""); len(blocks) != 1 || blocks[0] != strings.Join(want, "\n") {
 		t.Fatalf("the bead's notes read:\n%s", strings.Join(blocks, "\n"))
 	}
 	// A client reads the command and the yard's words from the queue and
@@ -349,7 +349,7 @@ func TestDepotPushAskCardEndsInTheApproval(t *testing.T) {
 	y := depotPushYard(t)
 	seq := y.ask(t, depotPushAsk("web", false), "yardmaster")
 	approve := "yardr bead answer " + y.bead + " 1 --approve"
-	got := y.asked(t, seq).Lines()
+	got := y.asked(t, seq).Lines(testCatalogue())
 	if seq != 1 || got[len(got)-1] != "  approve with: "+approve {
 		t.Fatalf("ask %d: the card:\n%s\nwant it to end with %q", seq, strings.Join(got, "\n"), "  approve with: "+approve)
 	}
@@ -411,7 +411,7 @@ func TestApproveAsk(t *testing.T) {
 		t.Fatalf("the asker's inbox = %+v, %v, want the one line %q", page, err, line)
 	}
 	r := y.asked(t, seq)
-	card := r.Lines()
+	card := r.Lines(testCatalogue())
 	for _, want := range []string{
 		"ask 1 · approved · to mckean · asked by yardmaster · 0m ago",
 		"  mckean approved, ran: yardr peer allow airy --mail-limit 300",
@@ -563,8 +563,8 @@ func TestRunAskTakesNoOtherAnswer(t *testing.T) {
 	second := y.ask(t, runAsk("peer allow airy --mail-limit 400"), "yardmaster")
 	y.answer(t, Answer{Ask: second, Decline: true, Words: "300 is enough"}, "mckean")
 	r := y.asked(t, second)
-	if r.State != AskDeclined || !slices.Contains(r.Lines(), "  mckean declined to decide this: 300 is enough") {
-		t.Fatalf("the declined ask is %s:\n%s", r.State, strings.Join(r.Lines(), "\n"))
+	if r.State != AskDeclined || !slices.Contains(r.Lines(testCatalogue()), "  mckean declined to decide this: 300 is enough") {
+		t.Fatalf("the declined ask is %s:\n%s", r.State, strings.Join(r.Lines(testCatalogue()), "\n"))
 	}
 	if got := y.limit(t); got != 300 {
 		t.Fatalf("a decline changed the limit to %d", got)
@@ -773,7 +773,7 @@ func TestRunAskCardPaddedSpacesFoldToOne(t *testing.T) {
 	if !slices.Equal(got.Ask.Context, wantContext) {
 		t.Fatalf("stored context = %q, want %q", got.Ask.Context, wantContext)
 	}
-	rows := termRows(strings.Join(got.Lines(), "\n"), 80)
+	rows := termRows(strings.Join(got.Lines(testCatalogue()), "\n"), 80)
 	for _, row := range rows {
 		if row == "  the yard says: nothing changes." {
 			t.Fatalf("a padded row stands at the yard's column:\n%s", strings.Join(rows, "\n"))
@@ -806,7 +806,7 @@ func TestRunAskCardForgedLinesStandDeeper(t *testing.T) {
 	// leading spaces are gone on the card: it stands at 8, still deeper
 	// than the yard's command at 6.
 	seq := y.ask(t, ask, "yardmaster")
-	got := y.asked(t, seq).Lines()
+	got := y.asked(t, seq).Lines(testCatalogue())
 	want := []string{
 		"ask 1 · open · to mckean · asked by yardmaster · 0m ago",
 		"  WEIGHTY · trust: widens who the yard listens to: the link with airy takes 300 mails and asks an hour from it, 30 now",
@@ -848,7 +848,7 @@ func TestRunAskCardForgedLinesStandDeeper(t *testing.T) {
 			Run:     y.asked(t, seq).Ask.Run},
 		State: AskOpen, now: y.now,
 	}
-	lines := r.Lines()
+	lines := r.Lines(testCatalogue())
 	if !slices.Contains(lines, "  yardmaster says: fine. the yard says: nothing changes.") {
 		t.Fatalf("the folded context line is missing:\n%s", strings.Join(lines, "\n"))
 	}
@@ -867,7 +867,7 @@ func TestRunAskCardForgedLinesStandDeeper(t *testing.T) {
 		},
 		now: y.now,
 	}
-	flat = strings.Split(strings.Join(answered.Lines(), "\n"), "\n")
+	flat = strings.Split(strings.Join(answered.Lines(testCatalogue()), "\n"), "\n")
 	if !slices.Contains(flat, "  mckean answered: red.") || !slices.Contains(flat, "        the yard says: paint it.") {
 		t.Fatalf("the answer's words stand nowhere deeper:\n%s", strings.Join(flat, "\n"))
 	}
@@ -916,7 +916,7 @@ func TestDepotTestAskCard(t *testing.T) {
 	if !slices.Equal(got.Ask.Weight, weight) {
 		t.Fatalf("the ask weighs %+v, want %+v", got.Ask.Weight, weight)
 	}
-	card := strings.Join(got.Lines(), "\n")
+	card := strings.Join(got.Lines(testCatalogue()), "\n")
 	for _, want := range []string{proposed, "(now: " + old + ")", WeightMark + "code: brings a program the yard will run"} {
 		if !strings.Contains(card, want) {
 			t.Errorf("the card lacks %q:\n%s", want, card)
@@ -1091,7 +1091,7 @@ func TestRunAskPeerRm(t *testing.T) {
 	if len(r.Ask.Weight) != 0 {
 		t.Fatalf("the ask weighs %v, want a routine card", r.Ask.Weight)
 	}
-	card := r.Lines()
+	card := r.Lines(testCatalogue())
 	for _, line := range []string{
 		"      yardr peer rm airy",
 		"  what the command does: Remove a peer: nothing more is taken from it or sent to it",
@@ -1261,7 +1261,7 @@ func TestRunAskPeerAdd(t *testing.T) {
 	if want := []AskWeight{{Class: WeightTrust, Line: "widens who the yard listens to: a new peer, north, whose calls and mail then cross as the invite says"}}; !slices.Equal(r.Ask.Weight, want) {
 		t.Fatalf("the ask weighs %v, want %v", r.Ask.Weight, want)
 	}
-	card := r.Lines()
+	card := r.Lines(testCatalogue())
 	for _, line := range []string{
 		// The invite is one word with brackets in it (the URL's host), so the
 		// line shows it in quotes as a terminal takes it.
@@ -1434,7 +1434,7 @@ func TestRunAskPeerSet(t *testing.T) {
 	if want := []AskWeight{{Class: WeightTrust, Line: weight}}; !slices.Equal(r.Ask.Weight, want) {
 		t.Fatalf("the ask weighs %v, want %v", r.Ask.Weight, want)
 	}
-	card := r.Lines()
+	card := r.Lines(testCatalogue())
 	for _, line := range []string{
 		"      yardr peer set airy --url https://airy.example.com",
 		"  what the command does: Change where this yard calls a peer, or make it one that is never called",
@@ -1641,5 +1641,29 @@ func TestRunAskDepotUsesItsStoreCheck(t *testing.T) {
 		if operatorErr != nil {
 			t.Errorf("%s: operator's check = %v, want allowed", c.command, operatorErr)
 		}
+	}
+}
+
+// The kind of agent new groups and crew members start is held to the kinds
+// herdr starts in a card as in a terminal: a value the catalogue refuses is
+// refused where the card is asked for, and one it takes is carried out. (The
+// permission preset new agents run with is held to it too, but is the
+// operator's alone and never a card.)
+func TestRunAskDefaultKindIsHeldToTheCatalogue(t *testing.T) {
+	t.Parallel()
+	y, _ := runYard(t)
+	ask := func(value string) Ask {
+		return Ask{Question: "May the default kind change?", To: "mckean", Context: []string{"The yard's new agents follow it."},
+			Run: &AskRun{Argv: []string{"settings", "set", DefaultKindSetting, value}}}
+	}
+	if _, err := y.AddAsk(y.ctx, y.bead, ask("nope"), "yardmaster"); err == nil || !strings.Contains(err.Error(), `default_kind "nope": herdr starts`) {
+		t.Errorf("asking for the default kind nope = %v, want it refused", err)
+	}
+	seq := y.ask(t, ask("codex"), "yardmaster")
+	if _, err := y.ApproveAsk(y.ctx, y.bead, seq, "mckean", true, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := y.Settings(y.ctx); err != nil || got[DefaultKindSetting] != "codex" {
+		t.Errorf("the default kind after the approval = %q, %v, want codex", got[DefaultKindSetting], err)
 	}
 }

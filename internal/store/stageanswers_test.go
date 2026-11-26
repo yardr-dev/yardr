@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	bolt "go.etcd.io/bbolt"
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
 	"yardr.dev/yardr/internal/yardkey"
@@ -112,11 +113,11 @@ func TestStageAnswerChoiceMoves(t *testing.T) {
 	if got[0].State != store.AskAnswered || got[1].State != store.AskTakenBack {
 		t.Fatalf("states = %s, %s", got[0].State, got[1].State)
 	}
-	lines := strings.Join(got[1].Lines(), "\n")
+	lines := strings.Join(got[1].Lines(agents.Catalogue()), "\n")
 	if !strings.Contains(lines, "taken back by yard: moved to approved by ada") {
 		t.Fatalf("loser's ask reads:\n%s", lines)
 	}
-	if lines := strings.Join(got[0].Lines(), "\n"); !strings.Contains(lines, "ada picked 1 (done): ship it") {
+	if lines := strings.Join(got[0].Lines(agents.Catalogue()), "\n"); !strings.Contains(lines, "ada picked 1 (done): ship it") {
 		t.Fatalf("winner's ask reads:\n%s", lines)
 	}
 
@@ -180,7 +181,7 @@ func TestStageAnswerInputMoves(t *testing.T) {
 	if got[0].State != store.AskAnswered || got[1].State != store.AskTakenBack {
 		t.Fatalf("states = %s, %s", got[0].State, got[1].State)
 	}
-	if lines := strings.Join(got[0].Lines(), "\n"); !strings.Contains(lines, "ada answered: merge on green") {
+	if lines := strings.Join(got[0].Lines(agents.Catalogue()), "\n"); !strings.Contains(lines, "ada answered: merge on green") {
 		t.Fatalf("winner's ask reads:\n%s", lines)
 	}
 }
@@ -240,7 +241,7 @@ func TestStageAnswerYouDecide(t *testing.T) {
 	// takes; the pick that moves the bead takes the way away, since a stage ask
 	// takes no pick after one that moved it.
 	way := fmt.Sprintf("answer with: yardr bead answer %s %d <n> [words]", b.ID, got[0].Note.Seq)
-	if lines := strings.Join(got[0].Lines(), "\n"); !strings.Contains(lines, "ada picked 3") || !strings.Contains(lines, way) {
+	if lines := strings.Join(got[0].Lines(agents.Catalogue()), "\n"); !strings.Contains(lines, "ada picked 3") || !strings.Contains(lines, way) {
 		t.Fatalf("after You decide the card reads:\n%s\nwant the pick and %q", lines, way)
 	}
 	if err := s.AddAnswer(ctx, b.ID, store.Answer{Ask: got[0].Note.Seq, Option: 1}, "ada"); err != nil {
@@ -249,7 +250,7 @@ func TestStageAnswerYouDecide(t *testing.T) {
 	if cur, err = s.GetBead(ctx, b.ID); err != nil || cur.Stage != "approved" {
 		t.Fatalf("after the re-pick: %+v, %v", cur, err)
 	}
-	if lines := strings.Join(stageAsks(t, s, b.ID)[0].Lines(), "\n"); !strings.Contains(lines, "ada picked 1") || strings.Contains(lines, "answer with") {
+	if lines := strings.Join(stageAsks(t, s, b.ID)[0].Lines(agents.Catalogue()), "\n"); !strings.Contains(lines, "ada picked 1") || strings.Contains(lines, "answer with") {
 		t.Fatalf("after the pick that moved the bead the card reads:\n%s\nwant the pick and no way to answer again", lines)
 	}
 }
@@ -836,7 +837,7 @@ func TestStageAnswerFromLink(t *testing.T) {
 		got[0].State != store.AskTakenBack {
 		t.Fatalf("asks = %+v", got)
 	}
-	if lines := strings.Join(got[0].Lines(), "\n"); !strings.Contains(lines, "moved to approved by mckean@north") {
+	if lines := strings.Join(got[0].Lines(agents.Catalogue()), "\n"); !strings.Contains(lines, "moved to approved by mckean@north") {
 		t.Fatalf("loser's ask reads:\n%s", lines)
 	}
 
@@ -1054,7 +1055,7 @@ func TestStageAnswerInputNone(t *testing.T) {
 	if cur, err := s.GetBead(ctx, b.ID); err != nil || cur.Stage != "review" {
 		t.Fatalf("bead = %+v, %v", cur, err)
 	}
-	if lines := strings.Join(got[0].Lines(), "\n"); !strings.Contains(lines, "ada answered: decided: merge") {
+	if lines := strings.Join(got[0].Lines(agents.Catalogue()), "\n"); !strings.Contains(lines, "ada answered: decided: merge") {
 		t.Fatalf("ask reads:\n%s", lines)
 	}
 }

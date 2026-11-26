@@ -72,7 +72,7 @@ func TestRunAskPresetGrant(t *testing.T) {
 		len(run.Seen["source crm"]) != 64 || len(run.Seen["group builders"]) != 64 || len(run.Seen["crew yardmaster"]) != 64 {
 		t.Fatalf("the card saw %+v", run.Seen)
 	}
-	if card := y.asked(t, seq).Lines(); !slices.Contains(card, "  the yard says: "+want[1]) ||
+	if card := y.asked(t, seq).Lines(testCatalogue()); !slices.Contains(card, "  the yard says: "+want[1]) ||
 		!slices.Contains(card, "  anyone can take it back: "+run.Back) {
 		t.Errorf("the card:\n%s", strings.Join(card, "\n"))
 	}

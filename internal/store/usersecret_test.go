@@ -75,7 +75,7 @@ func TestUserAskIsStoredWithTheMintOrStaticNames(t *testing.T) {
 		t.Fatalf("the static ask asks for %q", got)
 	}
 
-	lines := strings.Join(rs[0].Lines(), "\n")
+	lines := strings.Join(rs[0].Lines(testCatalogue()), "\n")
 	for _, want := range []string{
 		"  " + userSecretLine,
 		"  it goes to a file only the yard's server reads; no agent is shown it",
@@ -182,7 +182,7 @@ func TestGiveSecretGivesAUsersOwnCredential(t *testing.T) {
 	if len(answers) != 1 || answers[0].Author != "ada" || answers[0].Text != `{"ask":`+itoa(seq)+`,"given":["GOG_ACCOUNT"]}` {
 		t.Fatalf("the answer notes = %+v", answers)
 	}
-	if lines := strings.Join(y.resolved(t)[0].Lines(), "\n"); !strings.Contains(lines, "  ada gave GOG_ACCOUNT") || strings.Contains(lines, "answer with") {
+	if lines := strings.Join(y.resolved(t)[0].Lines(testCatalogue()), "\n"); !strings.Contains(lines, "  ada gave GOG_ACCOUNT") || strings.Contains(lines, "answer with") {
 		t.Fatalf("the card:\n%s", lines)
 	}
 	e := lastAnswer(t, y)

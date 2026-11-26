@@ -50,59 +50,24 @@ func (e *ModelEnv) check() error {
 	return nil
 }
 
-// HarnessNoModelFlag are the kinds whose harness file names no model flag:
-// the file's flags carry no model, so no flag gives their agents a model.
-// A group of such a kind refuses model= unless its kind takes a model in
-// its environment (HarnessModelEnvs). The store holds a group's model
-// to its kind, so that it imports no internal package; a test in agents
-// pins this table to the catalogue, so a file that drops or gains a flag
-// fails until this follows. A kind that is not here takes a model, with
-// its file's flag, or the runner's --model default where it has no file.
-// Read-only.
-var HarnessNoModelFlag = map[string]bool{
-	"opencode": true,
-}
-
-// HarnessModelEnvs are the kinds that take a model in their pane's
-// environment, as their files say it (flags.model_env). The store holds
-// a group's model to its kind's way of taking one, so that it imports no
-// internal package; a test in agents pins this table to the catalogue, so
-// a file that gains or drops a model environment fails until this
-// follows. A kind that is not here takes a model by its file's flag, by
-// the runner's --model default where it has no file, or not at all where
-// HarnessNoModelFlag names it. Read-only.
-var HarnessModelEnvs = map[string]ModelEnv{
-	"opencode": {Var: "OPENCODE_CONFIG_CONTENT", Value: `{"model":"{model}"}`},
-}
-
-// ModelKind is the kind whose flag a herdr config's model would go to: the
-// one it names, else the one the runner starts for a config that names none
-// (claude: agents.DefaultKind, which a test there holds to this).
-func ModelKind(cfg map[string]any) string {
-	if kind, _ := cfg["kind"].(string); kind != "" {
-		return kind
-	}
-	return "claude"
-}
-
 // modelProblems holds the model of a herdr group's config cfg to its kind:
 // the kind's file names a model flag or a model environment for it to go
 // to. A write that leaves model and kind as old holds them is not judged,
 // so a group stored before a harness file dropped its kind's flag can
 // still be changed, one key at a time, as configProblems has it.
-func modelProblems(subject string, cfg, old map[string]any) []error {
+func modelProblems(cat Catalogue, subject string, cfg, old map[string]any) []error {
 	model, ok := cfg["model"].(string)
 	if !ok || model == "" {
 		return nil
 	}
-	if was, had := old["model"].(string); had && was == model && ModelKind(old) == ModelKind(cfg) {
+	if was, had := old["model"].(string); had && was == model && cat.configKind(old) == cat.configKind(cfg) {
 		return nil
 	}
-	kind := ModelKind(cfg)
-	if _, takesEnv := HarnessModelEnvs[kind]; takesEnv {
+	kind := cat.configKind(cfg)
+	if _, takesEnv := cat.modelEnv(kind); takesEnv {
 		return nil
 	}
-	if !HarnessNoModelFlag[kind] {
+	if !cat.noModelFlag(kind) {
 		return nil
 	}
 	return []error{fmt.Errorf("%s: model is for the kinds whose harness file names a model flag or a model environment, and %s is not: its file names neither. Unset model, or set the group's kind to one that takes it",
@@ -115,42 +80,31 @@ func modelProblems(subject string, cfg, old map[string]any) []error {
 // in the night. A write that leaves fallback_model and kind as old holds
 // them is not judged, as modelProblems has it. Which kind a model
 // belongs to is read from the models each kind's file offers
-// (HarnessOffers): one offered by another kind and not by this one is
+// (Catalogue.offers): one offered by another kind and not by this one is
 // that kind's, and refused; one no kind offers, a full model id, cannot
-// be told another kind's from the table and is let through, as a crew
+// be told another kind's from the catalogue and is let through, as a crew
 // member's model is (configkeys_test).
-func fallbackProblems(subject string, cfg, old map[string]any) []error {
+func fallbackProblems(cat Catalogue, subject string, cfg, old map[string]any) []error {
 	fallback, ok := cfg["fallback_model"].(string)
 	if !ok || fallback == "" {
 		return nil
 	}
-	if was, had := old["fallback_model"].(string); had && was == fallback && ModelKind(old) == ModelKind(cfg) {
+	if was, had := old["fallback_model"].(string); had && was == fallback && cat.configKind(old) == cat.configKind(cfg) {
 		return nil
 	}
-	kind := ModelKind(cfg)
-	if _, takesEnv := HarnessModelEnvs[kind]; !takesEnv && HarnessNoModelFlag[kind] {
+	kind := cat.configKind(cfg)
+	if _, takesEnv := cat.modelEnv(kind); !takesEnv && cat.noModelFlag(kind) {
 		return []error{fmt.Errorf("%s: fallback_model is for the kinds whose harness file names a model flag or a model environment, and %s is not: its file names neither. Unset fallback_model, or set the crew member's kind to one that takes a model",
 			subject, kind)}
 	}
-	if slices.Contains(HarnessOffers[kind], fallback) {
+	if slices.Contains(cat.offers(kind), fallback) {
 		return nil
 	}
-	for _, other := range sortedKinds(HarnessOffers) {
-		if other != kind && slices.Contains(HarnessOffers[other], fallback) {
+	for _, other := range cat.offeringKinds() {
+		if other != kind && slices.Contains(cat.offers(other), fallback) {
 			return []error{fmt.Errorf("%s: fallback_model %q is a %s model, not a %s one: a fallback starts under the crew member's own harness, so name a %s model as fallback_model, or set its kind to %s",
 				subject, fallback, other, kind, kind, other)}
 		}
 	}
 	return nil
-}
-
-// sortedKinds are the kinds of offers, by name, so a refusal names the
-// same kind wherever the map's order would differ.
-func sortedKinds(offers map[string][]string) []string {
-	out := make([]string, 0, len(offers))
-	for kind := range offers {
-		out = append(out, kind)
-	}
-	slices.Sort(out)
-	return out
 }

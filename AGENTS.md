@@ -56,7 +56,9 @@ To find your way inside one, run `go doc -short ./internal/<pkg>` first:
 it lists every exported name with its comment, faster than grepping.
 
 - `agents`: what yardr knows of each harness kind (models, login recipes)
-  and the fetch data `yardr doctor` reports; not herdr's agent state.
+  and the fetch data `yardr doctor` reports; not herdr's agent state. It also
+  holds the kinds herdr starts and their programs (`kinds.go`) and builds the
+  `store.Catalogue` the store is opened with (`agents.Catalogue`).
 - `bdp`: serves the yard over HTTP as the Bead Protocol's Core reads;
   `docs/bdp.md`, Conformance, says what yardr claims.
 - `chat`: the `yardr chat` terminal UI (bubbletea); not the socket API it
@@ -129,6 +131,8 @@ it lists every exported name with its comment, faster than grepping.
 - `store`: the bbolt store and `API`, the interface everything uses
   (`*Store` in the owning process, `rpc.Client` elsewhere); migrations are
   `migrate_NNN_*.go`;
+  opened with a `Catalogue` of the harness kinds, which it reads them from and
+  refuses to open without (`catalogue.go`);
   imports no internal package except internal/peer and internal/source
   (arch_test rule (a)).
 - `storetest`: throwaway stores for tests; with `YARDR_TEST_RPC=1` they

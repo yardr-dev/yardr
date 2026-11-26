@@ -47,7 +47,7 @@ func TestHarnessKeyAskIsStoredWithTheFilesNames(t *testing.T) {
 	}
 
 	rs := y.resolved(t)
-	lines := strings.Join(rs[0].Lines(), "\n")
+	lines := strings.Join(rs[0].Lines(testCatalogue()), "\n")
 	for _, want := range []string{
 		"  " + harnessKeyLine,
 		"  the value is kept out of notes, events and logs; each such session receives it in its environment",
@@ -162,7 +162,7 @@ func TestGiveSecretGivesAHarnessKey(t *testing.T) {
 	if len(answers) != 1 || answers[0].Author != "mckean" || answers[0].Text != `{"ask":`+itoa(seq)+`,"given":["ANTHROPIC_API_KEY"]}` {
 		t.Fatalf("the answer notes = %+v", answers)
 	}
-	if lines := strings.Join(y.resolved(t)[0].Lines(), "\n"); !strings.Contains(lines, "  mckean gave ANTHROPIC_API_KEY") || strings.Contains(lines, "answer with") {
+	if lines := strings.Join(y.resolved(t)[0].Lines(testCatalogue()), "\n"); !strings.Contains(lines, "  mckean gave ANTHROPIC_API_KEY") || strings.Contains(lines, "answer with") {
 		t.Fatalf("the card:\n%s", lines)
 	}
 	e := lastAnswer(t, y)

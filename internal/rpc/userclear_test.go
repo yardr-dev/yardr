@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -253,7 +254,7 @@ func newWriteYard(t *testing.T) *writeYard {
 	t.Helper()
 	ctx := context.Background()
 	home := t.TempDir()
-	st, err := store.Open(filepath.Join(home, "yard.db"))
+	st, err := store.Open(filepath.Join(home, "yard.db"), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

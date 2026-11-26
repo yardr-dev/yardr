@@ -111,13 +111,13 @@ func TestLoginAskIsStoredWithTheWait(t *testing.T) {
 		t.Fatalf("the ask's secret = %s\nwant %s", got, want)
 	}
 	rs := y.resolved(t)
-	if got := rs[0].Ask.Secret.Line(); got != "a secret: INPUT, for the waiting login claude-a1b2c3d4" {
+	if got := rs[0].Ask.Secret.Line(testCatalogue()); got != "a secret: INPUT, for the waiting login claude-a1b2c3d4" {
 		t.Fatalf("the line = %q", got)
 	}
 	if !rs[0].Ask.Secret.OperatorLoginInput() {
 		t.Errorf("the stored ask %+v is not the operator's login input", rs[0].Ask.Secret)
 	}
-	lines := strings.Join(rs[0].Lines(), "\n")
+	lines := strings.Join(rs[0].Lines(testCatalogue()), "\n")
 	for _, want := range []string{
 		"  a secret: INPUT, for the waiting login claude-a1b2c3d4",
 		"  it goes to the waiting login only; it is kept nowhere, and no agent is shown it",
@@ -139,7 +139,7 @@ func TestLoginAskIsStoredWithTheWait(t *testing.T) {
 	if want := `{"source":"","env":["INPUT"],"login":"claude-ada","as":"ada"}`; string(ownJSON) != want {
 		t.Fatalf("the own login's secret = %s\nwant %s", ownJSON, want)
 	}
-	if got := rs[1].Ask.Secret.Line(); got != "a secret: INPUT, for ada's waiting login claude-ada" {
+	if got := rs[1].Ask.Secret.Line(testCatalogue()); got != "a secret: INPUT, for ada's waiting login claude-ada" {
 		t.Fatalf("the own login's line = %q", got)
 	}
 	// Asked of the operator for them it stands as well.
@@ -288,7 +288,7 @@ func TestGiveLoginHandsToTheWaiter(t *testing.T) {
 	if r := y.resolved(t)[0]; r.State != AskAnswered {
 		t.Fatalf("the ask is %s", r.State)
 	}
-	lines := strings.Join(y.resolved(t)[0].Lines(), "\n")
+	lines := strings.Join(y.resolved(t)[0].Lines(testCatalogue()), "\n")
 	if !strings.Contains(lines, "  mckean gave INPUT") || strings.Contains(lines, "answer with") {
 		t.Fatalf("the card:\n%s", lines)
 	}

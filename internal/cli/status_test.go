@@ -17,6 +17,7 @@ import (
 
 	"github.com/charmbracelet/huh"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/hooks"
 	"yardr.dev/yardr/internal/server"
@@ -227,7 +228,7 @@ func TestStatusBackupsWhenServerIsStopped(t *testing.T) {
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	st, err := store.Open(cfg.DBPath())
+	st, err := store.Open(cfg.DBPath(), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/store"
 )
@@ -21,7 +22,7 @@ func watchYard(t *testing.T) (*store.Store, string) {
 	t.Helper()
 	ctx := context.Background()
 	home := t.TempDir()
-	st, err := store.Open(filepath.Join(home, "y.db"))
+	st, err := store.Open(filepath.Join(home, "y.db"), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

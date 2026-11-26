@@ -245,31 +245,31 @@ func TestLinesMarked(t *testing.T) {
 	resolved := ResolveAsks(notes, y.now)
 	trusted := map[string]string{"mckean@north": "mckean"}
 	for _, r := range resolved {
-		if text := strings.Join(r.LinesMarked(trusted), "\n"); !strings.Contains(text, "mckean@north (as mckean)") {
+		if text := strings.Join(r.LinesMarked(testCatalogue(), trusted), "\n"); !strings.Contains(text, "mckean@north (as mckean)") {
 			t.Errorf("trusted lines mark no (as mckean):\n%s", text)
 		}
-		if text := strings.Join(r.LinesMarked(map[string]string{}), "\n"); !strings.Contains(text, "mckean@north ("+OutsideMail+")") {
+		if text := strings.Join(r.LinesMarked(testCatalogue(), map[string]string{}), "\n"); !strings.Contains(text, "mckean@north ("+OutsideMail+")") {
 			t.Errorf("untrusted lines carry no foreign line:\n%s", text)
 		}
-		if text := strings.Join(r.Lines(), "\n"); strings.Contains(text, "(as mckean)") || strings.Contains(text, OutsideMail) {
+		if text := strings.Join(r.Lines(testCatalogue()), "\n"); strings.Contains(text, "(as mckean)") || strings.Contains(text, OutsideMail) {
 			t.Errorf("Lines marks an answer:\n%s", text)
 		}
 	}
-	if text := strings.Join(resolved[0].LinesMarked(trusted), "\n"); !strings.Contains(text, "mckean@north (as mckean) picked 1 (Move them now): tonight") {
+	if text := strings.Join(resolved[0].LinesMarked(testCatalogue(), trusted), "\n"); !strings.Contains(text, "mckean@north (as mckean) picked 1 (Move them now): tonight") {
 		t.Errorf("trusted pick reads:\n%s", text)
 	}
-	if text := strings.Join(resolved[1].LinesMarked(trusted), "\n"); !strings.Contains(text, "mckean@north (as mckean) answered: warmly") {
+	if text := strings.Join(resolved[1].LinesMarked(testCatalogue(), trusted), "\n"); !strings.Contains(text, "mckean@north (as mckean) answered: warmly") {
 		t.Errorf("trusted words answer reads:\n%s", text)
 	}
-	if text := strings.Join(resolved[2].LinesMarked(trusted), "\n"); !strings.Contains(text, "mckean@north (as mckean) declined to decide this: not mine") {
+	if text := strings.Join(resolved[2].LinesMarked(testCatalogue(), trusted), "\n"); !strings.Contains(text, "mckean@north (as mckean) declined to decide this: not mine") {
 		t.Errorf("trusted decline reads:\n%s", text)
 	}
 	// The asker and the address are this yard's own words.
-	if text := strings.Join(resolved[0].LinesMarked(map[string]string{}), "\n"); !strings.Contains(text, "to mckean@north · asked by yardmaster") {
+	if text := strings.Join(resolved[0].LinesMarked(testCatalogue(), map[string]string{}), "\n"); !strings.Contains(text, "to mckean@north · asked by yardmaster") {
 		t.Errorf("head reads:\n%s", text)
 	}
 
-	blocks := NoteBlocksMarked(notes, y.now, trusted, "")
+	blocks := NoteBlocksMarked(testCatalogue(), notes, y.now, trusted, "")
 	if len(blocks) != 3 || !strings.Contains(blocks[0], "mckean@north (as mckean) picked 1") {
 		t.Fatalf("marked blocks = %q", blocks)
 	}
@@ -292,7 +292,7 @@ func TestNoteBlocksMarkedMarksAPlainNoteFromAnotherYard(t *testing.T) {
 		{Author: "mckean@a", Text: "from a trusted name", At: now, Seq: 2},
 		{Author: "builder", Text: "this yard's own", At: now, Seq: 3},
 	}
-	blocks := NoteBlocksMarked(notes, now, map[string]string{"mckean@a": "mckean"}, "")
+	blocks := NoteBlocksMarked(testCatalogue(), notes, now, map[string]string{"mckean@a": "mckean"}, "")
 	if len(blocks) != 3 {
 		t.Fatalf("blocks = %q", blocks)
 	}

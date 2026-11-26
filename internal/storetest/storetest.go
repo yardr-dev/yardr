@@ -20,6 +20,7 @@ import (
 
 	bolt "go.etcd.io/bbolt"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/peer"
 	"yardr.dev/yardr/internal/rpc"
@@ -241,7 +242,7 @@ func NameTestBinary() {
 // Open opens the store at path, closing it when the test ends.
 func Open(t testing.TB, path string) *store.Store {
 	t.Helper()
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

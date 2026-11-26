@@ -17,7 +17,7 @@ func TestUserCursorOfAnOlderStore(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "y.db")
-	s, err := Open(path)
+	s, err := openStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestUserCursorOfAnOlderStore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s, err = Open(path)
+	s, err = openStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestUserCursorOfAnOlderStore(t *testing.T) {
 
 	// Stamped 4, it is not migrated again: the mail's cursor has moved on
 	// and the notifications' has not followed.
-	if s, err = Open(path); err != nil {
+	if s, err = openStore(t, path); err != nil {
 		t.Fatal(err)
 	}
 	defer s.Close(ctx)

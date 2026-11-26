@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -195,7 +194,7 @@ func (w *wtx) crewAddProposal(run AskRun) (crewAddSpec, error) {
 	if kind == "" {
 		return crewAddSpec{}, fmt.Errorf("--run takes %s: it names no kind: name the harness kind as kind=<kind>, as yardr harness list names them", crewAddUse)
 	}
-	if err := checkHarnessKind("crew member "+name, kind); err != nil {
+	if err := checkHarnessKind(w.catalogue(), "crew member "+name, kind); err != nil {
 		return crewAddSpec{}, err
 	}
 	if err := checkCardModel("crew member "+name, model); err != nil {
@@ -203,9 +202,9 @@ func (w *wtx) crewAddProposal(run AskRun) (crewAddSpec, error) {
 	}
 	spec := crewAddSpec{name: name, kind: kind, model: model, role: run.Role}
 	if preset != "" && PresetLabel(preset) != "none" {
-		p, ok := HarnessPreset(kind, preset)
+		p, ok := w.catalogue().preset(kind, preset)
 		if !ok {
-			have := HarnessPresetLabels(kind)
+			have := w.catalogue().presetLabels(kind)
 			shown := "none"
 			if len(have) > 0 {
 				shown = strings.Join(have, ", ") + ", or none"
@@ -256,13 +255,11 @@ func (w *wtx) crewAddProposal(run AskRun) (crewAddSpec, error) {
 
 // checkHarnessKind refuses a kind the yard has no harness for, in words that list
 // those it has. subject names the member ("crew member porter").
-func checkHarnessKind(subject, kind string) error {
-	if _, ok := HarnessLabels[kind]; ok {
+func checkHarnessKind(cat Catalogue, subject, kind string) error {
+	if cat.known(kind) {
 		return nil
 	}
-	have := mapsKeys(HarnessLabels)
-	slices.Sort(have)
-	return fmt.Errorf("%s: kind %q is no harness kind the yard knows (it knows: %s): name one as kind=<kind>", subject, kind, strings.Join(have, ", "))
+	return fmt.Errorf("%s: kind %q is no harness kind the yard knows (it knows: %s): name one as kind=<kind>", subject, kind, strings.Join(cat.harnessKinds(), ", "))
 }
 
 // checkCardModel refuses a model that a card cannot carry. The model goes to the
@@ -298,15 +295,6 @@ func (w *wtx) knownDir(subject, key, dir, hint string) (string, error) {
 		return "", fmt.Errorf("%s: %s %s is outside %s: name one as %s", subject, key, clean, places, hint)
 	}
 	return clean, nil
-}
-
-// mapsKeys is the keys of m, for a refusal that lists them.
-func mapsKeys(m map[string]string) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
 }
 
 // crewDirKnown says whether dir is the yard's home, a depot, or under
@@ -356,14 +344,14 @@ func crewRoleHidden(r rune) bool {
 
 // presetSkips says whether starting kind's agents with the permission preset p
 // runs them without asking, which a card says in plain words, since approval
-// then starts an agent that never stops to ask. A preset the table names
+// then starts an agent that never stops to ask. A preset the catalogue names
 // answers by its Strong mark, the one rule the delegated leg and the cards of
 // the strong few read too (design yardr-m90n 3.5), so that no card can say
 // otherwise of a preset: codex's approve for me is automatic review inside a
-// sandbox, which the mark leaves out. A label the table does not name falls
+// sandbox, which the mark leaves out. A label the catalogue does not name falls
 // back to the flags themselves (presetSkipsPermissions), which fail closed.
-func presetSkips(kind string, p Permission) bool {
-	if known, ok := HarnessPreset(kind, p.Label); ok {
+func presetSkips(cat Catalogue, kind string, p Permission) bool {
+	if known, ok := cat.preset(kind, p.Label); ok {
 		return known.Strong
 	}
 	return presetSkipsPermissions(p)
@@ -371,7 +359,7 @@ func presetSkips(kind string, p Permission) bool {
 
 // presetSkipsPermissions says whether a permission preset runs without
 // asking: its flags or its own description say so. It is the check for flags
-// that name no preset of the table, a group add's free args among them, and
+// that name no preset of the catalogue, a group add's free args among them, and
 // takes the flags the design lists as skipping (3.5).
 func presetSkipsPermissions(p Permission) bool {
 	note := strings.ToLower(p.Note)
@@ -417,7 +405,7 @@ func (w *wtx) crewAddCard(run AskRun, asking bool) (AskRun, error) {
 		return AskRun{}, err
 	}
 	_ = asking
-	label := HarnessLabels[spec.kind]
+	label := w.catalogue().label(spec.kind)
 	model := spec.model
 	if model == "" {
 		model = "the agent's own default"
@@ -438,7 +426,7 @@ func (w *wtx) crewAddCard(run AskRun, asking bool) (AskRun, error) {
 			shownArgs = strings.Join(args, " ")
 		}
 		does = append(does, fmt.Sprintf("Permissions: %s — passes %s; %s.", spec.preset, shownArgs, spec.presetNote))
-		if presetSkips(spec.kind, Permission{Label: spec.preset, Args: spec.presetArgs, Note: spec.presetNote}) {
+		if presetSkips(w.catalogue(), spec.kind, Permission{Label: spec.preset, Args: spec.presetArgs, Note: spec.presetNote}) {
 			does = append(does, "It skips permissions: it runs without asking for permission.")
 		}
 		seenMap["permission preset "+spec.kind+" "+PresetLabel(spec.preset)] = seen(spec.preset, spec.presetArgs, spec.presetNote)

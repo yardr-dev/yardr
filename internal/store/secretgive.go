@@ -164,7 +164,7 @@ func (w *wtx) giveSecret(ctx context.Context, s *Store, home, id string, ask uin
 	// Weighed again, as an approval weighs every card: an ask written
 	// before secrets were weighed showed none, and is given no more. It
 	// is weighty, so it is given by a client that says its person saw it.
-	weight := secretWeight(*sec)
+	weight := secretWeight(w.catalogue(), *sec)
 	if err := weightStale(ask, storedWeight(notes, ask), weight); err != nil {
 		return err
 	}
@@ -404,11 +404,12 @@ func (w *wtx) giveHarnessKey(ctx context.Context, home string, row *beadRow, ask
 	if w.Bucket(bCrew).Get([]byte(sec.Crew)) == nil {
 		return fmt.Errorf("crew member %s: %w", sec.Crew, ErrNotFound)
 	}
-	loginEnv := HarnessLoginEnv[sec.Harness]
-	if _, ok := HarnessLabels[sec.Harness]; !ok || len(loginEnv) == 0 {
+	cat := w.catalogue()
+	loginEnv := cat.loginEnv(sec.Harness)
+	if !cat.known(sec.Harness) || len(loginEnv) == 0 {
 		return fmt.Errorf("harness %s: its file names no login_env now, so there is no API key to give", sec.Harness)
 	}
-	h := Harness{Kind: sec.Harness, Label: HarnessLabels[sec.Harness], LoginEnv: loginEnv}
+	h := Harness{Kind: sec.Harness, Label: cat.label(sec.Harness), LoginEnv: loginEnv}
 	// givable held the names to the ask's; the harness file is the
 	// writer's to check, without saying back what was sent.
 	names := make([]string, 0, len(values))

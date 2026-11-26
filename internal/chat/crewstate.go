@@ -61,7 +61,7 @@ func loginExe(r store.CrewMember) (kind, exe string) {
 	if kind == "" {
 		kind = agents.DefaultKind
 	}
-	return kind, store.Executable(kind)
+	return kind, agents.Executable(kind)
 }
 
 // YardLeadsLogin is what is said of a crew member at its login screen

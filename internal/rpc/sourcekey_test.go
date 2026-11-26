@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -100,7 +101,7 @@ type giving struct {
 
 func valueInTheFileAlone(t *testing.T, value string, prepare func(context.Context, *Client) giving) {
 	path := filepath.Join(t.TempDir(), "yard.db")
-	st, err := store.Open(path)
+	st, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/edgelink"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/yardkey"
@@ -44,7 +45,7 @@ func newSecretYard(t testing.TB) *secretYard {
 	ctx := context.Background()
 	dir := t.TempDir()
 	y := &secretYard{log: &bytes.Buffer{}, db: filepath.Join(dir, "yard.db"), file: filepath.Join(dir, "sources", "crm.env")}
-	st, err := store.Open(y.db)
+	st, err := store.Open(y.db, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +209,7 @@ func TestUserGivesASecret(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if text := strings.Join(store.NoteBlocksMarked(notes, time.Now(), nil, ""), "\n"); !strings.Contains(text, "jo (via phone) gave CRM_TOKEN") {
+	if text := strings.Join(store.NoteBlocksMarked(agents.Catalogue(), notes, time.Now(), nil, ""), "\n"); !strings.Contains(text, "jo (via phone) gave CRM_TOKEN") {
 		t.Errorf("the notes as they are printed do not say how the giving came:\n%s", text)
 	}
 	if q, err := y.st.UserAsks(ctx, "jo", "jo"); err != nil || len(q.Open) != 0 {

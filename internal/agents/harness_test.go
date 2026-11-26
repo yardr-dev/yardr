@@ -161,7 +161,7 @@ func TestAlwaysFlags(t *testing.T) {
 	}
 }
 
-func load(t *testing.T, files map[string]string) ([]store.Harness, error) {
+func loadFiles(t *testing.T, files map[string]string) ([]store.Harness, error) {
 	t.Helper()
 	fsys := fstest.MapFS{}
 	for name, body := range files {
@@ -173,7 +173,7 @@ func load(t *testing.T, files map[string]string) ([]store.Harness, error) {
 // A kind with a file that the display order does not name follows those it
 // names, by name; and a kind is found by its aliases too.
 func TestLoadOrderAndAliases(t *testing.T) {
-	hs, err := load(t, map[string]string{
+	hs, err := loadFiles(t, map[string]string{
 		"qwen.yaml":   "version: 1\nlabel: Qwen\n",
 		"pi.yaml":     "version: 1\nlabel: pi\n",
 		"amp.yaml":    "version: 1\nlabel: Amp\naliases: [ampcode]\n",
@@ -543,7 +543,7 @@ func TestOffers(t *testing.T) {
 		t.Errorf("a kind with no file offers models: %+v", h.Offers)
 	}
 	// A file with the list passes the check, and one without it does too.
-	hs, err := load(t, map[string]string{
+	hs, err := loadFiles(t, map[string]string{
 		"claude.yaml": "version: 1\nlabel: x\noffers: [{model: a, label: A, recommended: yardmaster}, {model: b, label: B}]\n",
 		"pi.yaml":     "version: 1\nlabel: pi\n",
 	})
@@ -780,11 +780,11 @@ func TestLoadRefuses(t *testing.T) {
 		"forget, the id inside a word":        {"claude.yaml", "version: 1\nlabel: x\nforget: {after_days: 7, args: [delete, '--id={session}']}\n", `forget.args: "--id={session}" holds braces`},
 		"forget, no program to name":          {"claude.yaml", "version: 1\nlabel: x\nforget: {after_days: 7, args: [delete, '{session}'], program: rm}\n", "field program not found"},
 	} {
-		if _, err := load(t, map[string]string{c.file: c.body}); err == nil || !strings.Contains(err.Error(), c.want) || !strings.Contains(err.Error(), c.file) {
+		if _, err := loadFiles(t, map[string]string{c.file: c.body}); err == nil || !strings.Contains(err.Error(), c.want) || !strings.Contains(err.Error(), c.file) {
 			t.Errorf("%s: %v, want %q and the file's name", name, err, c.want)
 		}
 	}
-	if _, err := load(t, map[string]string{
+	if _, err := loadFiles(t, map[string]string{
 		"amp.yaml":    "version: 1\nlabel: Amp\naliases: [claude]\n",
 		"claude.yaml": "version: 1\nlabel: Claude Code\n",
 	}); err == nil || !strings.Contains(err.Error(), "claude is already amp's name") {
@@ -796,7 +796,7 @@ func TestLoadRefuses(t *testing.T) {
 // shape; muse's are the greys its 1.4.25 hints are drawn in, and Kiro keeps
 // its named words alone.
 func TestPlaceholderSGR(t *testing.T) {
-	hs, err := load(t, map[string]string{
+	hs, err := loadFiles(t, map[string]string{
 		"claude.yaml": "version: 1\nlabel: x\nmarks: {input: '>', placeholder_sgr: ['38;5;007']}\n",
 	})
 	if err != nil || len(hs) != 1 || len(hs[0].Marks.PlaceholderSGR) != 1 || hs[0].Marks.PlaceholderSGR[0] != "38;5;7" {
@@ -967,7 +967,7 @@ func TestTrustAnswerForms(t *testing.T) {
 		{"the old answer", "  dialog: 'Sure?'\n  answer: 'Yes'\n  cursor: '>'\n", []string{"Yes"}},
 		{"a list under the old answer", "  dialog: 'Sure?'\n  answer: ['Yes', 'Yes please']\n  cursor: '>'\n", []string{"Yes", "Yes please"}},
 	} {
-		hs, err := load(t, file(c.trust))
+		hs, err := loadFiles(t, file(c.trust))
 		if err != nil {
 			t.Errorf("%s: %v", c.name, err)
 			continue
@@ -982,7 +982,7 @@ func TestTrustAnswerForms(t *testing.T) {
 		"a number among answers":       "  dialog: 'Sure?'\n  answers: ['Yes', 3]\n  cursor: '>'\n",
 		"a key the dialog has none of": "  dialog: 'Sure?'\n  answers: ['Yes']\n  cursor: '>'\n  colour: red\n",
 	} {
-		if _, err := load(t, file(trust)); err == nil {
+		if _, err := loadFiles(t, file(trust)); err == nil {
 			t.Errorf("%s: loaded, want refused", name)
 		} else if name == "both keys" && !strings.Contains(err.Error(), "under two names") {
 			t.Errorf("%s: error %q, want it to name the two keys", name, err)
@@ -1232,29 +1232,29 @@ func TestContextSourceChecked(t *testing.T) {
 		"reset without type":       "version: 1\nlabel: Q\n" + session + "context:\n  usage: .\n  reset_type: done\n",
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := load(t, map[string]string{"qwen.yaml": body}); err == nil {
+			if _, err := loadFiles(t, map[string]string{"qwen.yaml": body}); err == nil {
 				t.Fatalf("loaded: %s", body)
 			}
 		})
 	}
-	if _, err := load(t, map[string]string{"qwen.yaml": "version: 1\nlabel: Q\n" + model +
+	if _, err := loadFiles(t, map[string]string{"qwen.yaml": "version: 1\nlabel: Q\n" + model +
 		"context:\n  type: assistant\n  usage: message.usage\n"}); err != nil {
 		t.Fatalf("a whole source is refused: %v", err)
 	}
-	if _, err := load(t, map[string]string{"qwen.yaml": "version: 1\nlabel: Q\n" + session +
+	if _, err := loadFiles(t, map[string]string{"qwen.yaml": "version: 1\nlabel: Q\n" + session +
 		"context:\n  type: PLANNER_RESPONSE\n  usage: .\n"}); err != nil {
 		t.Fatalf("a source on an indexed session locator is refused: %v", err)
 	}
-	if _, err := load(t, map[string]string{"qwen.yaml": "version: 1\nlabel: Q\n" +
+	if _, err := loadFiles(t, map[string]string{"qwen.yaml": "version: 1\nlabel: Q\n" +
 		"session:\n  home: .x\n  glob: s/{session}.jsonl\n" +
 		"context:\n  type: PLANNER_RESPONSE\n  usage: .\n"}); err == nil {
 		t.Fatalf("a source on a session locator with no index or model loaded")
 	}
-	if hs, err := load(t, map[string]string{"qwen.yaml": "version: 1\nlabel: Q\n" + model +
+	if hs, err := loadFiles(t, map[string]string{"qwen.yaml": "version: 1\nlabel: Q\n" + model +
 		"context:\n  usage: message.usage\n  window: 123456\n"}); err != nil || hs[0].Context.Window != 123456 {
 		t.Fatalf("declared window: %v, %v", hs, err)
 	}
-	if hs, err := load(t, map[string]string{"qwen.yaml": "version: 1\nlabel: Q\n" + model +
+	if hs, err := loadFiles(t, map[string]string{"qwen.yaml": "version: 1\nlabel: Q\n" + model +
 		"context:\n  usage: message.usage\n  window_field: info.window\n"}); err != nil || hs[0].Context.WindowField != "info.window" {
 		t.Fatalf("reported window: %v, %v", hs, err)
 	}
@@ -1549,7 +1549,7 @@ func TestUsageSources(t *testing.T) {
 	// Every unit a file may name is one it loads with.
 	for _, unit := range []string{"s", "ms", "us"} {
 		body := "version: 1\nlabel: Q\nmodel: {home: .x, glob: '{session}.jsonl', field: m}\nusage: [{usage: u, input: i, at: t, at_unit: " + unit + "}]\n"
-		if hs, err := load(t, map[string]string{"qwen.yaml": body}); err != nil || len(hs[0].Usage) != 1 || hs[0].Usage[0].AtUnit != unit {
+		if hs, err := loadFiles(t, map[string]string{"qwen.yaml": body}); err != nil || len(hs[0].Usage) != 1 || hs[0].Usage[0].AtUnit != unit {
 			t.Errorf("at_unit %s: %+v, %v", unit, hs, err)
 		}
 	}

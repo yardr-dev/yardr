@@ -151,7 +151,7 @@ func (w *wtx) groupSetProposal(run AskRun) (groupSetSpec, error) {
 		if err != nil {
 			return groupSetSpec{}, err
 		}
-		p, err := strongPreset(subject, kind, label)
+		p, err := strongPreset(w.catalogue(), subject, kind, label)
 		if err != nil {
 			return groupSetSpec{}, err
 		}
@@ -169,7 +169,7 @@ func (w *wtx) groupSetProposal(run AskRun) (groupSetSpec, error) {
 	}
 	spec.want = spec.have
 	spec.want.Config = config
-	if ps := configProblems(GroupConfig, name, spec.have.Runner, spec.want.Config, spec.have.Config); len(ps) > 0 {
+	if ps := configProblems(w.catalogue(), GroupConfig, name, spec.have.Runner, spec.want.Config, spec.have.Config); len(ps) > 0 {
 		return groupSetSpec{}, ps[0]
 	}
 	return spec, nil
@@ -236,7 +236,7 @@ func (w *wtx) groupSetCard(run AskRun, _ bool) (AskRun, error) {
 		does = append(does, fmt.Sprintf("Each session will run sh -c with %s, as its program stands when the session starts.", strconv.Quote(cmd)))
 	}
 	if level, ok := spec.set["effort"].(string); ok {
-		does = append(does, effortLines(spec.have.Config, level)...)
+		does = append(does, effortLines(w.catalogue(), spec.have.Config, level)...)
 	} else if slices.Contains(spec.unset, "effort") {
 		does = append(does, effortUnsetLines(spec.have.Config)...)
 	}
@@ -244,7 +244,7 @@ func (w *wtx) groupSetCard(run AskRun, _ bool) (AskRun, error) {
 		does = append(does, modelLines(spec.have.Config, model)...)
 	}
 	if _, ok := sets["preset"]; ok {
-		does = append(does, presetLines(spec.kind, spec.kind, spec.have.Config["args"], spec.preset)...)
+		does = append(does, presetLines(w.catalogue(), spec.kind, spec.kind, spec.have.Config["args"], spec.preset)...)
 	}
 	return AskRun{
 		Argv:   run.Argv,
@@ -261,8 +261,8 @@ func (w *wtx) groupSetCard(run AskRun, _ bool) (AskRun, error) {
 // it will be, the flags the group's kind takes it by, quoted as the card shows
 // flags. The card sets no kind, so it is the one the group has, and the config
 // it would leave has been held to that kind's levels (groupSetProposal).
-func effortLines(old map[string]any, level string) []string {
-	e := HarnessEfforts[EffortKind(old)]
+func effortLines(cat Catalogue, old map[string]any, level string) []string {
+	e, _ := cat.effort(cat.configKind(old))
 	return []string{effortNow(old), fmt.Sprintf("Each session will start at the effort %s: %s are added after its other flags.", level, quotedWords(e.Words(level)))}
 }
 

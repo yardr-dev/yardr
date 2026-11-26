@@ -12,6 +12,7 @@ import (
 
 	bolt "go.etcd.io/bbolt"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
 )
@@ -72,7 +73,7 @@ func TestOpenIndexMatchesAWalkAfterEveryWrite(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	must(err)
 	defer func() { _ = s.Close(ctx) }()
 	must(s.PutDepot(ctx, store.Depot{Name: "web", Kind: store.DepotDir, Path: t.TempDir()}, "me"))
@@ -177,7 +178,7 @@ func TestOpenIndexMatchesAWalkAfterEveryWrite(t *testing.T) {
 		if aged == 0 {
 			t.Fatalf("no bead to age to schema %d", schema)
 		}
-		s, err = store.Open(path)
+		s, err = store.Open(path, agents.Catalogue())
 		must(err)
 		if kind == "" {
 			bs, err := s.ListBeads(ctx, store.BeadFilter{All: true})
@@ -249,7 +250,7 @@ func TestOpenIndexBuiltForOldStore(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "yard.db")
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

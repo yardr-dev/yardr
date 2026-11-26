@@ -37,6 +37,7 @@ import (
 	"sync"
 	"testing"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/rpc"
 	"yardr.dev/yardr/internal/scripttest"
@@ -126,7 +127,7 @@ func (tpl *yardTemplate) borrow(t *testing.T) string {
 func serveTemplate(t *testing.T, home string) func() {
 	t.Helper()
 	cfg := &config.Config{Home: home}
-	st, err := store.Open(cfg.DBPath())
+	st, err := store.Open(cfg.DBPath(), agents.Catalogue())
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

@@ -17,6 +17,7 @@ import (
 
 	"github.com/spf13/pflag"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/pack"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
@@ -51,7 +52,7 @@ func TestDelegatedRunFromTheCLI(t *testing.T) {
 		t.Errorf("free args on a delegated run: %v", err)
 	}
 	mustAs(t, st, "yardmaster", "group", "set", "builders", "preset=accept-edits", "--for", "jo", "--mail", mail)
-	accept, _ := store.HarnessPreset("claude", "accept edits")
+	accept, _ := agents.Preset("claude", "accept edits")
 	g, err := st.GetGroup(ctx, "builders")
 	if err != nil {
 		t.Fatal(err)

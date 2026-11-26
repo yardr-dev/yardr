@@ -15,7 +15,7 @@ import (
 // as any write of the yardmaster's is, and the record still finishes.
 func TestDelegatedPackRecordExpires(t *testing.T) {
 	// Sequential: delegatedPackTTL, which every delegated pack write reads.
-	s, err := Open(filepath.Join(t.TempDir(), "yard.db"))
+	s, err := openStore(t, filepath.Join(t.TempDir(), "yard.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

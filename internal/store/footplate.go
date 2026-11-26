@@ -407,7 +407,7 @@ func dropFootRemove(tx *bolt.Tx, user, name string) error {
 // the asker before its due, whose own intent told that return instead,
 // and no answer, decline or take-back before the aside, after which the
 // phone counts a return as decided, not news.
-func (f *FootItem) fresh(tx *bolt.Tx, rd *readers, at time.Time) (bool, error) {
+func (f *FootItem) fresh(tx *bolt.Tx, rd *readers, cat Catalogue, at time.Time) (bool, error) {
 	switch f.Kind {
 	case FootRemove:
 		return true, nil
@@ -425,16 +425,16 @@ func (f *FootItem) fresh(tx *bolt.Tx, rd *readers, at time.Time) (bool, error) {
 		f.Mail = &l
 		return !l.Read, nil
 	case FootDecision:
-		return f.askFresh(tx, at)
+		return f.askFresh(tx, cat, at)
 	}
 	return false, nil
 }
 
 // askFresh is fresh for an ask: an immediate row while the ask is open, a
 // delayed row for the return it waits on.
-func (f *FootItem) askFresh(tx *bolt.Tx, at time.Time) (bool, error) {
+func (f *FootItem) askFresh(tx *bolt.Tx, cat Catalogue, at time.Time) (bool, error) {
 	if !f.delayed() {
-		ask, err := (&Push{User: f.User, AskBead: f.AskBead, AskSeq: f.AskSeq, AskKey: f.AskKey}).openAsk(tx, at)
+		ask, err := (&Push{User: f.User, AskBead: f.AskBead, AskSeq: f.AskSeq, AskKey: f.AskKey}).openAsk(tx, cat, at)
 		if err != nil {
 			return false, err
 		}
@@ -442,7 +442,7 @@ func (f *FootItem) askFresh(tx *bolt.Tx, at time.Time) (bool, error) {
 		return ask != nil, nil
 	}
 	if f.AskKey != "" {
-		return f.foreignAsideFresh(tx, at)
+		return f.foreignAsideFresh(tx, cat, at)
 	}
 	notes, err := beadNotes(tx, f.AskBead)
 	if err != nil {
@@ -480,12 +480,12 @@ func (f *FootItem) askFresh(tx *bolt.Tx, at time.Time) (bool, error) {
 
 // foreignAsideFresh is askFresh for a delayed foreign row: the ask open,
 // and for one deferred here, the deferral still its latest answer.
-func (f *FootItem) foreignAsideFresh(tx *bolt.Tx, at time.Time) (bool, error) {
+func (f *FootItem) foreignAsideFresh(tx *bolt.Tx, cat Catalogue, at time.Time) (bool, error) {
 	var rec foreignAsk
 	if ok, err := get(tx, bPeerAsks, f.AskKey, &rec); err != nil || !ok {
 		return false, err
 	}
-	ask, err := (&Push{User: f.User, AskKey: f.AskKey}).openAsk(tx, at)
+	ask, err := (&Push{User: f.User, AskKey: f.AskKey}).openAsk(tx, cat, at)
 	if err != nil || ask == nil {
 		return false, err
 	}
@@ -518,7 +518,7 @@ func (s *Store) FootDue(ctx context.Context) ([]FootItem, error) {
 			if !f.due(at) {
 				return nil
 			}
-			fresh, err := f.fresh(tx, rd, at)
+			fresh, err := f.fresh(tx, rd, s.cat, at)
 			if err != nil {
 				return err
 			}
@@ -560,14 +560,14 @@ func (s *Store) FootSweep(ctx context.Context) (expired, stale int, err error) {
 	at := now()
 	var gone []string
 	if err = s.read(func(tx *bolt.Tx) error {
-		gone, expired, stale, err = footPastTelling(tx, at)
+		gone, expired, stale, err = footPastTelling(tx, s.cat, at)
 		return err
 	}); err != nil || len(gone) == 0 {
 		return expired, stale, err
 	}
 	// Judged again in the write: a row may have changed since the read.
 	err = s.write(func(w *wtx) error {
-		gone, expired, stale, err = footPastTelling(w.Tx, at)
+		gone, expired, stale, err = footPastTelling(w.Tx, s.cat, at)
 		for _, k := range gone {
 			if err == nil {
 				err = w.Bucket(bFoot).Delete([]byte(k))
@@ -580,7 +580,7 @@ func (s *Store) FootSweep(ctx context.Context) (expired, stale int, err error) {
 
 // footPastTelling is the keys of the rows FootSweep drops at at, with how
 // many aged out and how many are no longer news.
-func footPastTelling(tx *bolt.Tx, at time.Time) (gone []string, expired, stale int, err error) {
+func footPastTelling(tx *bolt.Tx, cat Catalogue, at time.Time) (gone []string, expired, stale int, err error) {
 	rd := &readers{tx: tx}
 	err = each(tx, bFoot, "", func(k []byte, f *FootItem) error {
 		if at.Sub(f.At) > FootMaxAge {
@@ -592,7 +592,7 @@ func footPastTelling(tx *bolt.Tx, at time.Time) (gone []string, expired, stale i
 		if f.delayed() && f.Due.After(when) {
 			when = f.Due
 		}
-		fresh, err := f.fresh(tx, rd, when)
+		fresh, err := f.fresh(tx, rd, cat, when)
 		if err != nil {
 			return err
 		}

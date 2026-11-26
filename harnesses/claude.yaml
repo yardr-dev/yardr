@@ -86,6 +86,7 @@ flags:
     - label: bypass
       args: [--dangerously-skip-permissions]
       description: never asks; runs as you with full access
+      strong: true
     # For an agent that reads what a stranger wrote: Claude Code's own
     # sandbox around every shell command, with the working directory denied
     # for writing too. Inside it nothing is written and nothing reaches the

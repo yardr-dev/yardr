@@ -14,6 +14,7 @@ import (
 // names neither a flag nor a model environment refuses.
 func TestModelProblems(t *testing.T) {
 	t.Parallel()
+	cat := testCatalogue()
 	for _, c := range []struct {
 		name     string
 		cfg, old map[string]any
@@ -31,7 +32,7 @@ func TestModelProblems(t *testing.T) {
 		{"the kind changed to an env kind", map[string]any{"kind": "opencode", "model": "gpt"}, map[string]any{"kind": "claude", "model": "gpt"}, ""},
 		{"the model changed on an env kind", map[string]any{"kind": "opencode", "model": "gpt"}, map[string]any{"kind": "opencode", "model": "opus"}, ""},
 	} {
-		got := modelProblems("group g", c.cfg, c.old)
+		got := modelProblems(cat, "group g", c.cfg, c.old)
 		switch {
 		case c.want == "" && len(got) != 0:
 			t.Errorf("%s: %v, want none", c.name, got)
@@ -43,20 +44,21 @@ func TestModelProblems(t *testing.T) {
 
 // No kind in the catalogue is flagless without a model environment
 // today, so the refusal a file that names neither still gives is driven
-// on a kind this test adds to the tables alone. Not parallel: the
-// tables are read by the parallel tests of this package, and a write
-// beside their reads would be a race.
+// on a kind this test adds to a catalogue of its own.
 func TestModelProblemsFlaglessKindWithoutEnv(t *testing.T) {
-	HarnessNoModelFlag["flagless"] = true
-	defer delete(HarnessNoModelFlag, "flagless")
+	t.Parallel()
+	flagless := Harness{Kind: "flagless", Version: FileVersion, Label: "Flagless"}
+	cat := testCatalogue()
+	cat.Harnesses = append(cat.Harnesses, flagless)
+	cat.Kinds = append(cat.Kinds, flagless.Kind)
 	cfg := map[string]any{"kind": "flagless", "model": "x"}
-	if got := modelProblems("group g", cfg, nil); len(got) != 1 ||
+	if got := modelProblems(cat, "group g", cfg, nil); len(got) != 1 ||
 		!strings.Contains(got[0].Error(), "and flagless is not: its file names neither") {
 		t.Fatalf("flagless without env: %v, want a refusal", got)
 	}
-	HarnessModelEnvs["flagless"] = ModelEnv{Var: "FLAGLESS_MODEL", Value: "{model}"}
-	defer delete(HarnessModelEnvs, "flagless")
-	if got := modelProblems("group g", cfg, nil); len(got) != 0 {
+	flagless.Flags.ModelEnv = &ModelEnv{Var: "FLAGLESS_MODEL", Value: "{model}"}
+	cat.Harnesses[len(cat.Harnesses)-1] = flagless
+	if got := modelProblems(cat, "group g", cfg, nil); len(got) != 0 {
 		t.Errorf("flagless with env: %v, want none", got)
 	}
 }

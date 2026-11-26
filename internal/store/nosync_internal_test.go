@@ -14,7 +14,7 @@ func TestOpenSyncsUnlessToldNotTo(t *testing.T) {
 	// Sequential: process environment.
 	for value, want := range map[string]bool{"": false, "0": false, "true": false, "1": true} {
 		t.Setenv(NoSyncEnv, value)
-		s, err := Open(filepath.Join(t.TempDir(), "yard.db"))
+		s, err := openStore(t, filepath.Join(t.TempDir(), "yard.db"))
 		if err != nil {
 			t.Fatal(err)
 		}

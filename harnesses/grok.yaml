@@ -25,3 +25,4 @@ flags:
     - label: always approve
       args: [--always-approve]
       description: auto-approves all tool executions
+      strong: true

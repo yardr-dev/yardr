@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/peer"
 	"yardr.dev/yardr/internal/rpc"
 	"yardr.dev/yardr/internal/store"
@@ -20,7 +21,7 @@ import (
 func paneYard(t *testing.T) (*store.Store, *rpc.Client, string) {
 	t.Helper()
 	home := t.TempDir()
-	st, err := store.Open(filepath.Join(home, "yard.db"))
+	st, err := store.Open(filepath.Join(home, "yard.db"), agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}

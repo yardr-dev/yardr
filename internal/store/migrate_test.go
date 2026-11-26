@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	bolt "go.etcd.io/bbolt"
+	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/yardkey"
 )
@@ -83,7 +84,7 @@ func TestSchema2StoreMigratesTo3(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	fixture := filepath.Join(dir, "fixture.db")
-	s, err := store.Open(fixture)
+	s, err := store.Open(fixture, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +160,7 @@ func TestSchema2StoreMigratesTo3(t *testing.T) {
 				t.Fatal("the aged fixture still has its inbox index")
 			}
 
-			s, err := store.Open(path)
+			s, err := store.Open(path, agents.Catalogue())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -233,7 +234,7 @@ func TestSchema8StoreRenamesTheMayorSetting(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "yard.db")
-			s, err := store.Open(path)
+			s, err := store.Open(path, agents.Catalogue())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -282,7 +283,7 @@ func TestSchema8StoreRenamesTheMayorSetting(t *testing.T) {
 			before := bucketDump(t, path, append(kept, "events", "settings")...)
 
 			for _, pass := range []string{"the upgrade", "the next start"} {
-				s, err = store.Open(path)
+				s, err = store.Open(path, agents.Catalogue())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -350,7 +351,7 @@ func TestSchema9StoreRenamesEpicsAndParts(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "yard.db")
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -461,7 +462,7 @@ func TestSchema9StoreRenamesEpicsAndParts(t *testing.T) {
 	}
 
 	for _, pass := range []string{"the upgrade", "the next start"} {
-		s, err = store.Open(path)
+		s, err = store.Open(path, agents.Catalogue())
 		must(err)
 		train, err := s.GetBead(ctx, "web-e")
 		if err != nil || train.Type != store.TypeTrain || !slices.Equal(train.Labels, []string{"epic"}) {
@@ -555,7 +556,7 @@ func TestSchema10StoreRenamesCars(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "yard.db")
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -665,7 +666,7 @@ func TestSchema10StoreRenamesCars(t *testing.T) {
 	}
 
 	for _, pass := range []string{"the upgrade", "the next start"} {
-		s, err = store.Open(path)
+		s, err = store.Open(path, agents.Catalogue())
 		must(err)
 		wagon, err := s.GetBead(ctx, "web-p")
 		if err != nil || wagon.Type != store.TypeWagon || !slices.Equal(wagon.Labels, []string{"car"}) {
@@ -744,7 +745,7 @@ func TestSchema10StoreRenamesCars(t *testing.T) {
 
 	// No release had the word, so it names no wagon now: a bead of type car
 	// is one of a type yardr knows nothing of, like any other word.
-	s, err = store.Open(path)
+	s, err = store.Open(path, agents.Catalogue())
 	must(err)
 	defer s.Close(ctx)
 	b, err := s.CreateBead(ctx, store.NewBead{Title: "typed with the old word", Type: "car", Depot: "web", Stage: "new"}, "me")
@@ -754,7 +755,7 @@ func TestSchema10StoreRenamesCars(t *testing.T) {
 	// A store older than the car has none to rename: there a type car is
 	// the operator's own word.
 	old9 := filepath.Join(t.TempDir(), "yard.db")
-	s9, err := store.Open(old9)
+	s9, err := store.Open(old9, agents.Catalogue())
 	must(err)
 	must(s9.PutDepot(ctx, store.Depot{Name: "web"}, "me"))
 	_, err = s9.CreateBead(ctx, store.NewBead{ID: "web-c", Title: "a rail car", Type: "car", Depot: "web"}, "me")
@@ -766,7 +767,7 @@ func TestSchema10StoreRenamesCars(t *testing.T) {
 		return tx.Bucket([]byte("meta")).Put([]byte("schema"), binary.BigEndian.AppendUint64(nil, 9))
 	}))
 	db.Close()
-	s9, err = store.Open(old9)
+	s9, err = store.Open(old9, agents.Catalogue())
 	must(err)
 	defer s9.Close(ctx)
 	if b, err := s9.GetBead(ctx, "web-c"); err != nil || b.Type != "car" {
@@ -798,7 +799,7 @@ func TestSchema10StoreRenamesResidents(t *testing.T) {
 		}
 	}
 	envFile := filepath.Join(home, "crew", "boss.env")
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	must(err)
 	must(s.SetSetting(ctx, "default_kind", "claude", "me"))
 	must(s.PutDepot(ctx, store.Depot{Name: "web", Path: t.TempDir()}, "me"))
@@ -886,7 +887,7 @@ func TestSchema10StoreRenamesResidents(t *testing.T) {
 
 	var first map[string]string
 	for _, pass := range []string{"the upgrade", "the next start"} {
-		s, err = store.Open(path)
+		s, err = store.Open(path, agents.Catalogue())
 		must(err)
 		boss, err := s.GetCrew(ctx, "boss")
 		must(err)
@@ -994,7 +995,7 @@ func TestSchema10StoreLeavesTwoDirectories(t *testing.T) {
 	home := t.TempDir()
 	path := filepath.Join(home, "yard.db")
 	oldEnv := filepath.Join(home, "residents", "boss.env")
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1020,7 +1021,7 @@ func TestSchema10StoreLeavesTwoDirectories(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if s, err = store.Open(path); err != nil {
+	if s, err = store.Open(path, agents.Catalogue()); err != nil {
 		t.Fatal(err)
 	}
 	defer s.Close(ctx)
@@ -1043,7 +1044,7 @@ func TestSchema18StoreDropsTheChecks(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "yard.db")
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1103,7 +1104,7 @@ func TestSchema18StoreDropsTheChecks(t *testing.T) {
 	}
 	var first map[string]string
 	for _, pass := range []string{"the upgrade", "the next start"} {
-		s, err = store.Open(path)
+		s, err = store.Open(path, agents.Catalogue())
 		if err != nil {
 			t.Fatalf("%s: %v", pass, err)
 		}
@@ -1168,7 +1169,7 @@ func TestSchema18StoreDropsTheChecks(t *testing.T) {
 
 	// A store that held none of it is told nothing.
 	fresh := filepath.Join(t.TempDir(), "yard.db")
-	if s, err = store.Open(fresh); err != nil {
+	if s, err = store.Open(fresh, agents.Catalogue()); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SetSetting(ctx, "default_kind", "claude", "me"); err != nil {
@@ -1192,7 +1193,7 @@ func TestSchema18StoreDropsTheChecks(t *testing.T) {
 		t.Fatal(err)
 	}
 	was := bucketDump(t, fresh, "events", "depots", "settings")
-	if s, err = store.Open(fresh); err != nil {
+	if s, err = store.Open(fresh, agents.Catalogue()); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Close(ctx); err != nil {
@@ -1228,7 +1229,7 @@ func TestSchema11StoreRenamesRigs(t *testing.T) {
 		}
 	}
 	clone, elsewhere := filepath.Join(home, "depots", "web"), t.TempDir()
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	must(err)
 	must(s.SetSetting(ctx, "default_kind", "claude", "me"))
 	// The fixtures' subscriptions are the operator's to write.
@@ -1327,7 +1328,7 @@ func TestSchema11StoreRenamesRigs(t *testing.T) {
 
 	var first map[string]string
 	for _, pass := range []string{"the upgrade", "the next start"} {
-		s, err = store.Open(path)
+		s, err = store.Open(path, agents.Catalogue())
 		must(err)
 		depots, err := s.Depots(ctx)
 		must(err)
@@ -1454,7 +1455,7 @@ func TestSchema11StoreLeavesTwoDepotDirectories(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1475,7 +1476,7 @@ func TestSchema11StoreLeavesTwoDepotDirectories(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s, err = store.Open(path); err != nil {
+	if s, err = store.Open(path, agents.Catalogue()); err != nil {
 		t.Fatal(err)
 	}
 	defer s.Close(ctx)
@@ -1505,7 +1506,7 @@ func TestOpenRenamesFlowPointersAtEpicAndPart(t *testing.T) {
 		".yardr/flows/type/train.flow": repoAlt,
 	})
 	path := filepath.Join(t.TempDir(), "yard.db")
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1558,7 +1559,7 @@ func TestOpenRenamesFlowPointersAtEpicAndPart(t *testing.T) {
 	}
 	var first map[string]string
 	for _, pass := range []string{"the upgrade", "the next start"} {
-		s, err = store.Open(path)
+		s, err = store.Open(path, agents.Catalogue())
 		if err != nil {
 			t.Fatalf("%s: %v", pass, err)
 		}
@@ -1658,7 +1659,7 @@ func TestOpenRenamesBeadPinsAtEpicAndPart(t *testing.T) {
 		".yardr/flows/web.wagon.flow": repoDecision,
 	})
 	path := filepath.Join(t.TempDir(), "yard.db")
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1726,7 +1727,7 @@ func TestOpenRenamesBeadPinsAtEpicAndPart(t *testing.T) {
 	want := map[string]string{"web.epic": "web.train", "web.part": "web.wagon", "kept.epic": "kept.epic", "": ""}
 	var first map[string]string
 	for _, pass := range []string{"the upgrade", "the next start"} {
-		s, err = store.Open(path)
+		s, err = store.Open(path, agents.Catalogue())
 		if err != nil {
 			t.Fatalf("%s: %v", pass, err)
 		}
@@ -1796,7 +1797,7 @@ func TestStoresStampedAtEachOldVersionOpen(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	fixture := filepath.Join(dir, "fixture.db")
-	s, err := store.Open(fixture)
+	s, err := store.Open(fixture, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1841,7 +1842,7 @@ func TestStoresStampedAtEachOldVersionOpen(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			s, err := store.Open(path)
+			s, err := store.Open(path, agents.Catalogue())
 			if err != nil {
 				t.Fatalf("Open at schema %d: %v", v, err)
 			}
@@ -1880,7 +1881,7 @@ func TestSchema22StoreGainsOriginators(t *testing.T) {
 	aged := func(t *testing.T, operator string) (string, []string, uint64) {
 		t.Helper()
 		path := filepath.Join(t.TempDir(), "yard.db")
-		s, err := store.Open(path)
+		s, err := store.Open(path, agents.Catalogue())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1948,7 +1949,7 @@ func TestSchema22StoreGainsOriginators(t *testing.T) {
 		path, ids, before := aged(t, "jo")
 		var revs []string
 		for _, pass := range []string{"the upgrade", "the next start"} {
-			s, err := store.Open(path)
+			s, err := store.Open(path, agents.Catalogue())
 			if err != nil {
 				t.Fatalf("%s: %v", pass, err)
 			}
@@ -1976,7 +1977,7 @@ func TestSchema22StoreGainsOriginators(t *testing.T) {
 	})
 	t.Run("without an operator", func(t *testing.T) {
 		path, ids, _ := aged(t, "")
-		s, err := store.Open(path)
+		s, err := store.Open(path, agents.Catalogue())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2002,7 +2003,7 @@ func TestSchema25PeerGainsIntakes(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "yard.db")
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2028,7 +2029,7 @@ func TestSchema25PeerGainsIntakes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err = store.Open(path)
+	s, err = store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2095,7 +2096,7 @@ func TestSchema26StoreGainsHearer(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "yard.db")
-			s, err := store.Open(path)
+			s, err := store.Open(path, agents.Catalogue())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -2134,7 +2135,7 @@ func TestSchema26StoreGainsHearer(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, pass := range []string{"the upgrade", "the next start"} {
-				s, err = store.Open(path)
+				s, err = store.Open(path, agents.Catalogue())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -2167,7 +2168,7 @@ func TestSchema27CrewRotationMoves6hTo24h(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "yard.db")
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2200,7 +2201,7 @@ func TestSchema27CrewRotationMoves6hTo24h(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, pass := range []string{"the upgrade", "the next start"} {
-		s, err = store.Open(path)
+		s, err = store.Open(path, agents.Catalogue())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2234,7 +2235,7 @@ func TestSchema28GrantsGainGiven(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "yard.db")
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2357,7 +2358,7 @@ func TestSchema28GrantsGainGiven(t *testing.T) {
 		return a.At.Equal(b.At) && a.By == b.By && a.Bead == b.Bead && a.Ask == b.Ask && a.Asker == b.Asker
 	}
 	for _, pass := range []string{"the upgrade", "the next start"} {
-		s, err = store.Open(path)
+		s, err = store.Open(path, agents.Catalogue())
 		must(err)
 		after, err := s.SourceGrants(ctx, "crm")
 		must(err)
@@ -2408,7 +2409,7 @@ func TestReleasedStoreOpensAndMigrates(t *testing.T) {
 	if got := schemaOf(t, path); got != 19 {
 		t.Fatalf("fixture schema = %d; want 19 (v0.9.0)", got)
 	}
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2474,7 +2475,7 @@ func TestSchema30NotificationsRemadeTold(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "yard.db")
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2568,7 +2569,7 @@ func TestSchema30NotificationsRemadeTold(t *testing.T) {
 
 	bare := bead.ID + ` workspace_kept (all) on "work"`
 	for _, pass := range []string{"the upgrade", "the next start"} {
-		s, err = store.Open(path)
+		s, err = store.Open(path, agents.Catalogue())
 		must(err)
 		opPage, err = s.UserNotifications(ctx, "op", 0, "op")
 		must(err)
@@ -2619,7 +2620,7 @@ func TestSchema32NotificationsRemadeTakebackHeld(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "yard.db")
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2756,7 +2757,7 @@ func TestSchema32NotificationsRemadeTakebackHeld(t *testing.T) {
 
 	bare := bead.ID + ` noted (` + reason + `) on "work"`
 	for _, pass := range []string{"the upgrade", "the next start"} {
-		s, err = store.Open(path)
+		s, err = store.Open(path, agents.Catalogue())
 		must(err)
 		opPage, err = s.UserNotifications(ctx, "op2", 0, "op2")
 		must(err)
@@ -2814,7 +2815,7 @@ func TestSchema33NotificationsRemadeHeld(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "yard.db")
-	s, err := store.Open(path)
+	s, err := store.Open(path, agents.Catalogue())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2957,7 +2958,7 @@ func TestSchema33NotificationsRemadeHeld(t *testing.T) {
 
 	bare := bead.ID + ` noted (` + reason + `) on "work"`
 	for _, pass := range []string{"the upgrade", "the next start"} {
-		s, err = store.Open(path)
+		s, err = store.Open(path, agents.Catalogue())
 		must(err)
 		opPage, err = s.UserNotifications(ctx, "op2", 0, "op2")
 		must(err)

@@ -181,6 +181,10 @@ type Setting struct {
 	Env string
 	// Check refuses a value the setting's readers would not take.
 	Check func(string) error
+	// Catalogued refuses one the catalogue the store was opened with would
+	// not (a kind herdr does not start, a preset no harness offers); nil when
+	// the catalogue has no say. Valid runs it after Check.
+	Catalogued func(Catalogue, string) error
 }
 
 // partyName is what names a crew member, a group or the yard.
@@ -221,19 +225,14 @@ var KnownSettings = append([]Setting{
 			return nil
 		}},
 	{Key: DefaultKindSetting, Help: "the agent kind of herdr groups and crew members whose config names none", Default: "claude",
-		Check: func(v string) error {
-			if !slices.Contains(HerdrKinds, v) {
-				return fmt.Errorf("%s %q: herdr starts %s", DefaultKindSetting, v, strings.Join(HerdrKinds, ", "))
-			}
-			return nil
-		}},
+		Catalogued: checkDefaultKind},
 	{Key: DefaultPackSetting, Help: "the pack a depot is set up from when yardr depot init names none, and the pack yardr init takes the yardmaster's role from: " +
 		"a pack's name (one the yard has imported, or one yardr carries), its directory, absolute, or a pack's URL; default: starter, and dir for a directory depot",
 		Default: "starter", Check: checkDefaultPack},
 	{Key: PermissionsPresetSetting, Help: "the permission preset new agents run with, named as yardr init --permissions names it for the yard's harness: " +
 		"a yard made with one gives each new agent that preset's flags for its kind instead of the kind's unattended flags; unset, new agents get the unattended flags. " +
 		"An agent's own args (a --bind preset, a crew or group set) still win for that agent",
-		Check: checkPermissionsPreset},
+		Catalogued: checkPermissionsPreset},
 	{Key: HookAddrSetting, Help: "the address the server takes webhooks on, such as 127.0.0.1:8790, when YARDR_HOOK_ADDR is not set where it starts; " +
 		"the server reads it when it starts", Env: "HOOK_ADDR", Check: CheckHookAddr},
 	{Key: HookPublicURLSetting, Help: "the public address hooks are reached at, such as https://yard.example/hooks: the URL of hook <name> is it plus /<name>. " +
@@ -638,19 +637,6 @@ func checkDefaultPack(v string) error {
 	return nil
 }
 
-// checkPermissionsPreset takes what names a permission preset of some
-// harness: the one-word form of a preset's label (PresetLabel), as
-// yardr init --permissions takes it. Which presets the yard's own harness
-// offers is init's to hold the value to; this holds a stored value to a
-// preset some harness knows, so a misspelling is refused where it is set
-// instead of read as no preset later.
-func checkPermissionsPreset(v string) error {
-	if slices.Contains(PresetNames, PresetLabel(v)) {
-		return nil
-	}
-	return fmt.Errorf("%s %q: no harness has a permission preset of that name (there is: %s); yardr init --permissions names what the yard's harness offers", PermissionsPresetSetting, v, strings.Join(PresetNames, ", "))
-}
-
 // CheckHookAddr refuses what the webhook receiver could not listen on: an
 // address that is no host:port.
 func CheckHookAddr(addr string) error { return checkHostPort("hook address", addr, "127.0.0.1:8790") }
@@ -821,7 +807,7 @@ func (s *Store) SetSetting(ctx context.Context, key, value, actor string) error 
 	}
 	set, known := SettingOf(key)
 	if known && value != "" {
-		if err := set.Check(value); err != nil {
+		if err := set.Valid(s.cat, value); err != nil {
 			return err
 		}
 	}
