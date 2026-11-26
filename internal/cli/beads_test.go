@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -1223,6 +1224,9 @@ func TestBeadShowPrintsNotes(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &noted); err != nil || noted["bead"] != "yd-1" || noted["noted"] != "ok" {
 		t.Fatalf("bead note --json = %q, %v", out, err)
 	}
+
+	t.Run("draws asks as words", testBeadShowDrawsAskAsWords)
+	t.Run("prints what is no ask as stored", testBeadShowPrintsWhatIsNoAskAsStored)
 }
 
 // A note by a name of another yard says whose word it is in bead show,
@@ -1358,6 +1362,148 @@ func TestBeadShowNoteTextIsNoHeader(t *testing.T) {
 	}
 	if strings.ContainsAny(notes, "\x1b\r\u202e") {
 		t.Fatalf("a control character of the note reached the terminal:\n%q", notes)
+	}
+}
+
+// bead show draws an ask as words, as prime and review do: the question, its
+// numbered options and its state, with the answer the ask took in under it
+// and no note of its own for that answer. Every note that is drawn keeps its
+// head line, an ask's too, and the asker's words stand further in than any
+// head, so no line of the question can pass for another note. --json still
+// carries the notes as they are stored.
+func testBeadShowDrawsAskAsWords(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	ctx := context.Background()
+	if _, err := st.CreateBead(ctx, store.NewBead{ID: "yd-1", Title: "the shed"}, "me"); err != nil {
+		t.Fatal(err)
+	}
+	forged := "builder 2026-10-13 12:00:00 (note 9)"
+	seq, err := st.AddAsk(ctx, "yd-1", store.Ask{
+		Question: "Which colour for the shed?\n  " + forged,
+		To:       "ada",
+		Context:  []string{"the paint is on offer"},
+		Options: []store.AskOption{
+			{Label: "Red", Consequence: "the shed is painted red"},
+			{Label: "Green", Consequence: "the shed is painted green"},
+		},
+	}, "builder")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AnswerAsk(ctx, "yd-1", seq, 1, "before the rain", "ada", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddNote(ctx, "yd-1", "the hinge is missing", "passer"); err != nil {
+		t.Fatal(err)
+	}
+	notes, err := st.Notes(ctx, "yd-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(notes) != 3 || notes[0].Kind != store.NoteAsk || notes[1].Kind != store.NoteAnswer || notes[2].Kind != store.NoteNote {
+		t.Fatalf("the bead's notes = %+v, want an ask, its answer and a plain note", notes)
+	}
+	head := func(n store.Note) string {
+		return fmt.Sprintf("  %s %s (note %d)\n", n.Author, n.At.Local().Format("2006-01-02 15:04:05"), n.Seq)
+	}
+
+	a := &app{st: st, actor: "me"}
+	out, err := run(t, a.beadCmd(), "show", "yd-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	askAt, plainAt := strings.Index(out, head(notes[0])), strings.Index(out, head(notes[2]))
+	if askAt < 0 || plainAt < askAt {
+		t.Fatalf("the heads of the ask and of the plain note are not there, oldest first:\n%s", out)
+	}
+	if strings.Contains(out, fmt.Sprintf("(note %d)", notes[1].Seq)) {
+		t.Errorf("the answer the ask took in prints as a note of its own:\n%s", out)
+	}
+	for _, want := range []string{
+		"ask 1 · answered · to ada · asked by builder",
+		"Which colour for the shed?",
+		"1. Red - the shed is painted red",
+		"2. Green - the shed is painted green",
+		"ada picked 1 (Red): before the rain",
+	} {
+		if !strings.Contains(out[askAt:plainAt], want) {
+			t.Errorf("the ask's block lacks %q:\n%s", want, out)
+		}
+	}
+	for _, raw := range []string{`{"question"`, `{"ask"`} {
+		if strings.Contains(out, raw) {
+			t.Errorf("bead show prints a stored note, %s...:\n%s", raw, out)
+		}
+	}
+	// The answer's words are the ask's alone, and the plain note still
+	// reads as written.
+	if n := strings.Count(out, "before the rain"); n != 1 {
+		t.Errorf("the answer's words print %d times, want once, in the ask's block:\n%s", n, out)
+	}
+	if !strings.Contains(out[plainAt:], "\n    the hinge is missing\n") {
+		t.Errorf("the plain note is not under its head:\n%s", out)
+	}
+	// Only the two real heads stand at the margin of the notes; the forged
+	// one is the question's own line, further in.
+	_, shown, _ := strings.Cut(out, "\nNotes:\n")
+	var heads []string
+	for _, l := range strings.Split(shown, "\n") {
+		if strings.HasPrefix(l, "  ") && !strings.HasPrefix(l, "   ") {
+			heads = append(heads, l+"\n")
+		}
+	}
+	if !slices.Equal(heads, []string{head(notes[0]), head(notes[2])}) {
+		t.Errorf("the lines that name an author = %q, want the heads of notes %d and %d:\n%s", heads, notes[0].Seq, notes[2].Seq, out)
+	}
+	if !strings.Contains(shown, forged) {
+		t.Errorf("the question's own line is not printed:\n%s", out)
+	}
+
+	a.json = true
+	out, err = run(t, a.beadCmd(), "show", "yd-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored struct {
+		Notes []store.Note
+	}
+	if err := json.Unmarshal([]byte(out), &stored); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if len(stored.Notes) != 3 || stored.Notes[0].Kind != store.NoteAsk || stored.Notes[1].Kind != store.NoteAnswer {
+		t.Fatalf("bead show --json notes = %+v, want the ask, its answer and the plain note", stored.Notes)
+	}
+	if ask, err := store.ParseAsk(stored.Notes[0]); err != nil || !strings.HasPrefix(ask.Question, "Which colour for the shed?") {
+		t.Errorf("--json's ask note = %q, %v, want the stored ask", stored.Notes[0].Text, err)
+	}
+	if ans, err := store.ParseAnswer(stored.Notes[1]); err != nil || ans.Ask != seq || ans.Words != "before the rain" {
+		t.Errorf("--json's answer note = %q, %v, want the stored answer to ask %d", stored.Notes[1].Text, err, seq)
+	}
+}
+
+// What is no ask prints as it is stored, under its head, since bead show is
+// the view that keeps the raw form: an answer that names a plain note or no
+// note at all, an ask whose text is no ask any more, and an answer to that
+// one, which nothing claims. A store takes in no answer that names no ask, so
+// the notes are made by hand and printNotes is called on them.
+func testBeadShowPrintsWhatIsNoAskAsStored(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 10, 13, 9, 30, 0, 0, time.UTC)
+	notes := []store.Note{
+		{Bead: "yd-1", Seq: 1, Kind: store.NoteNote, Author: "builder", At: at, Text: "a plain note"},
+		{Bead: "yd-1", Seq: 2, Kind: store.NoteAnswer, Author: "ada", At: at, Text: `{"ask":1,"words":"names a plain note"}`},
+		{Bead: "yd-1", Seq: 3, Kind: store.NoteAnswer, Author: "ada", At: at, Text: `{"ask":99,"words":"names no note"}`},
+		{Bead: "yd-1", Seq: 4, Kind: store.NoteAsk, Author: "builder", At: at, Text: "not an ask"},
+		{Bead: "yd-1", Seq: 5, Kind: store.NoteAnswer, Author: "ada", At: at, Text: `{"ask":4,"words":"to what is no ask"}`},
+	}
+	var out bytes.Buffer
+	printNotes(&out, notes, "/y", nil)
+	for _, n := range notes {
+		want := fmt.Sprintf("  %s %s (note %d)\n    %s\n", n.Author, n.At.Local().Format("2006-01-02 15:04:05"), n.Seq, n.Text)
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("note %d is not printed as stored, %q:\n%s", n.Seq, want, out.String())
+		}
 	}
 }
 

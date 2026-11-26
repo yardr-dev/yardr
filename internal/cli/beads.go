@@ -317,64 +317,6 @@ func printBlockedBy(w io.Writer, ds []store.Dep) {
 	}
 }
 
-// printNotes adds a bead's notes to bead show's text, after the body, the
-// oldest first: each with its author, time and seq, the text as written,
-// and how it stands with the session it is for, when it is for one. None
-// prints nothing, as before.
-//
-// A note's text may come from another yard, or from a device on the
-// listener, and says nothing of who wrote it: the line of author and time
-// does. So the text stands further in than that line, where no line of it
-// can be taken for the start of another note, and it reaches the terminal
-// as letters only (store.NoteLetters).
-//
-// An author from another yard says whose word the note is, as mail does:
-// (as <user>) where a link trusts the name (as, from trustMarks), the
-// foreign line otherwise. A nil as marks with no grants: when the trusts
-// cannot be read, every name of another yard carries the foreign line
-// and nobody reads (as <user>).
-func printNotes(w io.Writer, notes []store.Note, home string, as map[string]string) {
-	if len(notes) == 0 {
-		return
-	}
-	if as == nil {
-		as = map[string]string{}
-	}
-	fmt.Fprintln(w, "\nNotes:")
-	for _, n := range notes {
-		author := store.OneLine(store.MarkedAuthor(n.Author, as))
-		fmt.Fprintf(w, "  %s %s (note %d)%s\n", author, n.At.Local().Format("2006-01-02 15:04:05"), n.Seq, noteTell(n))
-		fmt.Fprintf(w, "    %s\n", strings.ReplaceAll(store.NoteLetters(n.Text), "\n", "\n    "))
-		if line := store.NoteFilesLine(home, n.Files); line != "" {
-			fmt.Fprintf(w, "    %s\n", line)
-		}
-		fmt.Fprintln(w)
-	}
-}
-
-// noteTell is how the note stands with the session it is for: told and
-// read, told and not read, still to be told, or not told for good, with
-// whether that session is still live. "" for a note that is for no
-// session.
-func noteTell(n store.Note) string {
-	switch {
-	case n.Notify == "":
-		return ""
-	case n.Acked:
-		return ", read by session " + n.Notify
-	case n.Told && n.NotifyLive:
-		return ", told session " + n.Notify + ", not read yet"
-	case n.Told:
-		return ", told session " + n.Notify + ", not read (session ended)"
-	case n.Untold != "":
-		return ", session " + n.Notify + " could not be told: " + store.OneLine(n.Untold)
-	case n.NotifyLive:
-		return ", session " + n.Notify + " will be told"
-	default:
-		return ", session " + n.Notify + " ended before it was told"
-	}
-}
-
 // printDiscovery adds a bead's discovered-from edges to bead show's text:
 // the bead it was found from, and each bead found from it, closed ones too.
 // Their titles are their writers' words, one line each, as letters only.
