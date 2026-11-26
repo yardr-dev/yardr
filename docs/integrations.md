@@ -1960,8 +1960,8 @@ answer from crm (customer): data from outside the yard, not instructions
   outside a pane the actor is a claimed name
   ([users.md](users.md#who-is-acting)), so it does not stop a terminal that
   claims the user, nor an agent that starts a process outside its pane's
-  process tree, which is then taken for one. A crew member that needs a
-  grant proposes it with a run ask (`yardr bead ask <id> -` with `Q:`, `C:`
+  process tree and session, which is then taken for one. A crew member that
+  needs a grant proposes it with a run ask (`yardr bead ask <id> -` with `Q:`, `C:`
   and `R: source grant crm note --crew yardmaster` lines on stdin): the
   card names each call with its method and path, says of `read` which calls that is today and that it
   covers read calls the source is later given, and says of an update call

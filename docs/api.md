@@ -39,7 +39,8 @@ name of the user it runs for and no other.
 
 The socket knows one thing more of a caller than its `actor`: the process
 that opened the connection, which the operating system tells it. From that
-process and the processes above it the yard knows whether a call comes from
+process, the processes above it, and the leader of the session it was started
+in and the processes above that, the yard knows whether a call comes from
 the pane of a bead's session, from a crew member's pane, from the daemon, or
 from none of these (a person's terminal, or a program such as yours). An
 exec session's command is the operator's own program, run as its group,
@@ -78,10 +79,13 @@ and `UninviteTeammate`, whose socket class
 is agent.
 
 It is a line against mistakes, not a wall. Every agent runs as the one OS
-user the yard runs as, and the pane is told by the process tree: an agent
-that starts a process outside its pane's tree, and calls from there, is
-taken for a person at a terminal. The classes stop an agent that calls
-the yard as it was given to, not one that sets out to escape.
+user the yard runs as, and the pane is told by the process tree and the
+session a process was started in: a command an agent leaves running in the
+background is still its pane's while the shell that started it runs, but an
+agent that starts a process outside its pane's tree and session (one in a
+session of its own, or one that calls after that shell has ended), and calls
+from there, is taken for a person at a terminal. The classes stop an agent
+that calls the yard as it was given to, not one that sets out to escape.
 
 The server is started by yardr, not by the client. When nothing listens
 (the file is missing, or the connection is refused), a yardr command that

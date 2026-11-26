@@ -37,3 +37,7 @@ func stat(pid int) (Stat, error) {
 	start := uint64(p.P_starttime.Sec)*1_000_000 + uint64(p.P_starttime.Usec)
 	return Stat{State: state, Start: start, PPID: int(k.Eproc.Ppid)}, nil
 }
+
+// session is the id of pid's session, which is its leader's pid. getsid
+// answers for a process of any session.
+func session(pid int) (int, error) { return unix.Getsid(pid) }

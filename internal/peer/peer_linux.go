@@ -31,6 +31,9 @@ var procOnce = sync.OnceValue(func() bool {
 // HaveStat is false where there is no /proc.
 func HaveStat() bool { return procOnce() }
 
+// session is the id of pid's session, which is its leader's pid.
+func session(pid int) (int, error) { return unix.Getsid(pid) }
+
 // readFile reads a file under /proc. It is a variable so that a test can
 // hand stat the error a process that exits mid-read gives, which no real
 // process can be made to give on demand.

@@ -840,6 +840,15 @@ func TestCrewWriteFromAPaneIsThatPanesActor(t *testing.T) {
 		if a := lastKindActor(t, s, ctx, "mail"); a != "yardmaster" {
 			t.Fatalf("mail event actor = %q, want yardmaster", a)
 		}
+		// A command the member leaves running in the background is its
+		// pane's too, while the shell that started it runs.
+		orphan, _ := startOrphan(t)
+		if err := s.Mail(store.WithCaller(ctx, orphan), "yardmaster", "again", "op"); err != nil {
+			t.Fatal(err)
+		}
+		if a := lastKindActor(t, s, ctx, "mail"); a != "yardmaster" {
+			t.Fatalf("mail event actor from a backgrounded command = %q, want yardmaster", a)
+		}
 	})
 
 	t.Run("no pane", func(t *testing.T) {

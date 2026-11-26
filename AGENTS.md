@@ -97,8 +97,9 @@ it lists every exported name with its comment, faster than grepping.
 - `otel`: trace context plus a hand-written OTLP/HTTP exporter; no SDK.
 - `pack`: reading, checking, planning and applying packs.
 - `pairing`: the pairing request paths under the peers' listener; a leaf.
-- `peer`: who is on the other end of a unix socket (pid, process tree), so
-  the store recognises a call from a session's pane.
+- `peer`: who is on the other end of a unix socket (pid, process tree, the
+  session it was started in), so the store recognises a call from a
+  session's pane, a command left running in the background included.
 - `pprof`: Go's `net/http/pprof` on a unix socket of its own for the
   server (`YARDR_PPROF`) and the daemon (`YARDR_DAEMON_PPROF`); a leaf.
 - `preview`: the yard's preview supervisor (part of `yardr server`): starts

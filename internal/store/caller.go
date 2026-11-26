@@ -72,10 +72,13 @@ func startingRefused(tx *bolt.Tx, id string) error {
 }
 
 // paneSession is the session whose pane the process pid runs in: the one
-// whose handle names pid or a process above it. An exec runner's handle
-// names its script's pid (pid, with its start time as start); a herdr
-// runner's names the shell of the agent's tab (shell_pid, shell_start); a
-// session whose runner recorded neither is not found this way. The pane
+// whose handle names pid or a process above it, or above the leader of its
+// session (peer.Lineage), so a command an agent left running in the
+// background, which init has for a parent, is still its pane's while the
+// shell that started it runs. An exec runner's handle names its script's
+// pid (pid, with its start time as start); a herdr runner's names the shell
+// of the agent's tab (shell_pid, shell_start); a session whose runner
+// recorded neither is not found this way. The pane
 // counts only while the recorded process still runs, live session or
 // ended (an agent kept open, or orphaned by a restart, after its bead
 // moved on): a pid the kernel has since given to someone else makes nobody
@@ -88,7 +91,7 @@ func paneSession(tx *bolt.Tx, pid int) (*Session, error) {
 	if pid <= 0 {
 		return nil, nil
 	}
-	for _, p := range peer.Ancestors(pid) {
+	for _, p := range peer.Lineage(pid) {
 		pn, err := paneOf(tx, p)
 		if err != nil {
 			return nil, err
@@ -138,8 +141,9 @@ func paneOf(tx *bolt.Tx, p int) (*pane, error) {
 
 // paneCrew is the crew member whose pane the process pid runs in: the
 // one whose handle names the shell of its tab (shell_pid, with its start
-// time as shell_start) as pid or a process above it, while that shell still
-// runs. The pane of a session that is being started counts as that of a
+// time as shell_start) as pid, a process above it, or one above the leader
+// of its session (peer.Lineage, as paneSession reads it), while that shell
+// still runs. The pane of a session that is being started counts as that of a
 // running one (CrewMember.Starting): its agent acts before the start is
 // recorded. nil when pid is 0, and for a crew member whose runner recorded
 // no shell: that one is known by the actor its commands name alone.
@@ -186,7 +190,7 @@ func paneCrewSession(tx *bolt.Tx, pid int) (*CrewMember, string, error) {
 	if err != nil || len(panes) == 0 {
 		return nil, "", err
 	}
-	for _, p := range peer.Ancestors(pid) {
+	for _, p := range peer.Lineage(pid) {
 		// A shell whose start time matches wins over one recorded
 		// without, which is trusted by its pid alone.
 		var unverified *crewPane

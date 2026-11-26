@@ -274,7 +274,7 @@ agent may call at all is the class of each call ([api.md](api.md#who-may-make-a-
 it notes, asks and works its bead, and does not change groups, routes,
 flows or crew. That too is a line, not a wall: every agent runs as the
 OS user the yard runs as, and one that starts a process outside its
-pane's process tree is believed about who it is.
+pane's process tree and session is believed about who it is.
 
 When the actor is the login name (neither `--actor` nor `$YARDR_ACTOR`
 given) and it is neither a user nor a crew member, a command that acts as

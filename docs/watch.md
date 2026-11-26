@@ -53,6 +53,14 @@ dev`) runs the builder's code, and stays a preview with an approval:
 The bead's builder (an agent working that bead), the user the bead is for, or
 an operator. A builder cannot watch another bead's files.
 
+The yard tells the builder by the process that calls, not by the name it
+gives: the command runs in the builder's own shell and returns once the watch
+is started, so it needs no background job. One the builder leaves running in
+the background still counts while the shell that started it runs. A call that
+names a session but has no pane of it above it, because the command outlived
+its shell or began a session of its own, is refused with the words "no process
+above it is in that session's pane".
+
 ## What is served
 
 - GET and HEAD. Anything else is refused with 405.

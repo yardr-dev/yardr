@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net"
+	"slices"
 )
 
 // ErrUnknown means the connection does not tell its peer: not a unix
@@ -98,6 +99,45 @@ func Ancestors(pid int) []int {
 }
 
 const maxDepth = 64
+
+// Lineage is every process pid is known to come from, nearest first: pid and
+// every process above it (Ancestors), then the leader of pid's session and
+// every process above that. A command a shell leaves running in the
+// background (`( cmd & )`) has init for a parent by the time it runs, but it
+// stays in the session it was started in, and that session's leader says
+// where it came from for as long as the leader runs. Once the leader has
+// ended, or where the command made a session of its own, nothing does.
+func Lineage(pid int) []int {
+	out := Ancestors(pid)
+	if pid <= 1 {
+		// getsid answers for the calling process when it is given 0.
+		return out
+	}
+	lead, err := session(pid)
+	if err != nil || lead <= 1 || slices.Contains(out, lead) {
+		return out
+	}
+	// A session can keep its id after its leader exits, and Linux still
+	// reports the leader's parent while it is a zombie. Check the same live
+	// process again after reading its ancestry before using that parent.
+	leader, err := stat(lead)
+	if err != nil || leader.State == 'Z' {
+		return out
+	}
+	if s, err := session(lead); err != nil || s != lead {
+		return out
+	}
+	above := Ancestors(lead)
+	if !Alive(lead, leader.Start) {
+		return out
+	}
+	for _, p := range above {
+		if !slices.Contains(out, p) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
 
 // kill0 reports whether pid is our own live process, by signalling it
 // nothing. EPERM is another user's process: not ours, not alive.

@@ -584,10 +584,10 @@ asked, and it does not
 cross a link: a run ask is for the operator of the yard that asks, and no
 copy of it goes to a linked yard. The pane refusal, like the socket's
 classes, is a line against mistakes, not a wall: every agent runs as the
-one OS user the yard runs as, the pane is told by the process tree, and a
-process an agent starts outside its pane's tree is taken for a person at
-a terminal. It stops an agent that calls the yard as it was given to, not
-one that sets out to escape. A command runs once for one ask. The
+one OS user the yard runs as, the pane is told by the process tree and the
+session a process was started in, and a process an agent starts outside
+both is taken for a person at a terminal. It stops an agent that calls the
+yard as it was given to, not one that sets out to escape. A command runs once for one ask. The
 answer on the bead holds the command as it ran and what it printed, the
 change's own event (`yardr events`) names the ask it was approved on, and
 the asker's inbox line reads `mckean approved ask 2710 on yardr-k3vd, and

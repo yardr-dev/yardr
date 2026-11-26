@@ -1,15 +1,20 @@
 package peer
 
 import (
+	"bufio"
 	"errors"
 	"io/fs"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
+	"strconv"
+	"strings"
 	"syscall"
 	"testing"
+	"time"
 )
 
 // The peer of a unix connection is the connecting process, and its
@@ -117,3 +122,110 @@ func TestAnotherUsersProcessIsNotOurs(t *testing.T) {
 }
 
 type fakeConn struct{ net.Conn }
+
+// startOrphan starts a shell that leads a session of its own, as a command
+// a harness runs does, has it start a command in the background from a
+// subshell that ends at once (`( cmd & )`), and answers the command's pid
+// and the leader's. The command's parent is then init's, or the nearest
+// subreaper's, and it stays in the leader's session while the leader runs.
+// endLeader ends the leader and waits for it.
+func startOrphan(t *testing.T) (orphan, leader int, endLeader func()) {
+	t.Helper()
+	cmd := exec.Command("sh", "-c", "( sleep 300 >/dev/null 2>&1 </dev/null & echo $! ); echo ready; read _")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if _, err := cmd.StdinPipe(); err != nil {
+		t.Fatal(err)
+	}
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	ended := false
+	endLeader = func() {
+		if !ended {
+			ended = true
+			cmd.Process.Kill()
+			cmd.Wait()
+		}
+	}
+	t.Cleanup(func() {
+		endLeader()
+		if orphan > 0 {
+			syscall.Kill(orphan, syscall.SIGKILL)
+		}
+	})
+	// The shell prints "ready" once the subshell has ended, so the command
+	// has been given to init by the time it is read.
+	r := bufio.NewReader(out)
+	line, err := r.ReadString('\n')
+	if err != nil {
+		t.Fatalf("the orphan's pid: %v", err)
+	}
+	if orphan, err = strconv.Atoi(strings.TrimSpace(line)); err != nil {
+		t.Fatalf("the orphan's pid %q: %v", line, err)
+	}
+	if ready, err := r.ReadString('\n'); err != nil || strings.TrimSpace(ready) != "ready" {
+		t.Fatalf("the shell says %q, %v, want ready", ready, err)
+	}
+	return orphan, cmd.Process.Pid, endLeader
+}
+
+// A command left running in the background is no child of the process that
+// started it, but it stays in that process's session: Lineage follows it to
+// the session's leader while the leader runs, and to nobody once it is gone.
+func TestLineageFollowsAnOrphanToItsSessionsLeader(t *testing.T) {
+	if !HaveStat() {
+		t.Skip("this OS does not tell a process's parent")
+	}
+	me := os.Getpid()
+	if me <= 1 {
+		t.Skip("this process is init: its children are never orphans of it")
+	}
+	orphan, leader, endLeader := startOrphan(t)
+	if anc := Ancestors(orphan); slices.Contains(anc, me) || slices.Contains(anc, leader) {
+		t.Fatalf("ancestors of the orphan %d are %v: it was not orphaned", orphan, anc)
+	}
+	// The process, then what is above it, then the leader and what is above
+	// the leader: the nearest first.
+	got := Lineage(orphan)
+	if !slices.Equal(got[:len(Ancestors(orphan))], Ancestors(orphan)) {
+		t.Fatalf("lineage %v does not begin with the ancestors %v", got, Ancestors(orphan))
+	}
+	i, j := slices.Index(got, leader), slices.Index(got, me)
+	if i < 0 || j < i {
+		t.Fatalf("lineage of the orphan %d is %v, want its session's leader %d, then this process %d above it", orphan, got, leader, me)
+	}
+	// No process has pid 0 or init's pid for a pane: getsid(0) is the
+	// caller's own session, which must not be taken for the pid's.
+	if got := Lineage(0); !slices.Equal(got, []int{0}) {
+		t.Fatalf("lineage of pid 0 is %v, want it alone", got)
+	}
+	// Linux keeps an exited session leader's process record, including its
+	// parent, until it is reaped. That dead shell must not keep the pane.
+	if err := syscall.Kill(leader, syscall.SIGKILL); err != nil {
+		t.Fatalf("kill the session leader: %v", err)
+	}
+	for fuse := time.Now().Add(time.Second); ; runtime.Gosched() {
+		st, err := Describe(leader)
+		if err != nil {
+			t.Fatalf("describe the unreaped session leader: %v", err)
+		}
+		if st.State == 'Z' {
+			break
+		}
+		if time.Now().After(fuse) {
+			t.Fatalf("session leader %d did not become a zombie: %+v", leader, st)
+		}
+	}
+	if got := Lineage(orphan); slices.Contains(got, me) || slices.Contains(got, leader) {
+		t.Fatalf("lineage of the orphan %d is %v while its session leader %d is a zombie, want no process above it", orphan, got, leader)
+	}
+	// Without its leader nothing says where the orphan came from.
+	endLeader()
+	if got := Lineage(orphan); slices.Contains(got, me) || slices.Contains(got, leader) {
+		t.Fatalf("lineage of the orphan %d is %v after its leader %d ended, want no process above it", orphan, got, leader)
+	}
+}

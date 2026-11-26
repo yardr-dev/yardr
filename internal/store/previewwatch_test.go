@@ -1,10 +1,14 @@
 package store_test
 
 import (
+	"bufio"
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 
 	"yardr.dev/yardr/internal/peer"
@@ -338,6 +342,97 @@ func TestWatchPreviewIsForTheBeadsAgentItsOriginatorAndAnOperator(t *testing.T) 
 	if _, err := y.s.PreviewStop(ctx, p.App, "lee"); err == nil {
 		t.Fatal("lee stopped a watch they did not start")
 	}
+
+	// A command the agent leaves running in the background, as
+	// `( yardr preview watch ... & )` does, has no parent but init's by the
+	// time it calls. It is of the pane it was started in, whatever actor it
+	// names, while the command line that started it runs: the session it
+	// stays in has that command line's shell for its leader.
+	orphan, endLeader := startOrphan(t)
+	left := store.WithCaller(ctx, orphan)
+	if kind, err := y.s.CallerOf(left); err != nil || kind != store.CallerBead {
+		t.Fatalf("the agent's backgrounded command is %v, %v, want the pane of a bead's session", kind, err)
+	}
+	p, err = y.s.WatchPreview(left, y.bead.ID, "mockups", "", "lee")
+	if err != nil {
+		t.Fatalf("watch from the agent's backgrounded command: %v", err)
+	}
+	if p.Proposer != "yardr-a-new" {
+		t.Fatalf("a backgrounded command's watch is started by %q, want its pane's agent", p.Proposer)
+	}
+	// Another bead's agent is told the same way: its backgrounded command
+	// is refused, as its pane is.
+	if err := y.s.SetHandle(ctx, y.sess.ID, map[string]any{"agent": "yardr-a-new", "worktree": y.link}); err != nil {
+		t.Fatal(err)
+	}
+	y.pane(t, other, "yardr-b-new")
+	if _, err := y.s.WatchPreview(left, y.bead.ID, "", "", "jo"); err == nil || !strings.Contains(err.Error(), refused+"; this is yardr-b-new") {
+		t.Fatalf("watch from another bead's backgrounded command = %v, want %q", err, refused)
+	}
+	// Once the command line that started it has ended, nothing says where
+	// the command came from. The words say what was not found, not that the
+	// agent it names is a stranger; a call that names no session is a person's.
+	endLeader()
+	if err := y.s.SetHandle(ctx, other.ID, map[string]any{"agent": "yardr-b-new"}); err != nil {
+		t.Fatal(err)
+	}
+	y.pane(t, y.sess, "yardr-a-new")
+	_, err = y.s.WatchPreview(store.WithSession(left, y.sess.ID), y.bead.ID, "", "", "yardr-a-new")
+	if err == nil || !strings.Contains(err.Error(), refused+"; this call says it is yardr-a-new of session "+y.sess.ID+", but no process above it is in that session's pane") {
+		t.Fatalf("watch from a command left running past its shell = %v", err)
+	}
+	if _, err := y.s.WatchPreview(left, y.bead.ID, "", "", "lee"); err == nil || !strings.Contains(err.Error(), refused+"; this is lee") {
+		t.Fatalf("watch by lee from a command left running = %v", err)
+	}
+}
+
+// startOrphan starts a shell that leads a session of its own, as a command a
+// harness runs does, under this process, which is the pane's shell; the shell
+// starts a command in the background from a subshell that ends at once, and
+// the command's pid is answered. The command is then init's child but stays
+// in the shell's session for as long as the shell runs; endLeader ends it.
+func startOrphan(t *testing.T) (orphan int, endLeader func()) {
+	t.Helper()
+	cmd := exec.Command("sh", "-c", "( sleep 300 >/dev/null 2>&1 </dev/null & echo $! ); echo ready; read _")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if _, err := cmd.StdinPipe(); err != nil {
+		t.Fatal(err)
+	}
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	ended := false
+	endLeader = func() {
+		if !ended {
+			ended = true
+			cmd.Process.Kill()
+			cmd.Wait()
+		}
+	}
+	t.Cleanup(func() {
+		endLeader()
+		if orphan > 0 {
+			syscall.Kill(orphan, syscall.SIGKILL)
+		}
+	})
+	// "ready" comes once the subshell has ended, so the command has been
+	// given to init when it is read.
+	r := bufio.NewReader(out)
+	line, err := r.ReadString('\n')
+	if err != nil {
+		t.Fatalf("the backgrounded command's pid: %v", err)
+	}
+	if orphan, err = strconv.Atoi(strings.TrimSpace(line)); err != nil {
+		t.Fatalf("the backgrounded command's pid %q: %v", line, err)
+	}
+	if ready, err := r.ReadString('\n'); err != nil || strings.TrimSpace(ready) != "ready" {
+		t.Fatalf("the shell says %q, %v, want ready", ready, err)
+	}
+	return orphan, endLeader
 }
 
 func TestWatchPreviewStartsAnEndedWatchInPlace(t *testing.T) {

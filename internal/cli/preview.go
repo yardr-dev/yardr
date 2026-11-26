@@ -110,7 +110,9 @@ with a dot is never served, nor anything outside dir, and a directory
 answers its index.html. A page is given a small script that reloads it
 when a file in dir has changed and stood still for a moment.
 
-The bead's builder, the user it is for or an operator may start a watch.
+The bead's builder, the user it is for or an operator may start a watch. The
+command returns once the watch has started, so a builder runs it in its own
+shell and needs no background job for it.
 It ends when the bead leaves the stage it is in now or is closed, after
 the idle time without a request (preview_idle, four hours while unset), or
 seven days after it began, and the same command starts it again at the

@@ -17,3 +17,7 @@ func HaveStat() bool { return false }
 func stat(pid int) (Stat, error) {
 	return Stat{}, fmt.Errorf("pid %d: %w", pid, errors.ErrUnsupported)
 }
+
+func session(pid int) (int, error) {
+	return 0, fmt.Errorf("pid %d: %w", pid, errors.ErrUnsupported)
+}

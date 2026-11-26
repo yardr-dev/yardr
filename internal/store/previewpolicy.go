@@ -41,7 +41,9 @@ func mayStopPreview(ctx context.Context, tx *bolt.Tx, actor string, _ Action, ob
 // (Object.Whose), or an agent working that bead start a watch of its files.
 // The agent is told by the store's own records of the calling pane, not by
 // the actor it names, so no pane can serve the files of a bead it does not
-// work.
+// work. A call that names a session and has no pane above it is refused
+// with what was not found: its actor is only the name it gave, so the
+// refusal does not call that agent the stranger.
 func mayWatchPreview(ctx context.Context, tx *bolt.Tx, actor string, _ Action, obj Object) error {
 	resolved, err := paneAuthor(tx, callerOf(ctx), actor)
 	if err != nil {
@@ -65,6 +67,16 @@ func mayWatchPreview(ctx context.Context, tx *bolt.Tx, actor string, _ Action, o
 	if ops.none() {
 		who = "the operator"
 	}
-	return fmt.Errorf("only an agent working %s, the user it is for or %s may watch its files; this is %s",
-		obj.Name, who, or(resolved, "nobody"))
+	refused := fmt.Sprintf("only an agent working %s, the user it is for or %s may watch its files", obj.Name, who)
+	if named := sessionOf(ctx); named != "" && sess == nil {
+		crew, err := paneCrew(tx, callerOf(ctx))
+		if err != nil {
+			return err
+		}
+		if crew == nil {
+			return fmt.Errorf("%s; this call says it is %s of session %s, but no process above it is in that session's pane "+
+				"(a command left running after the one that started it ended is in no pane)", refused, or(resolved, "nobody"), named)
+		}
+	}
+	return fmt.Errorf("%s; this is %s", refused, or(resolved, "nobody"))
 }
