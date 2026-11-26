@@ -1235,6 +1235,14 @@ page again, which `/line` and a bead's page make at every event, leaves what is 
 it. The form around it is not kept: it carries the bead's revision as of the read, and a
 form kept past the next event would post a stale one, refused again at every retry.
 
+Enter in a text field of the card picks no option and approves nothing. A browser answers
+Enter by pressing the form's first submit button, so each form of the card opens with a
+button of its own. It is out of sight and out of the tab order, and its class is
+`wv-enter`. It does what the button beside the words field does, `Send` where the card has
+options and `Answer` where it has none, and in a secret card's fields it gives. On a run
+card and a setup card it is disabled, so Enter submits nothing and approving takes the
+`Approve` button.
+
 ## The line
 
 `/line` is what waits for a person, and under it the line in numbers, as JSON, and

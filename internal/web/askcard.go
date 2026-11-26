@@ -112,6 +112,28 @@ func (c AskCard) OptionRows() []optionRow {
 	return out
 }
 
+// Enter is the action of the answer form's default button. A browser presses
+// that button when a person hits Enter in one of the card's text fields, and
+// it takes the form's first submit button in tree order. Without a button of
+// the card's own that would be the first option's pick, a run card's Approve
+// or, on a card with neither, Later. A person typing words chose none of
+// them, and an answer is not taken back. So Enter does what the card's words
+// button does, which the template draws under the same conditions: Send where
+// there are options, Answer where there are none. On a secret card it gives.
+// "" means Enter has nothing to do on the card, and its default button is
+// disabled so that Enter submits nothing.
+func (c AskCard) Enter() string {
+	switch {
+	case c.Words && len(c.Options) > 0 && c.Setup == nil:
+		return "send"
+	case c.Words && len(c.Options) == 0 && c.Answer:
+		return "answer"
+	case c.Give && c.Secret != nil:
+		return "give"
+	}
+	return ""
+}
+
 // cardSecret is what a secret ask asks for, in the yard's words, with the
 // names its giving takes values for.
 type cardSecret struct {

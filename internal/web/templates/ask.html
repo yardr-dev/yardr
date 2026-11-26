@@ -57,8 +57,15 @@
          the page again (hx-preserve), and not the form around it: its
          revision is the bead's as of the read, and a form kept past the next
          event would post a stale one, refused again at every retry. */}}
+  {{- /* Enter in a text field presses the form's first submit button in tree
+         order. That would be the first pick, an Approve or, on a card with
+         neither, Later, and a person typing words chose none of them. An
+         answer is not taken back. So the form opens with a button of its
+         own, out of sight and out of the tab order. AskCard.Enter says what
+         it does. That is what the words button does, or nothing, when the
+         button is disabled. */}}
   {{- if .Form}}
-  <form class="wv-ask__form" method="post" action="{{.Action}}"{{if .OnBead}} hx-post="{{.Action}}" hx-push-url="false"{{end}}><input type="hidden" name="rev" value="{{.Rev}}">{{template "csrf"}}<input type="hidden" name="ask" value="{{.Ask}}">
+  <form class="wv-ask__form" method="post" action="{{.Action}}"{{if .OnBead}} hx-post="{{.Action}}" hx-push-url="false"{{end}}><input type="hidden" name="rev" value="{{.Rev}}">{{template "csrf"}}<input type="hidden" name="ask" value="{{.Ask}}">{{template "enter" .Enter}}
   {{- end}}
   {{- if .Options}}
   <ol class="wv-opts">
@@ -193,9 +200,10 @@
          beside it, the candidate taken instead, or a bare pick where the
          card keeps the account that stands. As a run card's, it stands
          only where the card is routine on its bead's page, or weighty
-         under the gate. */}}
+         under the gate. Enter in one of its fields approves nothing, since
+         its default button is the disabled one. */}}
   {{- if and .Setup .Approve}}
-  <form class="wv-ask__form" method="post" action="{{.Action}}"{{if .OnBead}} hx-post="{{.Action}}" hx-push-url="false"{{end}}><input type="hidden" name="rev" value="{{.Rev}}">{{template "csrf"}}<input type="hidden" name="ask" value="{{.Ask}}">
+  <form class="wv-ask__form" method="post" action="{{.Action}}"{{if .OnBead}} hx-post="{{.Action}}" hx-push-url="false"{{end}}><input type="hidden" name="rev" value="{{.Rev}}">{{template "csrf"}}<input type="hidden" name="ask" value="{{.Ask}}">{{template "enter" ""}}
     <div class="wv-ask__row">
       {{- range $i, $o := .Options}}
       <label class="wv-ask__pick"><input type="radio" name="option" value="{{inc $i}}">{{$o.Label}}</label>
@@ -220,3 +228,7 @@
 {{- /* An option: its number, its label and, where it has one, what choosing
        it does. */}}
 {{define "option"}}<span class="wv-opt__n">{{.N}}</span><span class="wv-opt__b"><span class="wv-opt__t">{{.Label}}</span>{{with .Consequence}}<span class="wv-opt__c">{{.}}</span>{{end}}</span>{{end}}
+{{- /* A form's default button. The answer's form says why it stands first.
+       It carries the action it is given, or is disabled where it is given
+       none, which makes Enter submit nothing. */}}
+{{define "enter"}}<button class="wv-enter" type="submit"{{with .}} name="action" value="{{.}}"{{else}} disabled{{end}} tabindex="-1" aria-hidden="true"></button>{{end}}

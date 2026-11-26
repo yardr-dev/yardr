@@ -117,6 +117,44 @@ func oneCard(t *testing.T, body string) string {
 	return cards[0]
 }
 
+// formsOf are the forms of a card, each from its opening tag to its closing
+// one.
+func formsOf(card string) []string {
+	var out []string
+	rest := card
+	for {
+		_, after, ok := strings.Cut(rest, "<form")
+		if !ok {
+			return out
+		}
+		form, next, _ := strings.Cut(after, "</form>")
+		out = append(out, "<form"+form+"</form>")
+		rest = next
+	}
+}
+
+// submitter matches the start tag of a button or an input, which is where a
+// form's submit buttons are found.
+var submitter = regexp.MustCompile(`<(button|input)\b(?:[^>"']|"[^"]*"|'[^']*')*>`)
+
+// defaultButton is the attributes of the form's default button, the first
+// submit button in tree order, which is the one a browser presses when a
+// person hits Enter in a text field. It is nil where the form has none.
+func defaultButton(form string) map[string]string {
+	for _, m := range submitter.FindAllStringSubmatch(form, -1) {
+		a := startTags(m[0], m[1])[0]
+		ty, typed := a["type"]
+		// A button with no type submits, as an input of type submit or image
+		// does; any other type submits nothing.
+		if m[1] == "button" && typed && !strings.EqualFold(ty, "submit") ||
+			m[1] == "input" && !strings.EqualFold(ty, "submit") && !strings.EqualFold(ty, "image") {
+			continue
+		}
+		return a
+	}
+	return nil
+}
+
 func pickAsk() store.Ask {
 	return store.Ask{
 		Question: "Move the links now?",
@@ -347,6 +385,126 @@ func TestAskCardKeepsItsWords(t *testing.T) {
 		if now := rev.FindStringSubmatch(card)[1]; now == first[path] || now != revOf(t, f, b.ID) {
 			t.Errorf("%s: the form's revision is %q after the bead changed, want the fresh %q (was %q)", path, now, revOf(t, f, b.ID), first[path])
 		}
+	}
+}
+
+// Enter in a text field of an ask card presses its form's default button, the
+// first submit button in tree order. So each form of a card opens with a
+// button of its own, and it is never an option's pick or an approval, which a
+// person who only typed words did not choose and cannot take back. It does
+// what the card's words button does, Send where there are options and Answer
+// where there are none, and on a secret card it gives. Where the card has none
+// of those it is disabled, which makes Enter submit nothing. Home and the line
+// draw the same forms, and on a card with neither pick nor approval their
+// first button used to be Later.
+func TestAskCardEnterPressesNoPickAndNoApproval(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name string
+		// build is a yard with the card in it, as a way to read a page of it,
+		// and the bead the card is on.
+		build func(t *testing.T) (read func(path string) string, bead string)
+		// stands is a control the card draws on its bead's page that Enter
+		// must not press, one the default button used to be or could have
+		// been.
+		stands string
+		// onBead and away list the default button of each of the card's
+		// forms in order, on its bead's page and away from it, on home and on
+		// the line. Each is the action the button carries, or "" for the
+		// disabled one.
+		onBead, away []string
+	}{
+		{"options and words", func(t *testing.T) (func(string) string, string) {
+			f, _ := talkFixture(t, "jo")
+			b, _ := actYard(t, f, pickAsk())
+			return func(path string) string { return f.get(path).body }, b.ID
+		}, pickOptions[0], []string{"send"}, []string{"send"}},
+		{"words alone", func(t *testing.T) (func(string) string, string) {
+			f, _ := talkFixture(t, "jo")
+			b, _ := actYard(t, f, store.Ask{Question: "What should it say?", Context: []string{"the sign."}})
+			return func(path string) string { return f.get(path).body }, b.ID
+		}, `value="answer"`, []string{"answer"}, []string{"answer"}},
+		{"a secret given on its page", func(t *testing.T) (func(string) string, string) {
+			y := newApproveYard(t, true)
+			y.putCRM(false)
+			b := y.bead("the crm key")
+			y.askSecret(b.ID, "jo")
+			tok := y.token("jo@example.net")
+			return func(path string) string { return y.surfaceBody(path, tok) }, b.ID
+		}, `value="give"`, []string{"give"}, []string{""}},
+		{"a secret given elsewhere", func(t *testing.T) (func(string) string, string) {
+			f, b, _ := secretActYard(t)
+			return func(path string) string { return f.get(path).body }, b.ID
+		}, `value="later"`, []string{""}, []string{""}},
+		{"a run card", func(t *testing.T) (func(string) string, string) {
+			y := newApproveYard(t, true)
+			b := y.bead("raise the session limit")
+			y.askRun(b.ID, "jo", "settings", "set", "max_sessions", "20")
+			tok := y.token("jo@example.net")
+			return func(path string) string { return y.surfaceBody(path, tok) }, b.ID
+		}, `value="approve"`, []string{""}, []string{""}},
+		{"a setup card", func(t *testing.T) (func(string) string, string) {
+			y := newApproveYard(t, true)
+			servesSetupmail(y.own)
+			b := y.bead("set up mail")
+			y.askSetup(b.ID)
+			tok := y.token("jo@example.net")
+			return func(path string) string { return y.surfaceBody(path, tok) }, b.ID
+		}, `value="approve"`, []string{"", ""}, []string{"", ""}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			read, bead := c.build(t)
+			for i, s := range approveSurfaces {
+				want := c.away
+				if i == 0 {
+					want = c.onBead
+				}
+				card := oneCard(t, read(s.path(bead)))
+				if i == 0 && !strings.Contains(card, c.stands) {
+					t.Errorf("%s: the card lacks %q, so the test shows nothing:\n%s", s.name, c.stands, card)
+				}
+				forms := formsOf(card)
+				if len(forms) != len(want) {
+					t.Errorf("%s: the card has %d forms, want %d:\n%s", s.name, len(forms), len(want), card)
+					continue
+				}
+				for n, form := range forms {
+					b := defaultButton(form)
+					if b == nil || b["class"] != "wv-enter" {
+						t.Errorf("%s, form %d: the first submit button is %v, want the wv-enter button:\n%s", s.name, n+1, b, form)
+						continue
+					}
+					// It is out of the tab order and out of a screen reader's
+					// reach, and nothing hides it: a browser may pass over a
+					// default button that is hidden.
+					if b["tabindex"] != "-1" || b["aria-hidden"] != "true" {
+						t.Errorf("%s, form %d: the default button is in the tab order or in a screen reader's reach: %v", s.name, n+1, b)
+					}
+					if _, hidden := b["hidden"]; hidden || b["style"] != "" {
+						t.Errorf("%s, form %d: the default button is hidden: %v", s.name, n+1, b)
+					}
+					_, disabled := b["disabled"]
+					switch {
+					case want[n] == "" && (!disabled || b["name"] != "" || b["value"] != ""):
+						t.Errorf("%s, form %d: the default button is %v, want it disabled, with no name", s.name, n+1, b)
+					case want[n] != "" && (disabled || b["name"] != "action" || b["value"] != want[n]):
+						t.Errorf("%s, form %d: the default button is %v, want action %q", s.name, n+1, b, want[n])
+					}
+				}
+			}
+		})
+	}
+	// The button is out of sight and takes no room. No rule gives it a display
+	// or hides it, since some browsers then skip implicit submission.
+	rule := cssRule(t, ".wv-enter")
+	for _, want := range []string{"position: absolute;", "width: 1px;", "height: 1px;", "overflow: hidden;", "clip-path: inset(50%);"} {
+		if !strings.Contains(rule, want) {
+			t.Errorf(".wv-enter lacks %s: %s", want, rule)
+		}
+	}
+	if strings.Contains(rule, "display") {
+		t.Errorf(".wv-enter sets display, which some browsers then skip as a default button: %s", rule)
 	}
 }
 

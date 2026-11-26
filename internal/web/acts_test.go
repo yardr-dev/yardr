@@ -210,12 +210,19 @@ func TestBeadAskButtons(t *testing.T) {
 	if strings.Contains(r.body, "Ask about this") {
 		t.Errorf("the card links Ask about this at an asker nobody can write to:\n%s", r.body)
 	}
+	// Enter in the words field presses the form's default button, so a person
+	// who types words and hits Enter posts what that button names. That is
+	// Send's post: the words as a note, and no option picked.
 	words := "Please leave the ask open while I check one more thing."
+	enter := defaultButton(answerForm(t, r.body))
+	if enter["name"] != "action" || enter["value"] != "send" {
+		t.Fatalf("Enter in the words field presses %v, want Send's action", enter)
+	}
 	if sent := f.postForm("/beads/"+b.ID, url.Values{
-		"rev":    {revOf(t, f, b.ID)},
-		"ask":    {strconv.FormatUint(seq, 10)},
-		"words":  {words},
-		"action": {"send"},
+		"rev":         {revOf(t, f, b.ID)},
+		"ask":         {strconv.FormatUint(seq, 10)},
+		"words":       {words},
+		enter["name"]: {enter["value"]},
 	}, "Origin", f.ts.URL); sent.status != http.StatusSeeOther {
 		t.Fatalf("sending words as a note: status %d, want 303:\n%s", sent.status, sent.body)
 	}
@@ -223,6 +230,13 @@ func TestBeadAskButtons(t *testing.T) {
 	must(t, err)
 	if len(notes) == 0 || notes[len(notes)-1].Author != "jo" || notes[len(notes)-1].Text != words {
 		t.Fatalf("sent note %+v, want jo's note %q", notes, words)
+	}
+	// The page still names the question after an answer, in its notes, so the
+	// store says whether the ask is open.
+	v, err := f.st.Bead(context.Background(), b.ID, "jo")
+	must(t, err)
+	if len(v.Asks) != 1 || v.Asks[0].State != "open" {
+		t.Fatalf("after the words were sent the asks are %+v, want one, open", v.Asks)
 	}
 	if page := f.get("/beads/" + b.ID).body; !strings.Contains(page, "Move the links now?") {
 		t.Fatalf("sending words as a note closed the ask:\n%s", page)

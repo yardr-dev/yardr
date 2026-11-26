@@ -350,6 +350,11 @@ div.wv-opt { cursor: default; }
 .wv-rec { margin: 4px 0 2px 38px; font: 400 12px/16px var(--sans); color: var(--dim); }
 .wv-ask__row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
 .wv-ask__pick { display: flex; align-items: center; gap: 6px; }
+/* A form's default button, which Enter in a text field presses. It is out of
+   sight and takes no room. It is never hidden and never display: none,
+   because some browsers then skip implicit submission, and Enter does nothing
+   where it should send the words. */
+.wv-enter { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 /* Controls: a field is sunken with a hairline, a button is bordered. The
    field's text is as big as the phone's, which would otherwise enlarge the
