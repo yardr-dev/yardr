@@ -284,7 +284,7 @@ at which commit, when the ceiling was set.
 
 | package | ceiling | measured |
 |---|---:|---|
-| `internal/store` | 107,416 | 101,416 lines at 606fd3bf5 |
+| `internal/store` | 101,634 | 101,634 lines at 0d0777d08 |
 | `internal/dispatch` | 20,181 | 18,381 lines at 606fd3bf5 |
 | `internal/rpc` | 7,545 | 7,045 lines at 606fd3bf5 |
 | `internal/server` | 5,910 | 5,410 lines at 606fd3bf5 |
