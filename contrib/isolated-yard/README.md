@@ -224,7 +224,9 @@ for the trial alone.
 A builder whose change shows in the web view looks at the page in a browser and
 shoots it at the commit they hand on. A bare yard holds what the page draws and
 `agent-browser` drives it, so no herdr starts and no agent runs. This is the
-recipe for one ask card. Another page takes the same steps with its own data.
+recipe for one ask card. Another page takes the same steps with its own data;
+for Crew, a conversation, a delegated run's record and Settings, `stock-view`
+makes the data ("Stocking a yard for Crew, talk and Settings", below).
 Everything of the yard goes through `D/e`:
 
 ```
@@ -305,6 +307,110 @@ Each of these cost calls the first time the view was shot by hand.
   before the press, and list it with the first command after. `No requests
   captured` means the press sent nothing. A reload is the control: it lists
   its GETs, so an empty list is no dead listing.
+
+## Stocking a yard for Crew, talk and Settings
+
+The recipe above makes one ask card in a bare yard. A page of Crew, a
+conversation with a crew member (`/talk`), a delegated run's record
+(`/delegations/<id>`) or a page of Settings draws more: crew members that run
+and one that does not, letters both ways with a picture among them, a record of
+what the yardmaster ran for the operator, and a yard that has a name.
+`stock-view` makes that yard in one run, in about 40 seconds after `up`. From
+the worktree under test, after your last commit:
+
+```
+contrib/isolated-yard/isolated-yard up        # not bare: builds yardr from this checkout, prints D
+contrib/isolated-yard/stock-view D            # stocks the yard, prints what it made
+D/e yardr web serve --as ada --addr 127.0.0.1:0 --pages-addr 127.0.0.1:0 > D/web.log 2>&1 &
+D/e yardr web open --print                    # the URL with the view's token, for the browser alone
+```
+
+From there the steps are those of "Looking at a page of the view", above: wait
+for `serving the yard` in `D/web.log`, give every `agent-browser` command the
+same `AGENT_BROWSER_SESSION` of your own, put the picture in a directory of its
+own outside the worktree, and `down` the yard at the end. `stock-view` serves
+and shoots nothing, since the page and the session's name are yours. It takes a
+yard that `up` made and nothing has used, and refuses any other, saying why. It
+runs every command through `D/e`, as the operator `ada` (`--actor ada`), prints
+a line for each thing it made, and ends with the two commands above, with `D`
+spelled out. Each of its waits has a fuse of 60 seconds against a hang, which
+`STOCK_VIEW_WAIT=<seconds>` raises for a loaded machine.
+
+`TestStockView` runs it and reads the yard back through yardr. It needs herdr,
+so it runs in the quiet run alone, and by hand:
+
+```
+YARDR_QUIET_RUN=1 go test -run TestStockView ./contrib/isolated-yard
+```
+
+What it makes:
+
+- The yard, as `yardr init --harness claude --operator ada --start` makes it,
+  named `kestrel` (the letters of the rail's chip, `ke`), with the yardmaster's
+  delegation on, a user `jo`, a directory depot `notes`, a manual group `writers`
+  of ada and jo, and a route that sends the stage `review` to it. It has no
+  beads and no peers.
+- Crew: `yardmaster` and `scribe` running, `night` stopped.
+- A conversation with the yardmaster: its greeting, which the stand-in sends
+  when it starts, then letters both ways, one from ada with a picture and one
+  from the yardmaster with another. Ada's letters are read; the yardmaster's to
+  her are not.
+- A delegated run: ada's mail to the yardmaster asking for room for ten notes,
+  and delegation 1, in which the yardmaster ran `group set writers --limit 10`
+  for ada on that mail.
+
+What the pages then show, as the view acts as ada. The view acknowledges
+nothing, so looking changes none of it:
+
+- `/crew`: the list holds `night` as `stopped · disabled`, `scribe` and
+  `yardmaster` idle, and the person `jo`. The yardmaster is marked `unread mail`,
+  since its letters to ada are unread, and Crew's tile in the rail carries a
+  badge of ada's unread mail. Beside the list stands the conversation with the
+  yardmaster.
+- `/talk`: that conversation as a page of its own, `Today` and six letters,
+  oldest first, `read` under ada's and a picture on two. It opens the
+  yardmaster's; `?with=<name>` names another party, and no other has mail.
+- `/delegations/1`: `Record 1: yardmaster for ada`, the mail it ran on, what
+  changed, the command that ran and the one that takes it back, and a table of
+  the setting before and after (`--limit`, 50 and 10).
+- Settings, at `/config`: the pages of the list and the yardmaster's switch,
+  `on`. `/groups` lists `writers` (manual, limit 10, ada and jo), `/routes` the
+  route to it and `/depots` the depot `notes`.
+
+A page that needs what this yard lacks, a bead or a peer, needs more than
+`stock-view` makes.
+
+### Traps
+
+Each of these cost time when the yard was first stocked by hand.
+
+- It needs `up`, not `bare`: a crew member runs only under herdr, and a bare
+  yard has none. `stock-view` refuses a bare yard, and one `yardr init` has been
+  run in, since init is the first thing it does.
+- Run `agent-browser set viewport 1280 800` and `agent-browser set media dark`
+  (or `light`) before each shot, each with the same `AGENT_BROWSER_SESSION` as
+  the rest. A session keeps both from one `open` to the next and a new one
+  starts at the browser's own size and colour scheme, so a shot that sets
+  neither is of whatever the session held. The scheme changes on the page that
+  is open, so one page is shot in both without opening it again.
+- The conversation's pane, `#letters`, runs `column-reverse`: its `scrollTop` is
+  0 at the newest letter and negative above it, so `scroll down` does nothing
+  there, and `scrollTo(0, scrollHeight)` stays at the newest. Scroll to the
+  oldest letter with `-(scrollHeight - clientHeight)`:
+  `AGENT_BROWSER_SESSION=<a name of its own> agent-browser eval "(l => l.scrollTo(0, -(l.scrollHeight - l.clientHeight)))(document.querySelector('#letters'))"`.
+  The traps of "Looking at a page of the view" hold here too, `#stage`'s among
+  them.
+- Mail takes its time from the clock, and nothing else sets a letter's day: every
+  letter of this yard stands under `Today`, so a `Yesterday` separator cannot be
+  shot in it.
+- Every stand-in that takes a first prompt runs `D/run` while it is there, the
+  yardmaster's too. `stock-view` writes it for one restart of the yardmaster and
+  removes it before it ends. A command of your own goes in the same way: write it
+  once the members you do not mean to run it have started, and remove it after.
+- A member's state follows the command that changes it by seconds: `crew start`
+  takes about five seconds to show `running`, and a member that `crew stop`
+  stopped reads `running` until the daemon's next pass. Poll `crew list --json`
+  for the state before a shot, as `stock-view` does.
 
 ## The yard-shape matrix
 

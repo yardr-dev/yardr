@@ -1,0 +1,218 @@
+#!/bin/sh
+# stock-view: stocks an isolated yard with what the pages of Crew, of a
+# conversation (/talk), of a delegated run's record (/delegations/<id>) and of
+# Settings draw, in one run, so that a builder whose change shows on one of
+# them does not make the yard by hand. From any directory of a yardr checkout,
+# with D the yard that `isolated-yard up` printed:
+#
+#   contrib/isolated-yard/stock-view D
+#
+# D must be a yard `up` made and nothing has used: init is the first thing the
+# script runs, and a yard that has one already would take the letters below
+# on top of an older conversation. A bare yard is refused too, since a crew
+# member runs only under herdr. Everything the script runs goes through D/e,
+# so nothing of the calling session reaches the yard, and every act of the
+# operator ada names --actor ada, since D/e has no USER (README, "Traps").
+#
+# What it makes, in this order:
+#
+#   yard    yardr init --harness claude --operator ada --start, the yard named
+#           kestrel (the rail chip's letters come from the name), the
+#           yardmaster's delegation on, a user jo, a directory depot notes, a
+#           manual group writers (ada and jo) and a route that sends the stage
+#           review to it
+#   crew    scribe, running, and night, stopped, so that Crew shows both
+#   talk    the yardmaster's greeting, then letters between it and ada, both
+#           ways, with a picture on one letter each way (pictures/ makes them).
+#           Ada's letters are marked read, the yardmaster's to her are not
+#   record  ada's mail asking the yardmaster for room for ten notes, and the
+#           run the yardmaster does on it, `group set writers --limit 10 --for
+#           ada --mail <seq>`, which the yard keeps as delegation 1. The
+#           stand-in agent runs no command a prompt asks for, so the command
+#           is written to D/run, which a stand-in runs when it takes its first
+#           prompt, and the yardmaster is restarted to take one. Every
+#           stand-in that takes a first prompt runs that file, so it is there
+#           only while the yardmaster starts, and gone before anything else.
+#
+# It prints a line for each thing it made and, last, the two commands that
+# serve the view and print its address, as the README's recipe has them
+# ("Stocking a yard for Crew, talk and Settings"). It neither serves nor
+# shoots: which page, and the name of the browser's session, are the
+# builder's. A run takes about 40 seconds, besides the build `up` did.
+#
+# Each wait (a crew member's state, the greeting, the run's end) is for its
+# effect, with a fuse against a hang of STOCK_VIEW_WAIT seconds, 60 when
+# unset: a test on a loaded machine gives it a larger one.
+#
+# Needs go (for the pictures), jq, and what `up` needs.
+
+# The jq programs and the letters' words are single-quoted on purpose: their $
+# are for jq.
+# shellcheck disable=SC2016
+set -eu
+
+usage() {
+  echo "usage: stock-view D   (the yard isolated-yard up printed, before any yardr init)" >&2
+  exit 2
+}
+die() { echo "stock-view: $*" >&2; exit 1; }
+say() { printf '\n== %s\n' "$*"; }
+
+[ $# -eq 1 ] || usage
+D=$1
+
+# Only a yard that up made, which says so by leaving its own path in it. The
+# script stops no process, but a directory that is no yard is no place to
+# make one.
+if [ ! -x "$D/e" ] || [ "$(cat "$D/.isolated-yard" 2>/dev/null)" != "$D" ]; then
+  echo "stock-view: $D was not made by isolated-yard up" >&2
+  exit 2
+fi
+# init, the first command, refuses nothing on a yard that has one: it keeps
+# what it finds, and the letters below would join an older conversation.
+[ -z "$(ls -A "$D/y" 2>/dev/null)" ] || die "$D has a yard already (its home $D/y is not empty): stock-view stocks one that nothing has used"
+[ -x "$D/bin/herdr" ] || die "$D is a bare yard: a crew member runs only under herdr, so make the yard with isolated-yard up"
+
+# Seven characters or more, or any that is no digit, is no number of seconds
+# the polls below can compare.
+wait_for=${STOCK_VIEW_WAIT:-60}
+case $wait_for in
+*[!0-9]* | ???????*) echo "stock-view: STOCK_VIEW_WAIT must be a whole number of seconds, 999999 at most" >&2; exit 2 ;;
+esac
+for tool in go jq; do
+  command -v "$tool" >/dev/null 2>&1 || { echo "stock-view: $tool is not on PATH" >&2; exit 2; }
+done
+
+here=$(cd "$(dirname "$0")" && pwd)
+cd "$here/../.."
+
+# Nothing here reads a terminal: a command that finds one asks (init, which
+# also opens a chat there, and crew add on a member that exists), and a
+# script has nobody to answer.
+exec </dev/null
+
+# cleanup removes D/run, which every stand-in that takes a first prompt runs,
+# so that no stand-in the yard starts later does, however this script ends. A
+# failed run says what the daemon and the stand-in agents had by then.
+cleanup() {
+  status=$?
+  trap - EXIT
+  rm -f "$D/run"
+  if [ "$status" -ne 0 ]; then
+    echo "--- the daemon's last lines, and what the stand-in agents logged:" >&2
+    tail -n 12 "$D/y/daemon.log" 2>/dev/null | cut -c1-240 >&2 || true
+    tail -n 6 "$D/agents.log" 2>/dev/null | cut -c1-240 >&2 || true
+  fi
+  exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+E="$D/e"
+ada() { "$E" yardr --actor ada "$@"; }
+# letter FROM TO WORDS [--file PATH]: a mail, its words on stdin, which takes
+# them as they are where a double-quoted argument would be the shell's.
+letter() {
+  letter_from=$1 letter_to=$2 letter_words=$3
+  shift 3
+  printf '%s\n' "$letter_words" | "$E" yardr --actor "$letter_from" mail "$letter_to" - "$@"
+}
+# letters is the conversation of ada with the yardmaster, as JSON.
+letters() { ada mail --with yardmaster --json; }
+# newest_of_ada is the seq of ada's newest letter to the yardmaster: mail
+# prints none, and the conversation is where each is read.
+newest_of_ada() {
+  json=$(letters) || die "the conversation with the yardmaster cannot be read"
+  printf '%s\n' "$json" | jq -r '[.[] | select(.from == "ada") | .seq] | max'
+}
+crew_is() { [ "$(ada crew list --json | jq -r --arg n "$1" '.[] | select(.name == $n) | .state')" = "$2" ]; }
+greeted() { letters | jq -e 'any(.[]; .from == "yardmaster" and .to == "ada")' >/dev/null; }
+# ran is true once the stand-in has written the end of the line it ran.
+ran() { grep -q ' exit ' "$D/run.out" 2>/dev/null; }
+# wait_until WHAT COMMAND...: tries the command once a second until it
+# succeeds. The fuse is against a hang, never the measure of anything.
+wait_until() {
+  wait_what=$1
+  shift
+  wait_i=0
+  until "$@"; do
+    wait_i=$((wait_i + 1))
+    [ "$wait_i" -le "$wait_for" ] || die "$wait_what not reached after $wait_for s"
+    sleep 1
+  done
+}
+
+say "the yard: yardr init --harness claude --operator ada --start"
+# --no-chat: where init finds a terminal it opens a chat, and a script has
+# none to give it.
+"$E" yardr init --harness claude --operator ada --start --no-chat >"$D/init.out" 2>&1 || { cat "$D/init.out" >&2; die "init failed"; }
+echo "init: the yard is made and its yardmaster runs (what it printed is in $D/init.out)"
+ada settings set name kestrel
+ada settings set yardmaster_delegation true
+ada user add jo
+mkdir -p "$D/depot"
+ada depot add notes "$D/depot" --kind dir
+ada group add writers --runner manual --members ada,jo
+# route add prints the route's id alone, which says nothing here.
+ada route add --stage review --group writers >/dev/null
+
+say "crew: scribe running, night stopped"
+ada crew add scribe --set kind=claude
+# The daemon would start a member that is added on its next pass; crew start
+# asks for it at once.
+ada crew start scribe
+ada crew add night --set kind=claude
+ada crew stop night
+wait_until "scribe running" crew_is scribe running
+
+say "talk: the yardmaster's greeting, then letters both ways, with a picture on two"
+go build -o "$D/bin/pictures" ./contrib/isolated-yard/pictures
+"$E" pictures "$D/pics" >/dev/null
+# The stand-in yardmaster greets ada from its first prompt, and init may
+# return before the greeting has been sent. Waiting for it keeps it the first
+# letter.
+wait_until "the yardmaster's greeting" greeted
+letter ada yardmaster 'Good morning. Which of the notes still wait for me?'
+letter yardmaster ada 'Two notes wait: the shed plan and the price list. I read the plan first.'
+letter ada yardmaster 'Here is the plan as I drew it. Does it match what you hold?' --file "$D/pics/mail.png"
+letter yardmaster ada 'It matches, apart from the roof. I sent the roof as I read it.' --file "$D/pics/done.png"
+
+say "record: ada asks the yardmaster for room for ten notes, and it makes it for her"
+letter ada yardmaster 'Please give the writers room for ten notes at once.'
+mail_seq=$(newest_of_ada)
+# The stand-in yardmaster reads no mail, so ada's letters are marked read here,
+# as the yardmaster would. The mark is a cursor, so ada's newest letter marks
+# every one of hers before it. It comes before the restart: the daemon nudges a
+# session about unread mail, and the nudge is one more prompt for the stand-in.
+ada inbox --crew yardmaster --ack "$mail_seq" >/dev/null
+letters | jq -e '[.[] | select(.from == "ada")] | length > 0 and all(.read)' >/dev/null || die "ada's letters to the yardmaster are not all read"
+printf 'yardr group set writers --limit 10 --for ada --mail %s\n' "$mail_seq" >"$D/run"
+ada crew restart yardmaster
+wait_until "the end of the run in $D/run.out" ran
+# Gone before anything else starts: every stand-in that takes a first prompt
+# runs it.
+rm -f "$D/run"
+ran_status=$(sed -n 's/^.* exit \(-*[0-9][0-9]*\)$/\1/p' "$D/run.out" | tail -n 1)
+[ "$ran_status" = 0 ] || { cat "$D/run.out" >&2; die "the yardmaster's run ended with status ${ran_status:-?}"; }
+ada delegation show 1 --json | jq -e --argjson mail "$mail_seq" '.for == "ada" and .mail == $mail' >/dev/null || die "delegation 1 is not the run for ada on mail $mail_seq"
+
+# crew stop returns before the daemon has stopped the session, and the member
+# reads running until its next pass: night, stopped straight after its add,
+# may have been started by then. So the states Crew is to show are read last.
+wait_until "night stopped" crew_is night stopped
+wait_until "yardmaster running" crew_is yardmaster running
+
+say "stocked: $D"
+echo "  settings    name=kestrel yardmaster_delegation=true"
+echo "  user        jo"
+echo "  depot       notes (dir) in $D/depot"
+echo "  group       writers (manual: ada, jo; limit 10 since the delegated run)"
+echo "  route       review -> writers"
+ada crew list --json | jq -r 'sort_by(.name)[] | "  crew        \(.name) \(.state)\(if .enabled then "" else " (disabled)" end)"'
+letters | jq -r '.[] | "  mail        \(.seq) \(.from) -> \(.to)\(if .read then ", read" else "" end)\((.files // []) | map(", with " + .name) | join(""))"'
+ada delegation show 1 --json | jq -r '"  delegation  \(.id): \(.yardmaster) for \(.for) on mail \(.mail), \(.command)"'
+echo
+echo "To look at the view, as ada:"
+echo "$D/e yardr web serve --as ada --addr 127.0.0.1:0 --pages-addr 127.0.0.1:0 > $D/web.log 2>&1 &"
+echo "$D/e yardr web open --print"

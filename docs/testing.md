@@ -433,23 +433,26 @@ package's own re-run (R1, yardr-t4c0).
 the mark a test reads when it costs minutes and belongs to no other run.
 Without it the test skips and says why, so `go test ./...`, a builder's gate
 and a landing stay as fast as they were. Today that is `TestYardShapes`
-(`contrib/isolated-yard/matrix_test.go`, yardr-n9ss), the yard-shape matrix.
-It walks a yard with a git depot, one with a directory depot and one set up
-as a server by `contrib/server-yard` through the same steps: init, doctor,
-depot add and depot init, a bead created, listed and shown and then worked to
-its end by the stand-in agent, status, and the daemon stopped, started and
-stopped again. A shape that cannot do a step does not skip it. Its table
-entry holds the refusal it gets, and the matrix pins the exit status and the
-start of the error. A peer-linked yard and a hosted one are not in the table
-yet.
+(`contrib/isolated-yard/matrix_test.go`, yardr-n9ss), the yard-shape matrix,
+and `TestStockView` (`contrib/isolated-yard/stock_test.go`), which stocks one
+yard with `contrib/isolated-yard/stock-view` and reads back what the pages of
+Crew, a conversation, a delegated run's record and Settings draw, in about 45 s
+beside the matrix's shapes. The matrix walks a yard with a git depot, one with a
+directory depot and one set up as a server by `contrib/server-yard` through the
+same steps: init, doctor, depot add and depot init, a bead created, listed and
+shown and then worked to its end by the stand-in agent, status, and the daemon
+stopped, started and stopped again. A shape that cannot do a step does not
+skip it. Its table entry holds the refusal it gets, and the matrix pins the
+exit status and the start of the error. A peer-linked yard and a hosted one are
+not in the table yet.
 
 A shape takes 35 to 50 s on the yard's machine and the three run beside one
 another, which puts `contrib/isolated-yard` at about 75 s under `-race` (18 s
-without the matrix), over R1's 60 s. The package is on R1's allow-list for
-that, and no bead brings it under, because the matrix is an acceptance test
-and the quiet run is where its minutes are spent. `YARDR_LANDING=1` with
-`YARDR_R1_STRICT=1` and `YARDR_QUIET_RUN=1` beside it stays the one command
-anyone can run.
+without the matrix and `TestStockView`), over R1's 60 s. The package is on R1's
+allow-list for that, and no bead brings it under, because the matrix is an
+acceptance test and the quiet run is where its minutes are spent.
+`YARDR_LANDING=1` with `YARDR_R1_STRICT=1` and `YARDR_QUIET_RUN=1` beside it
+stays the one command anyone can run.
 
 R7. The rules are judged by re-measurement: the same per-package table one
 week after the last fix bead lands, against the design's table and its

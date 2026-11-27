@@ -10,6 +10,13 @@
 // landing do not run it. By hand:
 //
 //	YARDR_QUIET_RUN=1 go test -run TestYardShapes ./contrib/isolated-yard
+//
+// The second exception is TestStockView (stock_test.go), which brings up one
+// such yard and stocks it with stock-view, the recipe of the README's
+// "Stocking a yard for Crew, talk and Settings". It needs herdr as well and
+// skips on the same variable:
+//
+//	YARDR_QUIET_RUN=1 go test -run TestStockView ./contrib/isolated-yard
 package isolatedyard
 
 import (
