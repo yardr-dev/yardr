@@ -1,7 +1,10 @@
 package web
 
 import (
+	"fmt"
 	"net/http"
+	"slices"
+	"strings"
 
 	"yardr.dev/yardr/internal/limits"
 	"yardr.dev/yardr/internal/store"
@@ -30,6 +33,10 @@ type Groups struct {
 	Head   uint64     `json:"head"`
 }
 
+// Line is the stage head's line under the title: how many groups the table
+// lists.
+func (g Groups) Line() string { return countWords(len(g.Groups), "group", "groups") }
+
 // GroupRow is one group of /groups: the command's row, and the resolved
 // provider beside it, as CrewRow carries it.
 type GroupRow struct {
@@ -37,6 +44,21 @@ type GroupRow struct {
 	// Provider is the subscription the group burns (providerOf); absent
 	// where none is known and for a group of another runner.
 	Provider string `json:"provider,omitempty"`
+}
+
+// ConfigLine is the group's runner settings on one line, a key and its value
+// each, which is all its fold says before it is opened.
+func (r GroupRow) ConfigLine() string {
+	keys := make([]string, 0, len(r.Config))
+	for k := range r.Config {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s %v", k, r.Config[k]))
+	}
+	return strings.Join(parts, " · ")
 }
 
 // providerOf is the subscription a herdr group or crew member with cfg
@@ -62,12 +84,22 @@ type Routes struct {
 	Head   uint64        `json:"head"`
 }
 
+// Line is the stage head's line under the title: how many routes the table
+// lists and the rule it is read by.
+func (r Routes) Line() string {
+	return countWords(len(r.Routes), "route", "routes") + ", in match order: the first that matches takes the bead"
+}
+
 // Peers is /peers: `yardr peer list --json`. The page is the operator's
 // to read: a peer's URL and key are the yard's to dial with.
 type Peers struct {
 	Peers []store.Peer `json:"peers"`
 	Head  uint64       `json:"head"`
 }
+
+// Line is the stage head's line under the title: how many peers the table
+// lists.
+func (p Peers) Line() string { return countWords(len(p.Peers), "peer", "peers") }
 
 // DepEnd is one end of an edge of /deps: the bead's title, stage and
 // status, what the id the edge carries does not say.
@@ -140,8 +172,7 @@ func all(r *http.Request) bool {
 // puts it and the head from before the read into the route's answer, and
 // the page renders that answer, live on the shell's stream. A list the
 // store has nothing for is empty, never null. kind is the stage kind the
-// page draws itself as (Page.Kind), "" for a list whose template does not
-// draw its own head yet.
+// page draws itself as (Page.Kind).
 func listedPage[T any](s *Server, w http.ResponseWriter, r *http.Request, read func() ([]T, error), wrap func([]T, uint64) any, template, kind, title string) {
 	// The head first, as on a page: the stream after it brings whatever
 	// changed while the list was read.
@@ -181,7 +212,7 @@ func (s *Server) handleGroups(w http.ResponseWriter, r *http.Request) {
 			rows = append(rows, GroupRow{Group: g, Provider: providerOf(g.Runner, g.Config, as)})
 		}
 		return rows, nil
-	}, func(rows []GroupRow, head uint64) any { return Groups{rows, head} }, "groups", "", "Groups")
+	}, func(rows []GroupRow, head uint64) any { return Groups{rows, head} }, "groups", "table", "Groups")
 }
 
 func (s *Server) handleRoutes(w http.ResponseWriter, r *http.Request) {
@@ -189,12 +220,13 @@ func (s *Server) handleRoutes(w http.ResponseWriter, r *http.Request) {
 		rs, err := s.st.Routes(r.Context())
 		store.SortRoutes(rs)
 		return rs, err
-	}, func(rows []store.Route, head uint64) any { return Routes{rows, head} }, "routes", "", "Routes")
+	}, func(rows []store.Route, head uint64) any { return Routes{rows, head} }, "routes", "table", "Routes")
 }
 
-// Config is /config: the hub of the yard's configuration pages, the links
-// to the yard's lists, with Telemetry for the operator. It is static
-// links with no live part of its own.
+// Config is /config: the hub of the yard's configuration pages, a sheet of
+// the pages Settings' list names, with Peers and Telemetry for the operator,
+// and for the operator the yardmaster's delegation switch. It is a snapshot,
+// with no live part of its own.
 type Config struct {
 	Links []ConfigLink `json:"links"`
 	// Delegation is the yardmaster's delegation switch as it reads, "on"
@@ -213,6 +245,31 @@ type ConfigLink struct {
 	Blurb string `json:"blurb"`
 }
 
+// The pages of Settings with the words the hub and Settings' list both say of
+// them. Depots and Deps are Lines' rows, so neither stands here.
+var (
+	groupsLink    = ConfigLink{Title: "Groups", Path: "/groups", Blurb: "who works a stage"}
+	routesLink    = ConfigLink{Title: "Routes", Path: "/routes", Blurb: "which group a stage sends its beads to, first match wins"}
+	peersLink     = ConfigLink{Title: "Peers", Path: "/peers", Blurb: "the yards this one is linked with"}
+	limitsLink    = ConfigLink{Title: "Limits", Path: "/limits", Blurb: "what the subscriptions the yard burns still carry"}
+	telemetryLink = ConfigLink{Title: "Telemetry", Path: "/telemetry", Blurb: "the yard's opt-in telemetry switch"}
+)
+
+// settingsLinks are the pages of Settings but Config and Pair device, in the
+// order of its list: Peers and Telemetry stand for the operator alone, so no
+// page stands that its reader is refused.
+func settingsLinks(operator bool) []ConfigLink {
+	links := []ConfigLink{groupsLink, routesLink}
+	if operator {
+		links = append(links, peersLink)
+	}
+	links = append(links, limitsLink)
+	if operator {
+		links = append(links, telemetryLink)
+	}
+	return links
+}
+
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) { s.config(w, r, "") }
 
 // config draws the hub, with why where a POST to it wrote nothing.
@@ -222,23 +279,9 @@ func (s *Server) config(w http.ResponseWriter, r *http.Request, why string) {
 		s.fail(w, r, err)
 		return
 	}
-	// Peers stands in its place for the operator alone, as Telemetry
-	// stands last: the hub links no page its reader is refused.
 	operator := s.isOperator(r.Context())
-	out := Config{Head: head, Links: []ConfigLink{
-		{Title: "Depots", Path: "/depots", Blurb: "the repositories and directories beads are worked in"},
-		{Title: "Groups", Path: "/groups", Blurb: "who works a stage"},
-		{Title: "Routes", Path: "/routes", Blurb: "which group a stage sends its beads to, first match wins"},
-	}}
+	out := Config{Head: head, Links: settingsLinks(operator)}
 	if operator {
-		out.Links = append(out.Links, peersLink)
-	}
-	out.Links = append(out.Links,
-		ConfigLink{Title: "Deps", Path: "/deps", Blurb: "the edges with an open end, grouped by the blocked bead"},
-		ConfigLink{Title: "Limits", Path: "/limits", Blurb: "what the subscriptions the yard burns still carry"},
-	)
-	if operator {
-		out.Links = append(out.Links, telemetryLink)
 		settings, err := s.st.Settings(r.Context())
 		if err != nil {
 			s.fail(w, r, err)
@@ -247,12 +290,8 @@ func (s *Server) config(w http.ResponseWriter, r *http.Request, why string) {
 		out.Delegation = delegationSwitch(settings)
 	}
 	out.Error = why
-	s.respond(w, r, Page{Template: "config", Title: "Config", Data: out, head: head})
+	s.respond(w, r, Page{Template: "config", Kind: "table", Title: "Config", Data: out, head: head})
 }
-
-// peersLink is the Peers page on the config hub: the yards this one is
-// linked with, the operator's alone.
-var peersLink = ConfigLink{Title: "Peers", Path: "/peers", Blurb: "the yards this one is linked with"}
 
 func (s *Server) handlePeers(w http.ResponseWriter, r *http.Request) {
 	if !s.isOperator(r.Context()) {
@@ -261,7 +300,7 @@ func (s *Server) handlePeers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	listedPage(s, w, r, func() ([]store.Peer, error) { return s.st.Peers(r.Context()) },
-		func(rows []store.Peer, head uint64) any { return Peers{rows, head} }, "peers", "", "Peers")
+		func(rows []store.Peer, head uint64) any { return Peers{rows, head} }, "peers", "table", "Peers")
 }
 
 func (s *Server) handleDeps(w http.ResponseWriter, r *http.Request) {

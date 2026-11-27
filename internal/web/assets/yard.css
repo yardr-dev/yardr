@@ -21,6 +21,9 @@
   /* a tile's pill fill: rust 600, which carries white text at 5.2:1
      where the accent fill cannot (the design readme) */
   --pill: #b54e22; /* --yard-600 */
+  /* the primary button's hover: the pill's neighbour on the design system's
+     ramp */
+  --pill-hover: #c0552a; /* --button-primary-hover */
   /* links and the depot's transit counts, in link blue */
   --link: #7aa2f7; /* --text-link */
   /* The phone's drawer dims the page with a translucent dusk ground. */
@@ -46,10 +49,8 @@
   --on-accent: #ffffff; /* --text-on-accent */
 
   /* status */
-  --working: var(--accent); /* --yard-500 */
   --running: #4cc38a; /* --signal-green */
   --held: #e5675a; /* --signal-red */
-  --done: var(--faint); /* --text-disabled */
 
   /* faces: the design system's Plex pair, with the system faces behind
      them; none is downloaded, and there is no @import */
@@ -82,11 +83,6 @@
   --dur-med: 180ms;
   --ease-out: cubic-bezier(0.2, 0.7, 0.3, 1);
   --shadow-popover: 0 6px 20px rgba(4, 5, 7, 0.4), 0 0 0 1px var(--hairline-strong);
-
-  /* the talk page's mail: footplate's reading width, and the gutter its
-     clock sets at the left of a letter */
-  --reading-width: 880px;
-  --letter-gutter: 3.5rem;
 }
 
 /* The light look: the same tokens with the design system's light values,
@@ -248,9 +244,10 @@ ul, ol { list-style: none; }
 .page-head { margin-bottom: 22px; }
 .page-head h1 { font: var(--wv-title); letter-spacing: -0.005em; }
 
-/* The stage of the talk page fills the window instead: the crew above the
-   letters, the form below, and the letters scrolling between them. */
-.wv-stage:has(#talk) { display: flex; flex-direction: column; padding-block: 44px 0; overflow: hidden; }
+/* The stage of a conversation fills the window instead (the talk kind, below):
+   the head above the letters, the composer under them, and the letters
+   scrolling between. */
+.wv-stage:has(.wv-compose) { display: flex; flex-direction: column; padding-bottom: 0; overflow: hidden; }
 
 /* Under 900 px (a phone, or a window as narrow) the stage is the page and
    the list is a drawer over it from the left: #drawer in the address opens it
@@ -261,7 +258,7 @@ ul, ol { list-style: none; }
   :root { --wv-gutter: 16px; --wv-answer: 600 26px/32px var(--sans); --wv-title: 600 22px/28px var(--sans); }
   .wv-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
   .wv-stage { grid-row: 1; padding-top: 0; }
-  .wv-stage:has(#talk) { padding-top: 0; }
+  .wv-stage:has(.wv-compose) { padding-top: 0; }
   .wv-rail { grid-row: 2; flex-direction: row; justify-content: space-around; align-items: stretch; height: var(--wv-bar); padding: 6px 0 calc(6px + env(safe-area-inset-bottom)); border-right: 0; border-top: 1px solid var(--hairline); }
   .wv-rail .wv-chip, .wv-rail__foot { display: none; }
   .wv-tile, .wv-rail > .wv-chip + .wv-tile { flex: 1; width: auto; max-width: 96px; min-height: 48px; margin: 0; justify-content: center; }
@@ -485,6 +482,37 @@ a.wv-btn { display: inline-block; }
 .wv-table .wv-num { text-align: right; font-variant-numeric: tabular-nums; }
 .wv-table .wv-nil { color: var(--faint); }
 .wv-table code { font: 400 12.5px/18px var(--mono); color: var(--ink); }
+/* A group's runner settings fold under its row: the row's rule moves to the
+   foot of the fold, as the edges' of a blocked bead do. */
+.wv-table tr:has(+ .wv-table__fold) td { border-bottom: 0; }
+.wv-table__fold td { padding: 0 4px; }
+.wv-table__fold .wv-fold > summary { padding: 2px 0 10px; border-bottom: 0; }
+.wv-table__fold .wv-fold__body { padding: 0 0 12px; border-bottom: 0; }
+
+/* A sheet (/config, /telemetry): a lede, setting rows and, where a page has
+   one, a table or a file block. A setting row is a label, what it does, its
+   state and its button. A meter in a table cell shows a window's use beside
+   its words. */
+.wv-lede { max-width: 68ch; margin-top: 12px; font: 400 15px/24px var(--sans); color: var(--dim); }
+.wv-setting { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 14px 4px; border-bottom: 1px solid var(--hairline); }
+.wv-lede + .wv-setting { margin-top: 12px; border-top: 1px solid var(--hairline); }
+.wv-setting__text { min-width: 0; margin-right: auto; }
+.wv-setting__name { font: 500 15px/20px var(--sans); }
+.wv-setting__help { max-width: 62ch; margin-top: 2px; font: 400 13px/18px var(--sans); color: var(--dim); }
+.wv-state { font: 400 13px/18px var(--sans); color: var(--dim); }
+.wv-state--on { color: var(--ink); }
+.wv-setting + .wv-facts { margin-top: 12px; }
+.wv-meter { width: 120px; height: 6px; vertical-align: middle; appearance: none; border: 0; border-radius: var(--radius-full); background: var(--surface-pressed); overflow: hidden; }
+.wv-meter::-webkit-meter-bar { background: var(--surface-pressed); border: 0; border-radius: var(--radius-full); height: 6px; }
+.wv-meter::-webkit-meter-optimum-value, .wv-meter::-webkit-meter-suboptimum-value, .wv-meter::-webkit-meter-even-less-good-value { background: var(--dim); border-radius: var(--radius-full); }
+.wv-meter::-moz-meter-bar { background: var(--dim); }
+/* On a phone the words of a setting take the row's width, and its state and
+   button stand under them, the button at the right. */
+@media (max-width: 899px) {
+  .wv-setting { flex-wrap: wrap; gap: 12px 16px; }
+  .wv-setting__text { flex: 1 1 100%; margin-right: 0; }
+  .wv-state { margin-right: auto; }
+}
 
 /* A bead as a row of the stage, the list's row at the stage's width. */
 .wv-srow { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 14px; padding: 11px 4px; border-bottom: 1px solid var(--hairline); }
@@ -618,144 +646,86 @@ li:has(> .wv-waits) { border-bottom: 1px solid var(--hairline); }
 /* Shown only while a bead stands off its flow. */
 .wv-group--off:not(:has(li)) { display: none; }
 
-/* --- what goes in the columns ------------------------------------------- */
+/* --- talk, the sixth stage kind ------------------------------------------ */
 
-.label {
-  color: var(--faint);
-  font-size: var(--small);
-  letter-spacing: var(--label-spacing);
-  text-transform: uppercase;
+/* The stage of /crew, /talk and /delegations/<id> (docs/web.md, The stage
+   kinds): a conversation's head, the letters by day, the composer under them.
+   The kit's parts in yard.css's names for its tokens. Where the page has a
+   composer the stage fills the window and does not scroll (above): the head
+   stands above, the form below, and the letters scroll between them, bottom-up,
+   so the newest letter is in view on open with the form under it, and the link
+   to older mail, at the pane's top, is out of view until it is scrolled to.
+   Each block inside keeps its own order. A record stands in a letter's place on
+   a page with no composer, which scrolls as any page does. */
+.wv-talk:has(.wv-compose) { display: flex; flex-direction: column; flex: 1; min-height: 0; padding-bottom: var(--wv-gutter); }
+.wv-letters { margin-top: 8px; }
+.wv-talk:has(.wv-compose) .wv-letters { display: flex; flex-direction: column-reverse; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--hairline-strong) transparent; }
+.wv-talk:has(.wv-compose) .wv-letters > * { flex: none; }
+/* The day stands centred between two hairlines above the first letter of a day
+   and of a page. */
+.wv-day { display: flex; align-items: center; gap: 12px; margin: 18px 0 6px; font: 500 12px/16px var(--sans); color: var(--dim); }
+.wv-day::before, .wv-day::after { content: ""; flex: 1; height: 1px; background: var(--hairline); }
+/* One letter: the time in a gutter at the left, the sender on the first letter
+   of a group, then the words, the files and what the other party has read. */
+.wv-letter { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 0 8px; padding: 6px 0; }
+.wv-letter__at { font: 400 12px/20px var(--mono); color: var(--faint); }
+.wv-letter__who { font: 600 13px/20px var(--sans); overflow-wrap: anywhere; }
+.wv-letter--own .wv-letter__who { color: var(--dim); }
+.wv-letter__body { grid-column: 2; min-width: 0; }
+.wv-letter img { display: block; max-width: 100%; height: auto; margin-top: 8px; }
+.wv-read { display: block; margin-top: 2px; font: 400 12px/16px var(--sans); color: var(--faint); }
+/* A letter that reads under the head above it names its sender to a screen
+   reader alone. */
+.wv-vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* The composer: a framed box under the mail, on the raised ground with a
+   hairline and the card radius. The label stands small and quiet at its top,
+   the line has no border of its own but a rule under it, and the Send row is
+   its foot. The form stands outside the live part, so what is typed survives
+   what arrives. Why a mail was not sent stands above the frame. The frame shows
+   the focus the line does not. */
+.wv-compose { flex: none; margin-top: 12px; padding: 12px 14px; background: var(--panel); border: 1px solid var(--hairline); border-radius: var(--radius-lg); }
+.wv-compose:focus-within { border-color: var(--accent); }
+.wv-compose label { display: block; font: 400 12px/16px var(--sans); color: var(--dim); }
+.wv-compose textarea { width: 100%; margin-top: 6px; padding: 6px 0; resize: none; background: transparent; color: var(--ink); border: 0; border-bottom: 1px solid var(--hairline); font: 400 14px/20px var(--sans); }
+.wv-compose textarea:focus-visible { outline: none; }
+.wv-compose textarea::placeholder { color: var(--faint); }
+.wv-compose__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
+.wv-compose__row .wv-btn { margin-left: auto; }
+.wv-hint { font: 400 12px/16px var(--sans); color: var(--faint); text-wrap: balance; }
+/* The one filled button is the primary: rust 600 with white on it. */
+.wv-btn--primary { background: var(--pill); border-color: var(--pill); color: var(--on-accent); }
+.wv-btn--primary:hover { background: var(--pill-hover); border-color: var(--pill-hover); color: var(--on-accent); }
+/* A delegated run's record: the yardmaster's mail to the operator in its long
+   form, the one letter of its page, a card in the letter's body with the ask
+   card's frame. What it holds are the stage's own parts: a section head for its
+   title, facts, a table, notes for the objects and file blocks for their diffs. */
+.wv-record { margin-top: 6px; padding: 12px 18px 14px; background: var(--panel); border: 1px solid var(--hairline); border-radius: var(--radius-lg); }
+.wv-record__label { margin: 18px 0 2px; font: 500 13px/18px var(--sans); color: var(--dim); }
+.wv-record .wv-table :is(th, td):first-child, .wv-record .wv-note { padding-left: 0; }
+.wv-record .wv-note { padding-right: 0; }
+/* A command or an object the record names is set in mono and ink, as the cells
+   of its table are, and not in the quiet words code has elsewhere. */
+.wv-record code { font: 400 12.5px/18px var(--mono); color: var(--ink); }
+
+@media (max-width: 899px) {
+  .wv-compose textarea { font-size: 16px; line-height: 22px; }
+  .wv-record { padding: 10px 14px 12px; }
 }
+
+/* --- what is left of the old columns ------------------------------------- */
+
+/* The pages that are of no stage kind (an error, a notice, the pairing page)
+   draw with these: one entry of the stage, and what it says in the quiet and in
+   the red. */
 .faint { color: var(--faint); }
 .held { color: var(--held); }
-
-/* One entry of the stage's feed. */
 .item { padding: var(--gap); border-bottom: 1px solid var(--hairline); }
-.item-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.item-head h2 { font-size: var(--large); overflow-wrap: anywhere; }
-.item-count { margin-left: auto; color: var(--dim); }
 .item > p { font-family: var(--sans); }
-
-.bead { color: var(--accent); }
 /* A sentence of a summary card that opens the text it names: underlined,
    since the card's sentences read as plain text otherwise. It stays under
    the link states above (a:hover, a:focus-visible). */
 .opens { color: var(--dim); text-decoration: underline; text-decoration-color: var(--faint); text-underline-offset: 3px; }
-
-/* A bead's own page. */
-.facts div { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 10px; padding: 2px 0; }
-.facts dt { color: var(--faint); }
-.facts dd { overflow-wrap: anywhere; }
-/* A group's runner settings stand under their own small heading, the bare
-   key beside each value. */
-.item > .facts + h3 { margin-top: 12px; }
-/* A file of a summary card's full text: its facts under the label that says
-   what the file is. */
-.item > .label + .facts { margin-top: 8px; }
-/* The routes as one row each, as `yardr route list` prints them, the id
-   quiet at the end. */
-.routes { width: 100%; border-collapse: collapse; }
-.routes th, .routes td { padding: 3px 12px 3px 0; text-align: left; font: inherit; overflow-wrap: anywhere; }
-.routes th:last-child, .routes td:last-child { padding-right: 0; }
-.routes thead th { color: var(--faint); font-size: var(--small); letter-spacing: var(--label-spacing); text-transform: uppercase; }
-.routes tbody tr { border-top: 1px solid var(--hairline); }
-/* A route's id, quiet beside its heading until opened. */
-.route-id { color: var(--faint); font-size: var(--small); }
-.route-id summary { cursor: pointer; }
-.route-id summary:hover { color: var(--accent-hover); }
-/* The stacked cards stand only below 700 px; the wide table only above. */
-.routes-cards { display: none; }
-@media (max-width: 699px) {
-  .routes-table { display: none; }
-  .routes-cards { display: block; }
-}
-/* What someone wrote, as they wrote it. */
-.text { white-space: pre-wrap; overflow-wrap: anywhere; }
-/* Running text keeps a measure of about 90 characters: on a wide window
-   the centre is far wider than a line wants to be. */
-.text { max-width: 90ch; }
-/* A stage file is wrapped by hand, at a width the column may not have: wrapped
-   again its lines end ragged and its lists lose their indent. So it keeps
-   its lines, smaller, and what still does not fit scrolls inside the block. */
-.text.file { white-space: pre; overflow-wrap: normal; overflow-x: auto; font-size: var(--small); line-height: 1.6; }
-.item > h3 + *, .item > .item-head + * { margin-top: 8px; }
-.note + .note { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--hairline); }
-.note .text, .note p { margin-top: 4px; }
-/* A note's pictures, each below its words, never wider than the column. */
-.note img { display: block; max-width: 100%; height: auto; margin-top: 8px; }
-/* The talk page: the crew to talk to, the conversation's head, the mail in
-   a reading column, the form that sends. The stage fills the window
-   (.wv-stage:has(#talk)), the crew and the head stay above the letters and
-   the form below, and the letters scroll between them. The pane runs
-   bottom-up, so the newest letter is in view on open with the form under
-   it; each block inside keeps the letters oldest first. */
-#talk { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-#letters { display: flex; flex-direction: column-reverse; flex: 1; min-height: 0; overflow-y: auto; }
-#letters > * { flex: none; }
-/* The mail stands in the reading column: as wide as the centre, to
-   footplate's measure, and centred past it. */
-#talk #live, #talk #earlier { width: 100%; max-width: var(--reading-width); margin-inline: auto; }
-.peers { padding: 12px var(--gap); border-bottom: 1px solid var(--hairline); }
-.peers ul { display: flex; flex-wrap: wrap; gap: 4px 16px; }
-.peers a { display: block; padding: 4px 0; color: var(--dim); font-size: var(--small); letter-spacing: var(--label-spacing); text-transform: uppercase; }
-.peers a:hover { color: var(--accent-hover); }
-.peers li a[aria-current="page"] { color: var(--ink); }
-.peers p { margin-top: 8px; }
-.dot.unread { background: var(--accent); }
-/* The conversation's head: the party's name in the section face, a crew
-   member's state beside it, quiet. */
-.talk-head { display: flex; align-items: baseline; gap: 8px; padding: 12px var(--gap); border-bottom: 1px solid var(--hairline); }
-.talk-head .state { color: var(--faint); font-family: var(--sans); font-size: 13px; }
-.section-head { font-family: var(--sans); font-size: 13px; font-weight: 600; }
-/* One letter: the gutter at the left holds the time, and the body stands
-   in from it. A letter that heads its group puts the sender beside the
-   time and its body under it; one that reads under the head above it puts
-   its time in the gutter beside its body, and its sender stays with a
-   screen reader unless its line differs from the letter above, when it is
-   said quietly above the words. A letter that opens a day has the day's
-   separator above it, centred between two hairlines. */
-.letter { position: relative; display: grid; grid-template-columns: var(--letter-gutter) minmax(0, 1fr); align-items: start; padding: 2px var(--gap); }
-.letter.head { padding-top: 14px; }
-.letter .day-break { display: none; grid-column: 1 / -1; grid-row: 1; }
-.letter.day { padding-top: var(--gap); }
-.letter.day .day-break { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; color: var(--faint); font-family: var(--sans); font-size: var(--small); }
-.letter .day-break::before, .letter .day-break::after { content: ""; flex: 1; border-top: 1px solid var(--hairline); }
-.letter .at { grid-column: 1; grid-row: 2; color: var(--faint); font-family: var(--sans); font-variant-numeric: tabular-nums; }
-.letter .who { grid-column: 2; grid-row: 2; font-family: var(--sans); font-weight: 600; overflow-wrap: anywhere; }
-.letter.own .who { color: var(--faint); }
-.letter:not(.head):not(.differs) .who { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.letter.differs:not(.head) .who { font-size: var(--small); font-weight: 400; color: var(--faint); }
-.letter .body { grid-column: 2; grid-row: 2; min-width: 0; }
-.letter.head .body, .letter.differs .body { grid-row: 3; }
-.letter .text { font-family: var(--sans); }
-.letter img { display: block; max-width: 100%; height: auto; margin-top: 8px; }
-.letter .label { margin-top: 4px; }
-/* The composer: the form stands in the reading column under the mail, a
-   framed box on the raised ground, with a hairline and the card radius
-   (8px, where the reset squares the rest). It is as wide as the mail less
-   the gutter the letters keep, so its
-   edges stand on the hairlines of the day breaks above it, and centred past
-   the reading width. The label stands small and quiet at its top, the line
-   has no border of its own, and the Send row is its foot. The form stands
-   outside the live part, so what is typed survives what arrives. The line's
-   text is 16px: smaller, a phone enlarges the field on focus and the page
-   with it. Why a mail was not sent stands above the frame, on its edge. */
-.compose, #talk > .error { width: calc(100% - 2 * var(--gap)); max-width: calc(var(--reading-width) - 2 * var(--gap)); margin-inline: auto; }
-.compose { display: flex; flex-direction: column; gap: 4px; margin-block: var(--gap); padding: 8px 12px; background: var(--panel); border: 1px solid var(--hairline); border-radius: 8px; }
-#talk > .error { padding: var(--gap) 0 0; border-bottom: 0; }
-/* The line has no border to show the focus, so the frame shows it. */
-.compose:focus-within { border-color: var(--accent); }
-.compose textarea { width: 100%; padding: 0; background: none; color: var(--ink); border: 0; font: 16px/1.5 var(--mono); resize: vertical; }
-.compose textarea:focus-visible { outline: none; }
-.compose textarea::placeholder { color: var(--faint); }
-/* The Send button stands at the row's right edge, the key that sends it
-   beside: faint as the view's faint text, small, and never uppercased,
-   as key names are case-sensitive. */
-.compose .send-row { display: flex; justify-content: flex-end; align-items: baseline; gap: 8px; }
-.compose .hint { color: var(--faint); font-size: var(--small); text-wrap: balance; }
-.compose button { padding: 8px 16px; background: var(--panel); color: var(--dim); border: 1px solid var(--hairline-strong); font-size: var(--small); letter-spacing: var(--label-spacing); text-transform: uppercase; }
-.compose button:hover { color: var(--accent-hover); border-color: var(--accent-hover); }
-/* Why a mail was not sent, above the form that keeps its words. */
+/* Why a page could not do what it was asked, in red. */
 .error { color: var(--held); }
 /* The pairing page: the code large in mono, the QR at its natural size on
    white (a scanner wants the contrast the page's ground does not give),
@@ -768,16 +738,3 @@ li:has(> .wv-waits) { border-bottom: 1px solid var(--hairline); }
 #pairing button { padding: 8px 16px; background: var(--panel); color: var(--dim); border: 1px solid var(--hairline-strong); font-size: var(--small); letter-spacing: var(--label-spacing); text-transform: uppercase; }
 #pairing button:hover { color: var(--accent-hover); border-color: var(--accent-hover); }
 code { font: inherit; color: var(--dim); overflow-wrap: anywhere; }
-
-.figures { margin-top: 8px; }
-.figures div { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; }
-.figures dt { color: var(--dim); }
-.figures dd { text-align: right; overflow-wrap: anywhere; }
-.item > .figures { margin-top: 8px; color: var(--dim); font-size: var(--small); }
-
-.state { color: var(--dim); }
-
-.dot { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: var(--done); }
-.dot.working { background: var(--working); }
-.dot.running { background: var(--running); }
-.dot.held { background: var(--held); }

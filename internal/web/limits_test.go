@@ -250,8 +250,9 @@ func TestLimitsOfASourceThatAnswersForItself(t *testing.T) {
 		t.Fatalf("asked = %q, want nothing asked again within the minute", got)
 	}
 	r := f.get("/limits", "Accept", "text/html")
-	if r.status != 200 || !strings.Contains(r.body, "<h2>machine</h2>") ||
-		!strings.Contains(r.body, "12.5% used") || !strings.Contains(r.body, "(target 80%)") {
+	page := squash(r.body)
+	if r.status != 200 || !strings.Contains(page, `<h2 class="wv-sh"><span>machine</span></h2>`) ||
+		!strings.Contains(page, `<td class="wv-name">load</td><td>12.5% used <meter class="wv-meter" min="0" max="100" value="12.5"></meter></td><td>80%</td>`) {
 		t.Errorf("the page shows no machine windows:\n%s", r.body)
 	}
 }
@@ -371,17 +372,20 @@ func TestLimitsPage(t *testing.T) {
 	useKinds(t, f, "claude", "kimi", "codex")
 	page := squash(f.get("/limits").body)
 	for _, want := range []string{
-		`<h2>moonshot</h2>`,
-		`<h2>claude</h2>`,
+		`<article class="wv-page" data-kind="table">`,
+		`<h1 class="wv-title">Limits</h1><p class="wv-meta">2 providers and 1 source</p>`,
+		`<h2 class="wv-sh"><span>moonshot</span></h2>`,
+		`<h2 class="wv-sh"><span>claude</span></h2>`,
+		`<thead><tr><th>window</th><th>used</th><th>target</th><th>resets</th></tr></thead>`,
 		`burned by</dt><dd>the yard&#39;s default (kind claude)</dd>`,
 		`burned by</dt><dd>group g0 (kind kimi)</dd>`,
-		`<div><dt>source</dt><dd>quokka says (provider Kimi, plan pro)</dd></div>`,
-		`100% used (100 of 100)`,
-		`38% used`,
-		`<span class="held">used up</span>`,
+		`<dt>source</dt><dd>quokka says (provider Kimi, plan pro)</dd>`,
+		// A window's use in words with a meter beside them, and a window used up
+		// says so in red.
+		`100% used (100 of 100) <meter class="wv-meter" min="0" max="100" value="100"></meter><span class="wv-fault">used up</span>`,
+		`38% used <meter class="wv-meter" min="0" max="100" value="38"></meter></td>`,
 		`waits for</dt><dd>the 5h window, which resets`,
-		`Not asked: codex`,
-		`in use here, and listed by no source`,
+		`<h2 class="wv-sh"><span>Not asked</span></h2><p class="wv-text">codex <span class="wv-dim">— in use here, and listed by no source</span></p>`,
 		`<a class="wv-row" href="/limits" aria-current="page">`,
 	} {
 		if !strings.Contains(page, want) {
@@ -405,7 +409,7 @@ func TestLimitsPage(t *testing.T) {
 	// An empty yard shows the built-in machine's windows.
 	g := newFixture(t)
 	must(t, os.MkdirAll(g.home, 0o755))
-	if body := g.get("/limits").body; !strings.Contains(body, "<h2>machine</h2>") ||
+	if body := squash(g.get("/limits").body); !strings.Contains(body, `<h2 class="wv-sh"><span>machine</span></h2>`) ||
 		strings.Contains(body, "This yard has no limits to show.") {
 		t.Errorf("/limits of an empty yard shows no machine section: %s", body)
 	}

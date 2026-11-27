@@ -1,7 +1,6 @@
 package web_test
 
 import (
-	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -48,9 +47,9 @@ func TestWindowFillsTheWindow(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		// Running text keeps a measure of about 90 characters.
-		".text { max-width: 90ch; }",
-		// A note's lines keep the same measure, which the stage kind sets for its words.
+		// Running text keeps a measure of about 80 characters, in the stage kind's
+		// words, and so do a note's lines.
+		".wv-text { max-width: 80ch; font: 400 14px/20px var(--sans); white-space: pre-wrap; overflow-wrap: anywhere; }",
 		".wv-note p { max-width: 80ch; font: 400 14px/20px var(--sans); white-space: pre-wrap; overflow-wrap: anywhere; }",
 		// A feed line keeps its one line.
 		".wv-entry__body p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
@@ -188,57 +187,50 @@ func mediaCSS(t *testing.T, css, query string) string {
 	return out.String()
 }
 
-// /routes shows one row per route on a wide window and the stacked cards
-// below 700 px, and a group's config keys stand bare under their heading.
+// The tables of Settings are one layout at every width: a row to each route,
+// peer or group with a hairline under it, its header in quiet words and no
+// capitals, and what does not fit scrolls sideways inside its own block, not
+// the page. A group's config folds under its row, the row's rule moving to the
+// fold's foot. The sheet's setting row is a label, its state and its button.
 // What the pixels do is the bead's screenshot.
-func TestRoutesCompactRows(t *testing.T) {
+func TestSettingsTables(t *testing.T) {
 	t.Parallel()
-	css, err := os.ReadFile("assets/yard.css")
-	must(t, err)
-	text := string(css)
-	// Below 700 px the table goes and the stacked cards stand; above, the
-	// cards go and the table stands.
-	phone := mediaCSS(t, text, "max-width: 699px")
-	for _, want := range []string{
-		".routes-table { display: none; }",
-		".routes-cards { display: block; }",
+	css := string(readAsset(t, "yard.css"))
+	for selector, wants := range map[string][]string{
+		".wv-scrollx":                            {"overflow-x: auto;"},
+		".wv-table th":                           {"color: var(--dim);", "white-space: nowrap;"},
+		".wv-table td":                           {"border-bottom: 1px solid var(--hairline);"},
+		".wv-table tr:has(+ .wv-table__fold) td": {"border-bottom: 0;"},
+		".wv-setting":                            {"display: flex;", "justify-content: space-between;", "border-bottom: 1px solid var(--hairline);"},
+		".wv-state--on":                          {"color: var(--ink);"},
+		".wv-lede":                               {"max-width: 68ch;", "color: var(--dim);"},
+		".wv-meter":                              {"width: 120px;", "height: 6px;"},
 	} {
+		rule := cssRule(t, selector)
+		for _, want := range wants {
+			if !strings.Contains(rule, want) {
+				t.Errorf("%s lacks %s: %s", selector, want, rule)
+			}
+		}
+	}
+	if strings.Contains(cssRule(t, ".wv-table th"), "uppercase") {
+		t.Error("a table's header is set in capitals")
+	}
+	// On a phone the words of a setting take the row's width and its state and
+	// button stand under them, where beside them the words would be squeezed to
+	// a column and the button's label broken over two lines.
+	phone := mediaCSS(t, css, "max-width: 899px")
+	for _, want := range []string{".wv-setting { flex-wrap: wrap;", ".wv-setting__text { flex: 1 1 100%;"} {
 		if !strings.Contains(phone, want) {
 			t.Errorf("the phone rules lack %s", want)
 		}
 	}
-	if cards := cssRule(t, ".routes-cards"); !strings.Contains(cards, "display: none;") {
-		t.Errorf("the stacked cards stand on a wide window too: %s", cards)
-	}
-	// The table reads as the command's: quiet small-caps headers, one
-	// ruled row per route, long words wrapping inside their cell.
-	head := cssRule(t, ".routes thead th")
-	for _, want := range []string{"color: var(--faint);", "font-size: var(--small);", "letter-spacing: var(--label-spacing);", "text-transform: uppercase;"} {
-		if !strings.Contains(head, want) {
-			t.Errorf(".routes thead th lacks %s: %s", want, head)
+	// The stacked cards a narrow window had in place of the routes table are
+	// gone with the rest of the old pages' rules.
+	for _, gone := range []string{".routes", ".route-id", ".item-head", ".facts", ".figures", ".peers", ".talk-head", ".letter ", ".compose "} {
+		if strings.Contains(css, gone) {
+			t.Errorf("the stylesheet still names %s", gone)
 		}
-	}
-	row := cssRule(t, ".routes tbody tr")
-	if !strings.Contains(row, "border-top: 1px solid var(--hairline);") {
-		t.Errorf(".routes tbody tr lacks its rule: %s", row)
-	}
-	cells := cssRule(t, ".routes th, .routes td")
-	for _, want := range []string{"text-align: left;", "font: inherit;", "overflow-wrap: anywhere;"} {
-		if !strings.Contains(cells, want) {
-			t.Errorf(".routes th, .routes td lacks %s: %s", want, cells)
-		}
-	}
-	// The stacked card's id sits quiet beside its heading until opened.
-	id := cssRule(t, ".route-id")
-	for _, want := range []string{"color: var(--faint);", "font-size: var(--small);"} {
-		if !strings.Contains(id, want) {
-			t.Errorf(".route-id lacks %s: %s", want, id)
-		}
-	}
-	// The config keys stand under their heading, clear of the rows above.
-	sub := cssRule(t, ".item > .facts + h3")
-	if !strings.Contains(sub, "margin-top: 12px;") {
-		t.Errorf(".item > .facts + h3 lacks its margin: %s", sub)
 	}
 }
 
@@ -372,63 +364,47 @@ func TestAskRowOnPhone(t *testing.T) {
 	}
 }
 
-// The talk page reads as a messaging app: the stage fills the window, the
-// crew stays above the letters and the form below, and the letters scroll
+// The conversation reads as a messaging app: the stage fills the window, the
+// head stays above the letters and the composer below, and the letters scroll
 // between them, bottom-up, so the newest is in view on open with the form
-// under it. What the pixels do is the bead's screenshot.
+// under it. A delegated run's record, which has no composer, is not a pane: it
+// scrolls as any page does. What the pixels do is the bead's screenshot.
 func TestTalkLayout(t *testing.T) {
 	t.Parallel()
-	stage := cssRule(t, ".wv-stage:has(#talk)")
+	stage := cssRule(t, ".wv-stage:has(.wv-compose)")
 	for _, want := range []string{"display: flex;", "flex-direction: column;", "overflow: hidden;"} {
 		if !strings.Contains(stage, want) {
-			t.Errorf(".wv-stage:has(#talk) lacks %s: %s", want, stage)
+			t.Errorf(".wv-stage:has(.wv-compose) lacks %s: %s", want, stage)
 		}
 	}
-	talk := cssRule(t, "#talk")
+	talk := cssRule(t, ".wv-talk:has(.wv-compose)")
 	for _, want := range []string{"display: flex;", "flex-direction: column;", "flex: 1;", "min-height: 0;"} {
 		if !strings.Contains(talk, want) {
-			t.Errorf("#talk lacks %s: %s", want, talk)
+			t.Errorf(".wv-talk:has(.wv-compose) lacks %s: %s", want, talk)
 		}
 	}
-	letters := cssRule(t, "#letters")
+	letters := cssRule(t, ".wv-talk:has(.wv-compose) .wv-letters")
 	for _, want := range []string{"flex-direction: column-reverse;", "flex: 1;", "min-height: 0;", "overflow-y: auto;"} {
 		if !strings.Contains(letters, want) {
-			t.Errorf("#letters lacks %s: %s", want, letters)
+			t.Errorf("the conversation's pane lacks %s: %s", want, letters)
 		}
 	}
-	blocks := cssRule(t, "#letters > *")
+	blocks := cssRule(t, ".wv-talk:has(.wv-compose) .wv-letters > *")
 	if !strings.Contains(blocks, "flex: none;") {
-		t.Errorf("#letters > * lacks flex: none;: %s", blocks)
+		t.Errorf("the pane's blocks lack flex: none;: %s", blocks)
 	}
-	// The mail stands in the reading column, footplate's 880 pixels,
-	// centred, inside the stage's own measure; the conversation's head
-	// carries the member's state quietly.
-	column := cssRule(t, "#talk #live, #talk #earlier")
-	for _, want := range []string{"max-width: var(--reading-width);", "margin-inline: auto;"} {
-		if !strings.Contains(column, want) {
-			t.Errorf("#talk #live, #talk #earlier lacks %s: %s", want, column)
-		}
-	}
-	if root := cssRule(t, ":root"); !strings.Contains(root, "--reading-width: 880px;") {
-		t.Errorf(":root lacks footplate's reading width: %s", root)
-	}
-	head := cssRule(t, ".talk-head .state")
-	if !strings.Contains(head, "color: var(--faint);") {
-		t.Errorf(".talk-head .state lacks color: var(--faint);: %s", head)
-	}
-	// The form is the composer: a framed box on the raised ground, with a
-	// hairline and the card radius, in the reading column as the mail is, less
-	// the gutter its letters keep, so that its edges stand on the hairlines of
-	// the day breaks above it; the reason a mail was not sent stands above it,
-	// on the same edge. Its line has no border of its own and keeps its 16
-	// pixels, which a phone does not enlarge on focus, and the frame shows
-	// the focus.
+	// The composer is a framed box on the raised ground, with a hairline and
+	// the card radius; its line has no border of its own but a rule, and the
+	// frame shows the focus. The Send button is the one filled button.
 	for selector, wants := range map[string][]string{
-		".compose": {"background: var(--panel);", "border: 1px solid var(--hairline);", "border-radius: 8px;"},
-		".compose, #talk > .error": {"width: calc(100% - 2 * var(--gap));",
-			"max-width: calc(var(--reading-width) - 2 * var(--gap));", "margin-inline: auto;"},
-		".compose textarea":     {"border: 0;", "font: 16px/1.5 var(--mono);"},
-		".compose:focus-within": {"border-color: var(--accent);"},
+		".wv-compose":                     {"background: var(--panel);", "border: 1px solid var(--hairline);", "border-radius: var(--radius-lg);"},
+		".wv-compose textarea":            {"border: 0;", "border-bottom: 1px solid var(--hairline);"},
+		".wv-compose:focus-within":        {"border-color: var(--accent);"},
+		".wv-btn--primary":                {"background: var(--pill);", "color: var(--on-accent);"},
+		".wv-record":                      {"background: var(--panel);", "border-radius: var(--radius-lg);"},
+		".wv-record code":                 {"font: 400 12.5px/18px var(--mono);", "color: var(--ink);"},
+		".wv-letter":                      {"display: grid;", "grid-template-columns: 56px minmax(0, 1fr);"},
+		".wv-day::before, .wv-day::after": {"flex: 1;", "height: 1px;"},
 	} {
 		rule := cssRule(t, selector)
 		for _, want := range wants {
@@ -438,10 +414,13 @@ func TestTalkLayout(t *testing.T) {
 		}
 	}
 	// On a phone the stage takes what the bar leaves, with no top padding: the
-	// top bar stands there instead.
+	// top bar stands there instead, and the composer's line keeps the 16 pixels
+	// a phone does not enlarge on focus.
 	phone := mediaCSS(t, string(readAsset(t, "yard.css")), "max-width: 899px")
-	if want := ".wv-stage:has(#talk) { padding-top: 0; }"; !strings.Contains(phone, want) {
-		t.Errorf("the phone rules lack %s", want)
+	for _, want := range []string{".wv-stage:has(.wv-compose) { padding-top: 0; }", ".wv-compose textarea { font-size: 16px;"} {
+		if !strings.Contains(phone, want) {
+			t.Errorf("the phone rules lack %s", want)
+		}
 	}
 }
 
@@ -462,7 +441,6 @@ func TestFilePagesOnPhone(t *testing.T) {
 		".wv-title":                {"overflow-wrap: anywhere;"},
 		".opens":                   {"text-decoration: underline;"},
 		".wv-ask__row > .wv-faint": {"flex: 1 0 100%;", "overflow-wrap: anywhere;"},
-		".text.file":               {"white-space: pre;", "overflow-x: auto;"},
 		// A chip is a pill with its number, the current one filled.
 		".wv-chips p":            {"display: flex;", "flex-wrap: wrap;"},
 		".wv-pill":               {"min-height: 30px;", "border-radius: var(--radius-full);"},

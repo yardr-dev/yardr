@@ -8,11 +8,14 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"yardr.dev/yardr/internal/store"
+	"yardr.dev/yardr/internal/web"
 )
 
 // The Config hub shows an operator the yardmaster's delegation switch, and
@@ -43,12 +46,21 @@ func TestWebDelegationSwitch(t *testing.T) {
 	// Unset on a hosted yard, it reads on.
 	if r := y.getNoFollow("/config", jo); r.status != http.StatusOK || !strings.Contains(r.body, "Yardmaster for the operator") || !strings.Contains(r.body, `value="off"`) {
 		t.Fatalf("GET /config as jo: %d:\n%s", r.status, r.body)
+	} else if body := squash(r.body); !strings.Contains(body, `<div class="wv-setting"><div class="wv-setting__text"><p class="wv-setting__name">Yardmaster for the operator</p>`) ||
+		!strings.Contains(body, `<span class="wv-state wv-state--on">on</span><form method="post" action="/config/delegation"`) ||
+		strings.Contains(body, "Turning it on takes a fresh sign-in.") {
+		// On, the switch is a setting row with its state and the button for
+		// the other, and says nothing of a sign-in, which only turning it on
+		// takes.
+		t.Errorf("GET /config as jo: the switch is no setting row that is on:\n%s", r.body)
 	}
 	if r := y.getNoFollow("/config", sam); strings.Contains(r.body, "Yardmaster for the operator") {
 		t.Errorf("GET /config as sam shows the switch:\n%s", r.body)
 	}
 	for _, action := range []string{"off", "on"} {
-		if r := y.post("/config/delegation", sam, url.Values{"action": {action}}); r.status != http.StatusOK || !strings.Contains(r.body, "the operator&#39;s to switch") {
+		// A write the store refuses is a red line under the head.
+		if r := y.post("/config/delegation", sam, url.Values{"action": {action}}); r.status != http.StatusOK ||
+			!strings.Contains(squash(r.body), `<h1 class="wv-title">Config</h1><p class="wv-meta">The yard's configuration, one table a page</p><p class="wv-callout">the yardmaster&#39;s delegation is the operator&#39;s to switch</p></header>`) {
 			t.Errorf("sam turns it %s: %d:\n%s", action, r.status, r.body)
 		}
 	}
@@ -62,6 +74,13 @@ func TestWebDelegationSwitch(t *testing.T) {
 	}
 	if got := setting(); got != "false" {
 		t.Fatalf("after off the switch is %q", got)
+	}
+	// Off, the setting row says so and that turning it on takes a fresh
+	// sign-in.
+	if body := squash(y.getNoFollow("/config", jo).body); !strings.Contains(body, `<span class="wv-state">off</span>`) ||
+		!strings.Contains(body, `<p class="wv-setting__help">Turning it on takes a fresh sign-in.</p>`) ||
+		!strings.Contains(body, `<button class="wv-btn" type="submit" name="action" value="on">Turn on</button>`) {
+		t.Errorf("GET /config after off: the switch is no setting row that is off:\n%s", body)
 	}
 
 	// On without a fresh sign-in starts one and writes nothing.
@@ -133,10 +152,41 @@ func TestWebDelegationRecord(t *testing.T) {
 	must(t, err)
 
 	r := y.getNoFollow("/delegations/1", y.token("jo@example.net"))
-	for _, want := range []string{"Record 1: yardmaster for jo", "yardr group set builders kind=codex", "claude → codex", "yardr group set builders &#39;kind=claude&#39;"} {
-		if r.status != http.StatusOK || !strings.Contains(r.body, want) {
+	for _, want := range []string{"Record 1: yardmaster for jo", "yardr group set builders kind=codex", "<td><code>claude</code></td><td><code>codex</code></td>", "yardr group set builders &#39;kind=claude&#39;"} {
+		if r.status != http.StatusOK || !strings.Contains(squash(r.body), want) {
 			t.Errorf("jo's record page lacks %q: %d:\n%s", want, r.status, r.body)
 		}
+	}
+	// The record is Crew's page, the sixth stage kind in its other form: the
+	// conversation's head with the yardmaster's name and state, under it the
+	// day's separator and exactly one letter from the yardmaster, whose body is
+	// the record, and no thread and no composer. Its time is the letter's: the
+	// minute in the gutter and the seconds in the time's title. The
+	// yardmaster's row stands open in Crew's list, which is the way back.
+	page := squash(r.body)
+	for _, want := range []string{
+		`<article class="wv-page wv-talk" data-kind="talk"><header class="wv-head"><h1 class="wv-title">yardmaster</h1><p class="wv-meta">not running<span class="wv-sep">·</span>herdr · claude</p></header>`,
+		`<div class="wv-letters" id="letters"><p class="wv-day">Today</p><article class="wv-letter"><time class="wv-letter__at" datetime="`,
+		`<span class="wv-letter__who">yardmaster</span><section class="wv-record" aria-labelledby="record"><h2 class="wv-sh" id="record"><span>Record 1: yardmaster for jo</span></h2>`,
+		`<h3 class="wv-record__label">before and after</h3>`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("jo's record page lacks %q:\n%s", want, r.body)
+		}
+	}
+	if m := regexp.MustCompile(`<time class="wv-letter__at" datetime="[^"]*" title="(\d\d:\d\d:\d\d)">(\d\d:\d\d)</time>`).FindStringSubmatch(page); m == nil || !strings.HasPrefix(m[1], m[2]) {
+		t.Errorf("the letter's time is no minute with its seconds in the title: %v", m)
+	}
+	if n := strings.Count(page, `<article class="wv-letter`); n != 1 {
+		t.Errorf("the record page has %d letters, want the one", n)
+	}
+	for _, gone := range []string{"<form", "<textarea", `class="wv-compose"`, "‹ Config", `class="page-head"`, `class="wv-live"`} {
+		if strings.Contains(page, gone) {
+			t.Errorf("the record page has %s", gone)
+		}
+	}
+	if got := marked(listOf(t, r.body), "aria-current", "page"); !slices.Equal(got, []string{"/talk?with=yardmaster"}) {
+		t.Errorf("Crew's list opens %v, want the yardmaster's row", got)
 	}
 	for _, target := range []string{"/delegations/1", "/delegations/2", "/delegations/x"} {
 		token := y.token("sam@example.net")
@@ -239,7 +289,7 @@ func TestWebDelegationRecord(t *testing.T) {
 			"<dt>from</dt><dd>" + origin + "</dd>",
 			"<dt>prior digest</dt><dd>sha256:aaa111</dd>",
 			"<dt>written</dt><dd>group builders</dd>",
-			`<dt>failed</dt><dd class="error">route web-builders: the disk is full</dd>`,
+			`<dt>failed</dt><dd class="wv-fault">route web-builders: the disk is full</dd>`,
 			"<code>file roles/builder.md</code>: change",
 		}, []string{"unfinished", "<dt>state</dt><dd>done</dd>"}},
 		{"started, left unfinished", started, []string{
@@ -276,6 +326,50 @@ func TestWebDelegationRecord(t *testing.T) {
 			}
 		})
 	}
+	t.Run("daemon lost", func(t *testing.T) {
+		must(t, y.st.CrewStarted(ctx, "yardmaster", map[string]any{"agent": "yard-yardmaster"}))
+		must(t, y.st.CrewStatus(ctx, "yardmaster", "working"))
+		stopped := time.Now().Add(-time.Hour)
+		if _, _, err := y.own.NoteDaemonLost(ctx, stopped); err != nil {
+			t.Fatal(err)
+		}
+		r := y.getNoFollow("/delegations/1", y.token("jo@example.net"))
+		if r.status != http.StatusOK || !strings.Contains(squash(r.body), `<h1 class="wv-title">yardmaster</h1><p class="wv-meta">not running<span class="wv-sep">·</span>herdr · claude</p>`) {
+			t.Errorf("the record's head keeps the member's stale state after the daemon is lost: %d:\n%s", r.status, r.body)
+		}
+		var got struct {
+			Member *web.CrewRow `json:"member"`
+		}
+		if r := y.getNoFollow("/delegations/1", y.token("jo@example.net"), "Accept", "application/json"); json.Unmarshal([]byte(r.body), &got) != nil ||
+			got.Member == nil || got.Member.State != store.UnknownSince(stopped) || got.Member.Status != "" || got.Member.Running || got.Member.Since != nil {
+			t.Errorf("the lost member in the record = %+v, want its current state and no live session", got.Member)
+		}
+	})
+	t.Run("member left", func(t *testing.T) {
+		jo := y.token("jo@example.net")
+		if r := y.getNoFollow("/delegations/1", jo); len(marked(listOf(t, r.body), "aria-current", "page")) != 1 {
+			t.Fatalf("with the member in the crew Crew's list opens %v", marked(listOf(t, r.body), "aria-current", "page"))
+		}
+		must(t, y.st.DeleteCrew(ctx, "yardmaster", "", "jo"))
+		r := y.getNoFollow("/delegations/1", jo)
+		if r.status != http.StatusOK || !strings.Contains(squash(r.body), `<header class="wv-head"><h1 class="wv-title">yardmaster</h1></header><div class="wv-letters" id="letters">`) ||
+			!strings.Contains(r.body, "Record 1: yardmaster for jo") {
+			t.Errorf("the record of a member who left: %d:\n%s", r.status, r.body)
+		}
+		if got := marked(listOf(t, r.body), "aria-current", "page"); len(got) != 0 {
+			t.Errorf("Crew's list opens %v for a member who left, want no row", got)
+		}
+		// The head has no state line, in the JSON no member either.
+		if strings.Contains(r.body, `<p class="wv-meta">`) {
+			t.Errorf("the head of a member who left has a state line:\n%s", r.body)
+		}
+		var got struct {
+			Member *web.CrewRow `json:"member"`
+		}
+		if r := y.getNoFollow("/delegations/1", jo, "Accept", "application/json"); json.Unmarshal([]byte(r.body), &got) != nil || got.Member != nil {
+			t.Errorf("the JSON of a record of a member who left names the member: %s", r.body)
+		}
+	})
 }
 
 // pageObjects reads the delegated pack record id's page in its JSON form and

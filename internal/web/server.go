@@ -139,7 +139,7 @@ func NewServer(st store.API, home string, log *slog.Logger) (*Server, error) {
 
 // partial are the files of templates/ that define a part of a page, not a
 // page: every page is parsed with them.
-var partial = []string{"shell", "entry", "card", "ask", "csrf"}
+var partial = []string{"shell", "entry", "card", "ask", "csrf", "talkhead"}
 
 // loadPages parses every template of templates/ with the shell, one set per
 // page: each page defines "content", so two pages cannot share a set.
@@ -504,6 +504,9 @@ type Page struct {
 	// crew are the crew's rows, for a handler that has read them; respond
 	// reads them otherwise where the page stands in Crew, for its list.
 	crew []CrewRow
+	// talk is the conversation the page draws as its stage, for the talk
+	// pages: /talk's own data, and /crew's, whose JSON is the crew.
+	talk *Talk
 	// stream is the ?format= of the page's stream, for a page that hangs
 	// more on it than the shell does: card on /flows, seq on a page that
 	// only reads itself again, home on / for the entries its feed keeps.
@@ -524,6 +527,10 @@ type Page struct {
 // draw it as their stage (/ and /line): the one the handler passes for the
 // shell's counts, whichever of its own data the page answers JSON with.
 func (p Page) Overview() *Home { return p.ov }
+
+// Conversation is the conversation the page draws, for the pages of the talk
+// kind: the one /talk answers as JSON and /crew draws beside the crew it answers.
+func (p Page) Conversation() *Talk { return p.talk }
 
 // The swaps of a live page's leaf: the stage's own, which a read of the page
 // puts in place keeping the list and an open drawer, or none, for a page

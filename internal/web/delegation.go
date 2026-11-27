@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"time"
 
@@ -158,7 +159,28 @@ func (s *Server) configAgain(w http.ResponseWriter, r *http.Request, why string)
 // plan; the template reads the merged record's fields through it.
 type DelegationPage struct {
 	Record *store.DelegationView `json:"record"`
+	// Member is the yardmaster the record names as /crew has it, for the
+	// conversation's head the record stands under; absent where it has left
+	// the crew.
+	Member *CrewRow `json:"member,omitempty"`
 }
+
+// Party is the conversation's head the record stands under: the yardmaster's
+// name and, where it is still a crew member, its state.
+func (d DelegationPage) Party() TalkHead {
+	head := TalkHead{Name: d.Record.Yardmaster, Member: d.Member}
+	if d.Member != nil {
+		member := d.Member.CrewMember
+		// The row accounts for a lost daemon; the stored session may still say
+		// running even though the page must not show its stale status.
+		member.State, member.Status = d.Member.State, d.Member.Status
+		head.State = memberStatus(member)
+	}
+	return head
+}
+
+// Day is the words of the day the record's letter stands under.
+func (d DelegationPage) Day() string { return dayWords(d.Record.At, time.Now(), time.Local) }
 
 // handleDelegation serves the delegated record id to an operator, the
 // one it was for or another, and answers anyone else not found, as the
@@ -190,5 +212,16 @@ func (s *Server) handleDelegation(w http.ResponseWriter, r *http.Request) {
 		}
 		rec.DelegatedBody = *body
 	}
-	s.respond(w, r, Page{Template: "delegation", Title: fmt.Sprintf("Delegated record %d", id), Data: DelegationPage{Record: store.ViewDelegation(rec)}, with: rec.Yardmaster})
+	// The member the record names, for the head: the row stands open in Crew's
+	// list where it is still one, and none does where it has left.
+	rows, err := s.crewRows(ctx)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	page := DelegationPage{Record: store.ViewDelegation(rec)}
+	if i := slices.IndexFunc(rows, func(r CrewRow) bool { return r.Name == rec.Yardmaster }); i >= 0 {
+		page.Member = &rows[i]
+	}
+	s.respond(w, r, Page{Template: "delegation", Kind: "talk", Title: fmt.Sprintf("Delegated record %d", id), Data: page, crew: rows, with: rec.Yardmaster})
 }

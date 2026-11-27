@@ -421,34 +421,21 @@ func linesList(pl place, ov *Home, l *Line) listView {
 	return out
 }
 
-// settingsPage is one page of Settings' list: where it is and what it holds.
-type settingsPage struct{ path, name, blurb string }
-
-// settingsList is Settings' list: the pages by name, each with its blurb.
-// Peers and Telemetry stand for the operator alone, as on the hub; Pair
-// device for a view behind an auth gateway alone. Depots and Deps are Lines'
-// rows. /pairing, a page in no row of the map, opens none.
+// settingsList is Settings' list: the pages by name, each with its blurb,
+// the hub's own (settingsLinks) between Config and Pair device. Peers and
+// Telemetry stand for the operator alone; Pair device for a view behind an
+// auth gateway alone. Depots and Deps are Lines' rows. /pairing, a page in no
+// row of the map, opens none.
 func (s *Server) settingsList(ctx context.Context, pl place) listView {
-	pages := []settingsPage{
-		{"/config", "Config", "the pages below, and the yardmaster's switch"},
-		{"/groups", "Groups", "who works a stage"},
-		{"/routes", "Routes", "which group a stage sends its beads to, first match wins"},
-	}
-	operator := s.isOperator(ctx)
-	if operator {
-		pages = append(pages, settingsPage{"/peers", "Peers", peersLink.Blurb})
-	}
-	pages = append(pages, settingsPage{"/limits", "Limits", "what the subscriptions the yard burns still carry"})
-	if operator {
-		pages = append(pages, settingsPage{"/telemetry", "Telemetry", telemetryLink.Blurb})
-	}
+	pages := append([]ConfigLink{{Title: "Config", Path: "/config", Blurb: "the pages below, and the yardmaster's switch"}},
+		settingsLinks(s.isOperator(ctx))...)
 	if s.jwt != nil {
-		pages = append(pages, settingsPage{"/pairing", "Pair device", "how a device is paired with this yard"})
+		pages = append(pages, ConfigLink{Title: "Pair device", Path: "/pairing", Blurb: "how a device is paired with this yard"})
 	}
 	sec := listSection{Bare: true}
 	for _, p := range pages {
-		current := pl.path == p.path || p.path == "/config" && strings.HasPrefix(pl.path, "/config/")
-		sec.Rows = append(sec.Rows, listRow{Href: p.path, Name: p.name, Lines: []listLine{{{Text: p.blurb}}},
+		current := pl.path == p.Path || p.Path == "/config" && strings.HasPrefix(pl.path, "/config/")
+		sec.Rows = append(sec.Rows, listRow{Href: p.Path, Name: p.Title, Lines: []listLine{{{Text: p.Blurb}}},
 			Current: current && pl.path != "/pairing"})
 	}
 	return listView{Title: "Settings", Sections: []listSection{sec}}

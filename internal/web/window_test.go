@@ -152,8 +152,9 @@ func leafOf(path, swap string) string {
 }
 
 // windowRoute is one row of the page map: the address, the tile it stands
-// under, the list's head, and the row of the list it opens, "" where none.
-type windowRoute struct{ path, tile, list, open string }
+// under, the list's head, the row of the list it opens, "" where none, and the
+// stage kind the page draws itself as (docs/web.md, The stage kinds).
+type windowRoute struct{ path, tile, list, open, kind string }
 
 // Every page of the page map answers the whole window: the rail with the
 // tile of its mode open, the mode's list with its head and the row the page
@@ -163,27 +164,27 @@ func TestEveryPageIsTheWholeShell(t *testing.T) {
 	t.Parallel()
 	f, asked := windowYard(t)
 	routes := []windowRoute{
-		{"/", "/", "Decide", ""},
-		{"/line", "/", "Decide", ""},
-		{"/beads/" + asked.ID, "/", "Decide", "/beads/" + asked.ID},
-		{"/beads/" + f.byTitle()["six"].ID, "/", "Decide", ""},
-		{"/flows", "/flows", "Lines", "/flows"},
-		{"/depots", "/flows", "Lines", "/depots"},
-		{"/depots/line", "/flows", "Lines", "/depots/line"},
-		{"/depots/line/code", "/flows", "Lines", "/depots/line/code"},
-		{"/beads", "/flows", "Lines", "/beads"},
-		{"/sessions", "/flows", "Lines", "/sessions"},
-		{"/previews", "/flows", "Lines", "/previews"},
-		{"/deps", "/flows", "Lines", "/deps"},
-		{"/crew", "/crew", "Crew", "/talk?with=yardmaster"},
-		{"/talk", "/crew", "Crew", "/talk?with=yardmaster"},
-		{"/talk?with=jo", "/crew", "Crew", "/talk?with=jo"},
-		{"/config", "/config", "Settings", "/config"},
-		{"/groups", "/config", "Settings", "/groups"},
-		{"/routes", "/config", "Settings", "/routes"},
-		{"/peers", "/config", "Settings", "/peers"},
-		{"/limits", "/config", "Settings", "/limits"},
-		{"/telemetry", "/config", "Settings", "/telemetry"},
+		{"/", "/", "Decide", "", "overview"},
+		{"/line", "/", "Decide", "", "overview"},
+		{"/beads/" + asked.ID, "/", "Decide", "/beads/" + asked.ID, "bead"},
+		{"/beads/" + f.byTitle()["six"].ID, "/", "Decide", "", "bead"},
+		{"/flows", "/flows", "Lines", "/flows", "flow"},
+		{"/depots", "/flows", "Lines", "/depots", "table"},
+		{"/depots/line", "/flows", "Lines", "/depots/line", "flow"},
+		{"/depots/line/code", "/flows", "Lines", "/depots/line/code", "flow"},
+		{"/beads", "/flows", "Lines", "/beads", "list"},
+		{"/sessions", "/flows", "Lines", "/sessions", "list"},
+		{"/previews", "/flows", "Lines", "/previews", "list"},
+		{"/deps", "/flows", "Lines", "/deps", "list"},
+		{"/crew", "/crew", "Crew", "/talk?with=yardmaster", "talk"},
+		{"/talk", "/crew", "Crew", "/talk?with=yardmaster", "talk"},
+		{"/talk?with=jo", "/crew", "Crew", "/talk?with=jo", "talk"},
+		{"/config", "/config", "Settings", "/config", "table"},
+		{"/groups", "/config", "Settings", "/groups", "table"},
+		{"/routes", "/config", "Settings", "/routes", "table"},
+		{"/peers", "/config", "Settings", "/peers", "table"},
+		{"/limits", "/config", "Settings", "/limits", "table"},
+		{"/telemetry", "/config", "Settings", "/telemetry", "table"},
 	}
 	check := func(t *testing.T, get func(path string) resp, rt windowRoute) {
 		t.Helper()
@@ -221,6 +222,14 @@ func TestEveryPageIsTheWholeShell(t *testing.T) {
 		if strings.Contains(r.body, "<aside") || strings.Contains(r.body, "needs-count") {
 			t.Errorf("%s: the page draws a column or a count the window has no place for", rt.path)
 		}
+		// Every page of the map draws itself as its stage kind, with a head of
+		// its own: the shell's heading is for a page that is in no row.
+		if got := regexp.MustCompile(`<article class="[^"]*" data-kind="([a-z]+)"`).FindStringSubmatch(stageOf(t, r.body)); got == nil || got[1] != rt.kind {
+			t.Errorf("%s: the stage draws itself as %v, want the kind %s", rt.path, got, rt.kind)
+		}
+		if strings.Contains(r.body, `class="page-head"`) {
+			t.Errorf("%s: the shell's heading stands over a page that has a head of its own", rt.path)
+		}
 	}
 	for _, rt := range routes {
 		check(t, func(path string) resp { return f.get(path) }, rt)
@@ -231,8 +240,8 @@ func TestEveryPageIsTheWholeShell(t *testing.T) {
 	// which is Decide's with its bead's row open.
 	y, bead, packFile := delegatedPages(t)
 	for _, rt := range []windowRoute{
-		{"/delegations/1", "/crew", "Crew", "/talk?with=yardmaster"},
-		{packFile, "/", "Decide", "/beads/" + bead},
+		{"/delegations/1", "/crew", "Crew", "/talk?with=yardmaster", "talk"},
+		{packFile, "/", "Decide", "/beads/" + bead, "bead"},
 	} {
 		check(t, func(path string) resp { return y.getNoFollow(path, y.token("jo@example.net")) }, rt)
 	}

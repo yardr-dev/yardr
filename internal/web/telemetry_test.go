@@ -84,13 +84,25 @@ func TestTelemetryPage(t *testing.T) {
 		"eu.i.posthog.com/batch/",
 		"id-only person profile",
 		"pseudonymous, not anonymous",
-		"off — nothing is sent",
+		"Nothing is sent.",
 		`name="action" value="on"`,
 		"Turn on",
+		// A sheet of the fourth stage kind: the consent words as its lede, the
+		// switch as a setting row with its state and its button.
+		`<article class="wv-page" data-kind="table">`,
+		`<p class="wv-lede">Off unless turned on. `,
+		`<p class="wv-setting__name">Telemetry</p>`,
+		`<span class="wv-state">off</span>`,
+		`<button class="wv-btn" type="submit" name="action" value="on">Turn on</button>`,
 	} {
 		if !strings.Contains(off.body, want) {
 			t.Errorf("the page with the switch off lacks %q:\n%s", want, off.body)
 		}
+	}
+	// Telemetry is a row of Settings' list, so the page has no way back to
+	// the hub.
+	if strings.Contains(off.body, "‹ Config") {
+		t.Error("the page links back to the hub")
 	}
 	for _, unwanted := range []string{"https://", "install id</dt>", `value="off"`} {
 		if strings.Contains(off.body, unwanted) {
@@ -99,7 +111,7 @@ func TestTelemetryPage(t *testing.T) {
 	}
 	// Reading changes nothing: the switch stands off after two reads.
 	again := f.get("/telemetry")
-	if !strings.Contains(again.body, "off — nothing is sent") {
+	if !strings.Contains(again.body, "Nothing is sent.") {
 		t.Errorf("reading the page twice: %s", again.body)
 	}
 	if settings, err := f.st.Settings(context.Background()); err != nil {
@@ -116,7 +128,7 @@ func TestTelemetryPage(t *testing.T) {
 	}
 	on := f.get("/telemetry")
 	for _, want := range []string{
-		"on (since ",
+		"On since ",
 		"install id</dt>",
 		"next request",
 		"sending day ",
@@ -125,6 +137,9 @@ func TestTelemetryPage(t *testing.T) {
 		"data deleted, send the project",
 		`name="action" value="off"`,
 		"Turn off",
+		// The state is the setting row's, and the next payload a file block.
+		`<span class="wv-state wv-state--on">on</span>`,
+		`<pre class="wv-text wv-file">`,
 	} {
 		if !strings.Contains(on.body, want) {
 			t.Errorf("the page with the switch on lacks %q:\n%s", want, on.body)
@@ -161,7 +176,7 @@ func TestTelemetryPage(t *testing.T) {
 		t.Fatalf("POST /telemetry off: status %d, want 303", r.status)
 	}
 	off = f.get("/telemetry")
-	if !strings.Contains(off.body, "off — nothing is sent") || !strings.Contains(off.body, `value="on"`) {
+	if !strings.Contains(off.body, "Nothing is sent.") || !strings.Contains(off.body, `value="on"`) {
 		t.Errorf("the page after off lacks the off control:\n%s", off.body)
 	}
 	if strings.Contains(off.body, id) {
@@ -181,10 +196,19 @@ func TestTelemetryPage(t *testing.T) {
 				t.Errorf("the page as %q lacks %q:\n%s", as, want, page.body)
 			}
 		}
-		for _, unwanted := range []string{"off — nothing is sent", "Turn on", "Turn off", "install id</dt>", "<form"} {
+		for _, unwanted := range []string{"Nothing is sent.", "Turn on", "Turn off", "install id</dt>", "<form"} {
 			if strings.Contains(page.body, unwanted) {
 				t.Errorf("the page as %q holds %q:\n%s", as, unwanted, page.body)
 			}
+		}
+		// The notice stands on a table page of its own head, and Settings' list
+		// has no Telemetry row for the reader, whose page opens none.
+		if !strings.Contains(page.body, `<p class="wv-none">Telemetry is the operator's to see and set.</p>`) ||
+			!strings.Contains(page.body, `<article class="wv-page" data-kind="table">`) {
+			t.Errorf("the page as %q lacks the notice on its own head:\n%s", as, page.body)
+		}
+		if list := listOf(t, page.body); strings.Contains(list, `href="/telemetry"`) || len(marked(list, "aria-current", "page")) != 0 {
+			t.Errorf("Settings' list as %q has a row for the page, or opens one: %s", as, list)
 		}
 		data := telemetryJSON(t, other)
 		if data["operator"] != false {
@@ -241,7 +265,7 @@ func TestTelemetryPage(t *testing.T) {
 	memberJWT := signRSA(t, keys.a, "a", jwtClaims("sam@example.net"))
 	const jwtHeader = web.DefaultJWTHeader
 	off = hosted.get("/telemetry", jwtHeader, operatorJWT, "Host", edgeHost)
-	if off.status != http.StatusOK || !strings.Contains(off.body, "off — nothing is sent") ||
+	if off.status != http.StatusOK || !strings.Contains(off.body, "Nothing is sent.") ||
 		!strings.Contains(off.body, `name="action" value="on"`) {
 		t.Errorf("hosted telemetry page as the JWT operator: status %d:\n%s", off.status, off.body)
 	}
@@ -251,12 +275,12 @@ func TestTelemetryPage(t *testing.T) {
 		t.Fatalf("hosted telemetry click as the JWT operator: status %d:\n%s", r.status, r.body)
 	}
 	on = hosted.get("/telemetry", jwtHeader, operatorJWT, "Host", edgeHost)
-	if on.status != http.StatusOK || !strings.Contains(on.body, "on (since ") ||
+	if on.status != http.StatusOK || !strings.Contains(on.body, "On since ") ||
 		!strings.Contains(on.body, "install id</dt>") || !strings.Contains(on.body, "no batch available: nothing to send") {
 		t.Errorf("hosted telemetry page after the JWT operator's click: status %d:\n%s", on.status, on.body)
 	}
 	member := hosted.get("/telemetry", jwtHeader, memberJWT, "Host", edgeHost)
-	for _, unwanted := range []string{"off — nothing is sent", "Turn on", "Turn off", "install id</dt>", "no batch available: nothing to send"} {
+	for _, unwanted := range []string{"Nothing is sent.", "Turn on", "Turn off", "install id</dt>", "no batch available: nothing to send"} {
 		if member.status != http.StatusOK || strings.Contains(member.body, unwanted) {
 			t.Errorf("hosted telemetry page as a JWT member holds %q (status %d):\n%s", unwanted, member.status, member.body)
 		}

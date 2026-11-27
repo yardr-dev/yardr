@@ -1,26 +1,35 @@
+{{- /* /peers, a table, the fourth stage kind: one row to a peer, as `yardr peer
+       list` prints them. The operator's alone, which the handler holds: the
+       page a reader who is not one gets is the 403 page, and Settings' list
+       has no row for them. The page's leaf in the shell reads it again
+       whenever something happens in the yard. */}}
 {{define "content"}}
-{{- /* The page's leaf in the shell reads it again whenever something
-       happens in the yard: the stream carries each event's seq and nothing
-       else. */}}
-<div id="peers">
-  {{- range .Data.Peers}}
-  <article class="item">
-    <header class="item-head">
-      <h2>{{.Name}}</h2>
-    </header>
-    <dl class="facts">
-      {{- if .URL}}
-      <div><dt>url</dt><dd>{{.URL}}</dd></div>
-      {{- else}}
-      <div><dt>url</dt><dd>none — it calls this yard</dd></div>
-      {{- end}}
-      <div><dt>send</dt><dd>{{range $i, $s := .Send}}{{if $i}}, {{end}}{{$s}}{{else}}—{{end}}</dd></div>
-      <div><dt>receive</dt><dd>{{range $i, $s := .Receive}}{{if $i}}, {{end}}{{$s}}{{else}}—{{end}}</dd></div>
-      <div><dt>waiting</dt><dd>{{.Waiting}}{{if .Failed}} ({{.Failed}} failed){{end}}</dd></div>
-    </dl>
-  </article>
+{{- with .Data}}
+<article class="wv-page" data-kind="{{$.Kind}}">
+  <header class="wv-head">
+    <h1 class="wv-title">Peers</h1>
+    <p class="wv-meta">{{.Line}}</p>
+  </header>
+  {{- if .Peers}}
+  <div class="wv-scrollx">
+    <table class="wv-table">
+      <thead><tr><th>peer</th><th>url</th><th>send</th><th>receive</th><th class="wv-num">waiting</th></tr></thead>
+      <tbody>
+        {{- range .Peers}}
+        <tr>
+          <td class="wv-name">{{.Name}}</td>
+          <td>{{with .URL}}<code>{{.}}</code>{{else}}<span class="wv-nil">none — it calls this yard</span>{{end}}</td>
+          <td>{{range $i, $s := .Send}}{{if $i}}, {{end}}{{$s}}{{else}}<span class="wv-nil">–</span>{{end}}</td>
+          <td>{{range $i, $s := .Receive}}{{if $i}}, {{end}}{{$s}}{{else}}<span class="wv-nil">–</span>{{end}}</td>
+          <td class="wv-num">{{.Waiting}}{{if .Failed}} <span class="wv-fault">({{.Failed}} failed)</span>{{end}}</td>
+        </tr>
+        {{- end}}
+      </tbody>
+    </table>
+  </div>
   {{- else}}
-  <p class="item faint">This yard has no peers.</p>
+  <p class="wv-none">This yard has no peers.</p>
   {{- end}}
-</div>
+</article>
+{{- end}}
 {{end}}

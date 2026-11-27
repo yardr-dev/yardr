@@ -3,7 +3,6 @@ package web
 import (
 	"bytes"
 	"context"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -12,19 +11,18 @@ import (
 	"yardr.dev/yardr/internal/store"
 )
 
-// talkKind is how a letter's article reads, from its classes: head or grouped
-// under the head above it, opening a day, and saying a line its neighbour
-// does not.
-func talkKind(class string) string {
-	has := func(token string) bool { return slices.Contains(strings.Fields(class), token) }
+// talkKind is how a letter reads once the page has grouped it: head or grouped
+// under the head above it, opening a day, and saying a line its neighbour does
+// not.
+func talkKind(l TalkLetter) string {
 	out := "grouped"
-	if has("head") {
+	if !l.Grouped {
 		out = "head"
 	}
-	if has("day") {
+	if l.Day != "" {
 		out += " day"
 	}
-	if has("differs") {
+	if l.Differs {
 		out += " differs"
 	}
 	return out
@@ -36,8 +34,8 @@ func talkKind(class string) string {
 // it, on the same day in the reader's zone; a letter that opens a day, as
 // the first of the page does, carries the day's separator. Each row is a
 // conversation between jo and the yardmaster, oldest first, and what the page
-// makes of each letter: the classes of its article, which the stylesheet and
-// yard.js go by, and the words of the day it opens.
+// makes of each letter: whether it heads a group, the words of the day it opens
+// and what the page draws of it, which yard.js groups again by.
 func TestTalkGrouping(t *testing.T) {
 	t.Parallel()
 	s, err := NewServer(nil, t.TempDir(), nil)
@@ -126,14 +124,22 @@ func TestTalkGrouping(t *testing.T) {
 				if err := s.pages["talk"].ExecuteTemplate(&body, "letter", l); err != nil {
 					t.Fatal(err)
 				}
-				class := regexp.MustCompile(`<article class="([^"]*)"`).FindStringSubmatch(body.String())
-				if class == nil {
-					t.Fatalf("the letter draws no article: %s", body.String())
-				}
-				got = append(got, talkKind(class[1]))
+				got = append(got, talkKind(l))
 				days = append(days, l.Day)
-				// The separator's words stand in the letter that opens the day.
-				if want := `<p class="day-break">` + l.Day + `</p>`; !strings.Contains(body.String(), want) {
+				// The separator stands above the letter that opens the day, and
+				// above no other.
+				separator := strings.HasPrefix(strings.TrimSpace(body.String()), `<p class="wv-day">`+l.Day+`</p>`)
+				if separator != (l.Day != "") {
+					t.Errorf("letter %d (opens %q) has the separator %v: %s", l.Seq, l.Day, separator, body.String())
+				}
+				// The sender is named by a letter that heads its group or says
+				// something the one above does not, and to a screen reader alone
+				// by one that reads under it.
+				who := `<span class="wv-vh">`
+				if !l.Grouped || l.Differs {
+					who = `<span class="wv-letter__who">`
+				}
+				if want := who + l.Sender + `</span>`; !strings.Contains(body.String(), want) {
 					t.Errorf("letter %d lacks %s: %s", l.Seq, want, body.String())
 				}
 			}

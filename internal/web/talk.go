@@ -30,6 +30,9 @@ type Talk struct {
 	// when with names no crew member: a conversation with a person shows
 	// no status.
 	WithStatus string `json:"with_status,omitempty"`
+	// Member is the crew member in conversation as /crew has it, whose agent
+	// and uptime stand beside its state in the head; absent for a person.
+	Member *CrewRow `json:"member,omitempty"`
 	// Crew are the members to talk to, in the yard's order.
 	Crew []TalkPeer `json:"crew"`
 	// People are the users to talk to, in the yard's order, without the
@@ -76,6 +79,18 @@ func (t Talk) Composer() string {
 	return fmt.Sprintf("send-%s-%d", t.With, own)
 }
 
+// TalkHead is what a conversation's head says: the party's name and, for a
+// crew member, its state in footplate's words, with the member behind it,
+// whose agent and uptime stand beside the state. A person has no state, and
+// neither has a member that has left the crew.
+type TalkHead struct {
+	Name, State string
+	Member      *CrewRow
+}
+
+// Party is the conversation's head: the stage of /talk and of /crew.
+func (t Talk) Party() TalkHead { return TalkHead{Name: t.With, State: t.WithStatus, Member: t.Member} }
+
 // TalkPeer is one party to talk to: a crew member or a user.
 type TalkPeer struct {
 	Name string `json:"name"`
@@ -116,23 +131,39 @@ type TalkLetter struct {
 // the conversation, an older page a ?before= away.
 const talkLimit = 50
 
-func (s *Server) handleTalk(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleTalk(w http.ResponseWriter, r *http.Request) { s.conversation(w, r, false) }
+
+// conversation answers r with the talk page, the stage of /talk and of /crew:
+// the conversation of the user the view acts as with the party ?with= names,
+// else with the one the page opens on. /crew is that page with nothing named
+// and the crew's rows as its JSON, so asCrew ignores the query and answers the
+// crew where /talk answers the conversation.
+func (s *Server) conversation(w http.ResponseWriter, r *http.Request, asCrew bool) {
 	ctx := r.Context()
-	as := s.acting(ctx)
-	if as == "" {
-		// The view does not act, or not for this browser: no user to show a
-		// conversation of.
-		s.respond(w, r, Page{Template: "talk", Title: "Talk", Data: Talk{NeedsToken: s.token != nil}})
-		return
-	}
 	head, err := s.st.Head(ctx)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	crew, err := s.st.Crew(ctx)
+	// The crew once for the head, the list and /crew's JSON, which the shell
+	// would otherwise read again.
+	rows, err := s.crewRows(ctx)
 	if err != nil {
 		s.fail(w, r, err)
+		return
+	}
+	answer := func(t Talk, title, live string, box *store.Mailbox) {
+		p := Page{Template: "talk", Kind: "talk", Title: title, Data: t, talk: &t, head: head, inbox: box, crew: rows, with: t.With, live: live}
+		if asCrew {
+			p.Title, p.Data, p.live = "Crew", Crew{Crew: rows, Head: head}, liveStage
+		}
+		s.respond(w, r, p)
+	}
+	as := s.acting(ctx)
+	if as == "" {
+		// The view does not act, or not for this browser: no user to show a
+		// conversation of.
+		answer(Talk{NeedsToken: s.token != nil}, "Talk", "", nil)
 		return
 	}
 	users, err := s.st.Users(ctx)
@@ -145,7 +176,12 @@ func (s *Server) handleTalk(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	with := r.URL.Query().Get("with")
+	crew := members(rows)
+	var with string
+	var before uint64
+	if !asCrew {
+		with = r.URL.Query().Get("with")
+	}
 	switch {
 	case with == "":
 		with = defaultTalkPeer(crew, users, as, yardmasterName(settings))
@@ -154,8 +190,7 @@ func (s *Server) handleTalk(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, fmt.Errorf("talk partner %s: %w", with, store.ErrNotFound))
 		return
 	}
-	var before uint64
-	if v := r.URL.Query().Get("before"); v != "" {
+	if v := r.URL.Query().Get("before"); v != "" && !asCrew {
 		if before, err = strconv.ParseUint(v, 10, 64); err != nil || before == 0 {
 			s.respond(w, r, Page{Status: http.StatusBadRequest, Template: "error", Title: "Bad request",
 				Data: errorData{Error: "before is an event's seq, not " + v}})
@@ -166,32 +201,56 @@ func (s *Server) handleTalk(w http.ResponseWriter, r *http.Request) {
 		Before: before, Head: head, MaxMail: store.MaxMailParts * store.MaxMailBytes}
 	if with == "" {
 		// The yard has no crew: the page says whose command that is.
-		s.respond(w, r, Page{Template: "talk", Title: "Talk", Data: out, head: head})
+		answer(out, "Talk", "", nil)
 		return
 	}
-	// Whose unread mail the user has, for the peers' marks: the letters
-	// are not needed here.
-	box, err := s.st.UserInbox(ctx, as, 1, as)
+	box, err := s.readTalk(ctx, &out, rows, users, before)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	out.Crew, out.People = talkPeers(crew, users, as, box.From)
-	out.WithStatus = withStatus(crew, with)
-	letters, more, err := s.st.Conversation(ctx, as, with, 0, talkLimit, before)
+	answer(out, "Talk with "+with, talkLive(before), box)
+}
+
+// readTalk fills t, which names its user and party, with what the page shows
+// of the conversation: the picker's two lists with their unread marks, the
+// party's state and the member behind it, and the newest page of the letters
+// or the page under before. It returns the user's inbox read for the marks,
+// which the rail's badge counts from. rows are the crew as crewRows read it.
+func (s *Server) readTalk(ctx context.Context, t *Talk, rows []CrewRow, users []store.User, before uint64) (*store.Mailbox, error) {
+	// Whose unread mail the user has, for the peers' marks: the letters are
+	// not needed here.
+	box, err := s.st.UserInbox(ctx, t.As, 1, t.As)
 	if err != nil {
-		s.fail(w, r, err)
-		return
+		return nil, err
 	}
-	out.More = more
-	shown, err := s.talkLetters(ctx, as, with, letters)
+	crew := members(rows)
+	t.Crew, t.People = talkPeers(crew, users, t.As, box.From)
+	t.WithStatus = withStatus(crew, t.With)
+	if i := slices.IndexFunc(rows, func(r CrewRow) bool { return r.Name == t.With }); i >= 0 {
+		t.Member = &rows[i]
+	}
+	letters, more, err := s.st.Conversation(ctx, t.As, t.With, 0, talkLimit, before)
 	if err != nil {
-		s.fail(w, r, err)
-		return
+		return nil, err
 	}
-	out.Letters = shown
-	title := "Talk with " + with
-	s.respond(w, r, Page{Template: "talk", Title: title, Data: out, head: head, inbox: box, live: talkLive(before)})
+	t.More = more
+	if t.Letters, err = s.talkLetters(ctx, t.As, t.With, letters); err != nil {
+		return nil, err
+	}
+	return box, nil
+}
+
+// members are the crew rows as the page sees them. A row carries the derived
+// unknown state while the daemon is lost, but its embedded store value keeps
+// the last state the daemon reported.
+func members(rows []CrewRow) []store.CrewMember {
+	out := make([]store.CrewMember, len(rows))
+	for i := range rows {
+		out[i] = rows[i].CrewMember
+		out[i].State, out[i].Status = rows[i].State, rows[i].Status
+	}
+	return out
 }
 
 // talkLive is how the talk page reads itself again: the newest page of the
@@ -359,36 +418,40 @@ func talkPeers(crew []store.CrewMember, users []store.User, as string, unread []
 }
 
 // withStatus is the state of the member in conversation, in footplate's
-// words. It uses the crew state and status directly, but for a login
-// screen: a member there reads no mail, however its runtime reads it, and
-// "idle" would say it does (yardr-302g). yardr chat adds a refinement for
-// failed retries. "" when with names no crew member.
+// words (memberStatus). "" when with names no crew member.
 func withStatus(crew []store.CrewMember, with string) string {
 	for _, r := range crew {
 		if r.Name == with {
-			switch r.State {
-			case "failed":
-				return chat.Failed
-			case "running":
-				if r.LoginScreen {
-					return chat.NotLoggedIn
-				}
-				switch r.Status {
-				case "working":
-					return chat.Working
-				case "idle":
-					return chat.Idle
-				case "blocked":
-					return chat.Blocked
-				default:
-					return chat.Running
-				}
-			default:
-				return chat.NotRunning
-			}
+			return memberStatus(r)
 		}
 	}
 	return ""
+}
+
+// memberStatus is the state of a crew member in footplate's words. It uses the
+// crew state and status directly, but for a login screen: a member there reads
+// no mail, however its runtime reads it, and "idle" would say it does
+// (yardr-302g). yardr chat adds a refinement for failed retries.
+func memberStatus(r store.CrewMember) string {
+	switch r.State {
+	case "failed":
+		return chat.Failed
+	case "running":
+		if r.LoginScreen {
+			return chat.NotLoggedIn
+		}
+		switch r.Status {
+		case "working":
+			return chat.Working
+		case "idle":
+			return chat.Idle
+		case "blocked":
+			return chat.Blocked
+		default:
+			return chat.Running
+		}
+	}
+	return chat.NotRunning
 }
 
 // sender is who the talk page names for l: the sender with its device, as
@@ -455,15 +518,12 @@ func (s *Server) handleTalkPost(w http.ResponseWriter, r *http.Request) {
 // the reason and the text back in the form.
 func (s *Server) talkAgain(w http.ResponseWriter, r *http.Request, with, text, why string) {
 	ctx := r.Context()
-	as := s.acting(ctx)
 	head, err := s.st.Head(ctx)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	out := Talk{As: as, With: with, Crew: []TalkPeer{}, People: []TalkPeer{}, Letters: []TalkLetter{},
-		Head: head, MaxMail: store.MaxMailParts * store.MaxMailBytes, Error: why, Draft: text}
-	crew, err := s.st.Crew(ctx)
+	rows, err := s.crewRows(ctx)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -473,26 +533,14 @@ func (s *Server) talkAgain(w http.ResponseWriter, r *http.Request, with, text, w
 		s.fail(w, r, err)
 		return
 	}
-	box, err := s.st.UserInbox(ctx, as, 1, as)
+	out := Talk{As: s.acting(ctx), With: with, Crew: []TalkPeer{}, People: []TalkPeer{}, Letters: []TalkLetter{},
+		Head: head, MaxMail: store.MaxMailParts * store.MaxMailBytes, Error: why, Draft: text}
+	box, err := s.readTalk(ctx, &out, rows, users, 0)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	out.Crew, out.People = talkPeers(crew, users, as, box.From)
-	out.WithStatus = withStatus(crew, with)
-	letters, more, err := s.st.Conversation(ctx, as, with, 0, talkLimit, 0)
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	out.More = more
-	shown, err := s.talkLetters(ctx, as, with, letters)
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	out.Letters = shown
-	s.respond(w, r, Page{Template: "talk", Title: "Talk with " + with, Data: out, head: head, inbox: box, live: liveStage})
+	s.respond(w, r, Page{Template: "talk", Kind: "talk", Title: "Talk with " + with, Data: out, talk: &out, head: head, inbox: box, crew: rows, live: liveStage})
 }
 
 // ownOrigin reports whether origin is this request's own: an http or

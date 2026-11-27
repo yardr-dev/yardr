@@ -1,34 +1,52 @@
+{{- /* /groups, a table, the fourth stage kind: one row to a group, as
+       `yardr group list` prints them. A group's runner settings fold under its
+       row, one key a line, since a prompt or a directory list would break the
+       table's rows; the fold's one line says them before it is opened. The
+       page's leaf in the shell reads it again whenever something happens in
+       the yard. */}}
 {{define "content"}}
-{{- /* The page's leaf in the shell reads it again whenever something
-       happens in the yard: the stream carries each event's seq and nothing
-       else. */}}
-<div id="groups">
-  {{- range .Data.Groups}}
-  <article class="item">
-    <header class="item-head">
-      <h2>{{.Name}}</h2>
-    </header>
-    <dl class="facts">
-      <div><dt>runner</dt><dd>{{.Runner}}</dd></div>
-      <div><dt>limit</dt><dd>{{.Limit}}</dd></div>
-      {{- if .Members}}
-      <div><dt>members</dt><dd>{{range $i, $m := .Members}}{{if $i}}, {{end}}{{$m}}{{end}}</dd></div>
-      {{- end}}
-    </dl>
-    {{- /* The runner's config, one row per key, as `yardr group list` shows
-           it: the bare key under its own heading, since `config <key>`
-           wrapped beside its value at 500 px. */}}
-    {{- if .Config}}
-    <h3 class="label">config</h3>
-    <dl class="facts">
-      {{- range $k, $v := .Config}}
-      <div><dt>{{$k}}</dt><dd>{{$v}}</dd></div>
-      {{- end}}
-    </dl>
-    {{- end}}
-  </article>
+{{- with .Data}}
+<article class="wv-page" data-kind="{{$.Kind}}">
+  <header class="wv-head">
+    <h1 class="wv-title">Groups</h1>
+    <p class="wv-meta">{{.Line}}</p>
+  </header>
+  {{- if .Groups}}
+  <div class="wv-scrollx">
+    <table class="wv-table">
+      <thead><tr><th>name</th><th>runner</th><th class="wv-num">limit</th><th>members</th></tr></thead>
+      <tbody>
+        {{- range .Groups}}
+        {{- $g := .}}
+        <tr>
+          <td class="wv-name">{{.Name}}</td>
+          <td>{{.Runner}}</td>
+          <td class="wv-num">{{.Limit}}</td>
+          <td>{{range $i, $m := .Members}}{{if $i}}, {{end}}{{$m}}{{else}}<span class="wv-nil">–</span>{{end}}</td>
+        </tr>
+        {{- with .Config}}
+        <tr class="wv-table__fold">
+          <td colspan="4">
+            <details class="wv-fold">
+              <summary>{{template "chev"}}<span class="wv-fold__label">config</span><span class="wv-fold__value">{{$g.ConfigLine}}</span></summary>
+              <div class="wv-fold__body">
+                <dl class="wv-facts">
+                  {{- range $k, $v := .}}
+                  <dt>{{$k}}</dt><dd>{{$v}}</dd>
+                  {{- end}}
+                </dl>
+              </div>
+            </details>
+          </td>
+        </tr>
+        {{- end}}
+        {{- end}}
+      </tbody>
+    </table>
+  </div>
   {{- else}}
-  <p class="item faint">This yard has no groups.</p>
+  <p class="wv-none">This yard has no groups.</p>
   {{- end}}
-</div>
+</article>
+{{- end}}
 {{end}}

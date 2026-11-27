@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -1282,9 +1283,10 @@ func TestAge(t *testing.T) {
 	}
 }
 
-// The crew page lists each crew member, whether it runs and since when,
-// and how many events of its inbox it has not read. What its journal says
-// is not on it.
+// The crew's JSON lists each crew member, whether it runs and since when, and
+// how many events of its inbox it has not read; the page is the conversation
+// /talk opens, with the crew in Crew's list, a row to each member saying the
+// same. What a member's journal says is not on it.
 func TestCrew(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
@@ -1330,22 +1332,29 @@ func TestCrew(t *testing.T) {
 	if got.Head != head {
 		t.Errorf("crew head %d, want %d", got.Head, head)
 	}
-	text := squash(f.get("/crew").body)
+	// The view acts as no one, so the stage is the notice /talk gives and the
+	// crew is Crew's list: a row to each member with its agent and a state line,
+	// the member's own unread count at its end.
+	crew := f.get("/crew").body
+	list := squash(listOf(t, crew))
+	if !regexp.MustCompile(`<span class="wv-row__name">yardmaster</span><span class="wv-row__meta">herdr · claude · opus</span><span class="wv-row__meta">running · up \S+ · 2 unread</span>`).MatchString(list) {
+		t.Errorf("Crew's list lacks the yardmaster's row, running with its uptime and 2 unread:\n%s", list)
+	}
+	if want := `<span class="wv-row__name">zed</span><span class="wv-row__meta">herdr · claude · opus</span><span class="wv-row__meta">stopped · disabled</span>`; !strings.Contains(list, want) {
+		t.Errorf("Crew's list lacks %q:\n%s", want, list)
+	}
+	text := squash(stageOf(t, crew))
 	for _, part := range []string{
-		`<h2>yardmaster</h2><span class="state"><span class="dot running"></span><span>running</span></span><span class="item-count">2 unread</span>`,
-		`<h2>zed</h2><span class="state"><span>stopped</span> · disabled</span></header>`,
-		`<dt>agent</dt><dd>herdr · claude · opus</dd>`,
-		`<dt>running since</dt><dd><time datetime="`,
+		`<article class="wv-page" data-kind="talk"><header class="wv-head"><h1 class="wv-title">Crew</h1></header>`,
+		`<p class="wv-lede">This view does not act.`,
+		`<i class="wv-live" hidden hx-get="/crew"`,
 	} {
 		if !strings.Contains(text, part) {
 			t.Errorf("the page lacks %q", part)
 		}
 	}
-	if got := marked(railOf(t, f.get("/crew").body), "aria-current", "true"); len(got) != 1 || got[0] != "/crew" {
+	if got := marked(railOf(t, crew), "aria-current", "true"); len(got) != 1 || got[0] != "/crew" {
 		t.Errorf("the crew page opens the tiles %v, want Crew's", got)
-	}
-	if strings.Count(text, "running since") != 1 {
-		t.Error("the stopped crew member is shown running since some time")
 	}
 	for _, not := range []string{"dear diary", "the tests are red"} {
 		if strings.Contains(text, not) || strings.Contains(r.body, not) {
@@ -1357,8 +1366,8 @@ func TestCrew(t *testing.T) {
 	page, err := f.st.Inbox(ctx, "yardmaster", 0)
 	must(t, err)
 	must(t, f.st.AckInbox(ctx, "yardmaster", page.Last))
-	if text := squash(f.get("/crew").body); !strings.Contains(text, `<h2>yardmaster</h2>`) || strings.Contains(text, "2 unread") {
-		t.Error("the yardmaster read its inbox, and the page still counts 2 unread")
+	if list := squash(listOf(t, f.get("/crew").body)); !strings.Contains(list, `<span class="wv-row__name">yardmaster</span>`) || strings.Contains(list, "2 unread") {
+		t.Error("the yardmaster read its inbox, and the list still counts 2 unread")
 	}
 
 	// While a daemon_lost event stands with no start after it, the
@@ -1378,9 +1387,9 @@ func TestCrew(t *testing.T) {
 		lost.Crew[0].Since != nil || lost.Crew[0].Up != "" || lost.Crew[1].State != "stopped" || lost.Crew[1].Lost {
 		t.Fatalf("lost crew: %+v", lost.Crew)
 	}
-	if text := squash(f.get("/crew").body); !strings.Contains(text, `<span>`+want+`</span>`) ||
-		strings.Contains(text, "running since") || strings.Contains(text, "dot running") {
-		t.Errorf("the page of a lost daemon lacks the unknown state, or keeps a live dot or a running-since")
+	if list := squash(listOf(t, f.get("/crew").body)); !strings.Contains(list, `<span class="wv-row__meta">`+want+`</span>`) ||
+		strings.Contains(list, "wv-dot--run") || strings.Contains(list, " · up ") {
+		t.Errorf("Crew's list of a lost daemon lacks the unknown state, or keeps a live dot or an uptime:\n%s", list)
 	}
 }
 

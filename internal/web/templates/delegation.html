@@ -1,72 +1,93 @@
+{{- /* A delegated run's record, the sixth stage kind in its other form: the
+       conversation's head with one letter from the yardmaster under it, whose
+       body is the record. No thread stands here and no composer; the list's open
+       row is the way back to the conversation. What the yardmaster ran for an
+       operator, on which of their mails, what each setting held before, and how
+       it is taken back. A pack apply's record also says how far the run got (a
+       started one is unfinished), which pack and digest, where it came from and
+       the digest that stood before it, what each object does with its diff and
+       before-state, what was written and why it failed: the words of yardr
+       delegation show. An operator's alone, as the store's read is. The time
+       is the letter's: the minute in the gutter, the day in the separator and
+       the seconds, which a record of today prints, in the time's title. */}}
 {{define "content"}}
-{{- /* A delegated run's record: what the yardmaster ran for an operator, on
-       which of their mails, what each setting held before, and how it is
-       taken back. A pack apply's record also says how far the run got (a
-       started one is unfinished), which pack and digest, where it came from
-       and the digest that stood before it, what each object does with its
-       diff and before-state, what was written and why it failed: the words
-       of yardr delegation show. An operator's alone, as the store's read is. */}}
 {{- with .Data.Record}}
-<article class="item">
-  <header class="item-head">
-    <h2>Record {{.ID}}: {{.Yardmaster}} for {{.For}}</h2>
-    <span class="state faint">{{clock .At}}</span>
-  </header>
-  <dl class="facts">
-    <div><dt>on mail</dt><dd>{{.Mail}} from {{.For}}</dd></div>
-    <div><dt>changed</dt><dd>{{.Of}}</dd></div>
-    <div><dt>ran</dt><dd><code>{{or .Command "(no command words were sent)"}}</code></dd></div>
-    {{- with .State}}
-    <div><dt>state</dt><dd>{{if eq . "started"}}started (unfinished){{else}}{{.}}{{end}}</dd></div>
-    {{- end}}
-    {{- if .Pack}}
-    <div><dt>pack</dt><dd>{{.Pack}}, digest sha256:{{.Digest}}</dd></div>
-    {{- if .From}}
-    <div><dt>from</dt><dd>{{.From}}</dd></div>
-    <div><dt>prior digest</dt><dd>{{if .Prior}}sha256:{{.Prior}}{{else}}none known{{end}}</dd></div>
-    {{- end}}
-    {{- /* What was written and why it failed stand with the facts: the
-           objects below carry whole diffs and before-states, which run to
-           the blob cap and would push them off the first screen. */}}
-    {{- with .Written}}
-    <div><dt>written</dt><dd>{{range $i, $w := .}}{{if $i}}, {{end}}{{$w}}{{end}}</dd></div>
-    {{- end}}
-    {{- with .Error}}
-    <div><dt>failed</dt><dd class="error">{{.}}</dd></div>
-    {{- end}}
-    {{- end}}
-    {{- with .Back}}
-    <div><dt>taken back by</dt><dd><code>{{.}}</code></dd></div>
-    {{- end}}
-  </dl>
-  {{- with .Changes}}
-  <h3 class="label">before and after</h3>
-  <dl class="facts">
-    {{- range .}}
-    <div><dt>{{.Key}}</dt><dd>{{if .Had}}{{.Was}}{{else}}(unset){{end}} → {{if .Has}}{{.Is}}{{else}}(unset){{end}}</dd></div>
-    {{- end}}
-  </dl>
-  {{- end}}
-  {{- /* The body's objects, by name: .Objects is the record's own list of
-         names, which shadows them. */}}
-  {{- with .DelegatedBody.Objects}}
-  <h3 class="label">objects</h3>
-  {{- range .}}
-  <article class="note">
-    <p><code>{{.Kind}} {{.Name}}</code>: {{.Action}}</p>
-    {{- if or .Diff .Had}}
-    <dl class="facts">
-      {{- with .Diff}}
-      <div><dt>diff</dt><dd><pre class="text file">{{.}}</pre></dd></div>
-      {{- end}}
-      {{- if .Had}}
-      <div><dt>before</dt><dd><pre class="text file">{{.Before}}</pre></dd></div>
-      {{- end}}
-    </dl>
-    {{- end}}
-  </article>
-  {{- end}}
-  {{- end}}
+<article class="wv-page wv-talk" data-kind="{{$.Kind}}">
+  {{- template "talkhead" $.Data.Party}}
+  <div class="wv-letters" id="letters">
+    <p class="wv-day">{{$.Data.Day}}</p>
+    <article class="wv-letter">
+      <time class="wv-letter__at" datetime="{{.At.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{clock .At}}">{{clockTime .At}}</time>
+      <div class="wv-letter__body">
+        <span class="wv-letter__who">{{.Yardmaster}}</span>
+        <section class="wv-record" aria-labelledby="record">
+          <h2 class="wv-sh" id="record"><span>Record {{.ID}}: {{.Yardmaster}} for {{.For}}</span></h2>
+          <dl class="wv-facts">
+            <dt>on mail</dt><dd>{{.Mail}} from {{.For}}</dd>
+            <dt>changed</dt><dd>{{.Of}}</dd>
+            <dt>ran</dt><dd><code>{{or .Command "(no command words were sent)"}}</code></dd>
+            {{- with .State}}
+            <dt>state</dt><dd>{{if eq . "started"}}started (unfinished){{else}}{{.}}{{end}}</dd>
+            {{- end}}
+            {{- if .Pack}}
+            <dt>pack</dt><dd>{{.Pack}}, digest sha256:{{.Digest}}</dd>
+            {{- if .From}}
+            <dt>from</dt><dd>{{.From}}</dd>
+            <dt>prior digest</dt><dd>{{if .Prior}}sha256:{{.Prior}}{{else}}none known{{end}}</dd>
+            {{- end}}
+            {{- /* What was written and why it failed stand with the facts: the
+                   objects below carry whole diffs and before-states, which run
+                   to the blob cap and would push them off the first screen. */}}
+            {{- with .Written}}
+            <dt>written</dt><dd>{{range $i, $w := .}}{{if $i}}, {{end}}{{$w}}{{end}}</dd>
+            {{- end}}
+            {{- with .Error}}
+            <dt>failed</dt><dd class="wv-fault">{{.}}</dd>
+            {{- end}}
+            {{- end}}
+            {{- with .Back}}
+            <dt>taken back by</dt><dd><code>{{.}}</code></dd>
+            {{- end}}
+          </dl>
+          {{- with .Changes}}
+          <h3 class="wv-record__label">before and after</h3>
+          <div class="wv-scrollx">
+            <table class="wv-table">
+              <thead><tr><th>setting</th><th>before</th><th>after</th></tr></thead>
+              <tbody>
+                {{- range .}}
+                <tr><td class="wv-name">{{.Key}}</td><td>{{if .Had}}<code>{{.Was}}</code>{{else}}<span class="wv-nil">(unset)</span>{{end}}</td><td>{{if .Has}}<code>{{.Is}}</code>{{else}}<span class="wv-nil">(unset)</span>{{end}}</td></tr>
+                {{- end}}
+              </tbody>
+            </table>
+          </div>
+          {{- end}}
+          {{- /* The body's objects, by name: .Objects is the record's own list
+                 of names, which shadows them. */}}
+          {{- with .DelegatedBody.Objects}}
+          <h3 class="wv-record__label">objects</h3>
+          <ol class="wv-notes">
+            {{- range .}}
+            <li class="wv-note">
+              <p><code>{{.Kind}} {{.Name}}</code>: {{.Action}}</p>
+              {{- if or .Diff .Had}}
+              <dl class="wv-facts">
+                {{- with .Diff}}
+                <dt>diff</dt><dd><pre class="wv-text wv-file">{{.}}</pre></dd>
+                {{- end}}
+                {{- if .Had}}
+                <dt>before</dt><dd><pre class="wv-text wv-file">{{.Before}}</pre></dd>
+                {{- end}}
+              </dl>
+              {{- end}}
+            </li>
+            {{- end}}
+          </ol>
+          {{- end}}
+        </section>
+      </div>
+    </article>
+  </div>
 </article>
 {{- end}}
 {{end}}

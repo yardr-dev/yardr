@@ -10,8 +10,9 @@ import (
 	"yardr.dev/yardr/internal/store"
 )
 
-// Crew is the crew's page: every crew member of the yard, by name.
-// Their journals and handoffs are their own and are not shown.
+// Crew is /crew's JSON: every crew member of the yard, by name. The page draws
+// the conversation /talk opens and the crew in Crew's list. Their journals and
+// handoffs are their own and are not shown.
 type Crew struct {
 	Crew []CrewRow `json:"crew"`
 	// Head is the yard's newest seq when the page was read, before its crew.
@@ -49,18 +50,6 @@ type CrewRow struct {
 	// no start after it) while the member reads running: its state is
 	// then unknown since the daemon's last pass, and Running false.
 	Lost bool `json:"lost,omitempty"`
-}
-
-// Dot is the status dot's class: running, held for one that failed, none
-// for one that is stopped.
-func (r CrewRow) Dot() string {
-	switch {
-	case r.Running:
-		return "running"
-	case r.State == "failed":
-		return "held"
-	}
-	return ""
 }
 
 // agentOf is the crew member's runner with the kind and model it runs, as
@@ -116,17 +105,6 @@ func (s *Server) crewRows(ctx context.Context) ([]CrewRow, error) {
 	return out, nil
 }
 
-func (s *Server) handleCrew(w http.ResponseWriter, r *http.Request) {
-	head, err := s.st.Head(r.Context())
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	rows, err := s.crewRows(r.Context())
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	out := Crew{Crew: rows, Head: head}
-	s.respond(w, r, Page{Template: "crew", Title: "Crew", Data: out, head: head, crew: out.Crew, live: liveStage})
-}
+// handleCrew is Crew's root page: the conversation /talk opens without
+// ?with=, with the crew's rows as its JSON.
+func (s *Server) handleCrew(w http.ResponseWriter, r *http.Request) { s.conversation(w, r, true) }

@@ -1133,7 +1133,7 @@ daemon holding the lock, it writes one `daemon_lost` event and raises a
 run card for `yardr up` to the operator on a new bead. Until a fresh
 `daemon_started` ends it, the crew reads unknown since then
 (`yardr crew list`, `yardr doctor`,
-`yardr status`, the web crew page). Stopping the whole yard (`yardr down`)
+`yardr status`, the web view's Crew list). Stopping the whole yard (`yardr down`)
 writes none: the server goes down with the daemon, so nothing is there to
 notice.
 

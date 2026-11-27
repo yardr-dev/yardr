@@ -214,64 +214,56 @@ func TestConfigPages(t *testing.T) {
 		t.Error("/depots links back to the hub")
 	}
 
+	// The groups are a table, a row to each group as `yardr group list` prints
+	// them; a group's runner settings fold under its row, one key a line, and a
+	// group with none has no fold.
 	groups := squash(f.get("/groups").body)
 	for _, want := range []string{
-		`<h2>builders</h2>`,
-		`<div><dt>runner</dt><dd>herdr</dd></div>`,
-		`<div><dt>limit</dt><dd>3</dd></div>`,
-		`<h3 class="label">config</h3>`,
-		`<div><dt>kind</dt><dd>claude</dd></div>`,
-		`<div><dt>model</dt><dd>opus</dd></div>`,
-		`<h2>decisions</h2>`,
-		`<div><dt>members</dt><dd>jo, mo</dd></div>`,
+		`<article class="wv-page" data-kind="table">`,
+		`<h1 class="wv-title">Groups</h1><p class="wv-meta">2 groups</p>`,
+		`<thead><tr><th>name</th><th>runner</th><th class="wv-num">limit</th><th>members</th></tr></thead>`,
+		`<tr><td class="wv-name">builders</td><td>herdr</td><td class="wv-num">3</td><td><span class="wv-nil">–</span></td></tr>` +
+			`<tr class="wv-table__fold"><td colspan="4"><details class="wv-fold"><summary>` + chevron +
+			`<span class="wv-fold__label">config</span><span class="wv-fold__value">kind claude · model opus</span></summary>`,
+		`<dl class="wv-facts"><dt>kind</dt><dd>claude</dd><dt>model</dt><dd>opus</dd></dl>`,
+		`<tr><td class="wv-name">decisions</td><td>manual</td><td class="wv-num">50</td><td>jo, mo</td></tr>`,
 		`<a class="wv-row" href="/groups" aria-current="page">`,
 	} {
 		if !strings.Contains(groups, want) {
 			t.Errorf("/groups lacks %s", want)
 		}
 	}
-	// The bare key beside its value: `config <key>` wrapped at 500 px.
-	// The group without a config has no heading for one.
-	for _, want := range []string{`<dt>config kind</dt>`, `<dt>config model</dt>`} {
-		if strings.Contains(groups, want) {
-			t.Errorf("/groups still labels %s", want)
-		}
-	}
-	if n := strings.Count(groups, `<h3 class="label">config</h3>`); n != 1 {
-		t.Errorf("/groups has %d config headings, want one (for builders)", n)
+	// The group without a config has no fold: one, for builders.
+	if n := strings.Count(groups, `<tr class="wv-table__fold">`); n != 1 {
+		t.Errorf("/groups has %d config folds, want one (for builders)", n)
 	}
 
+	// The routes are a table in match order, a row to each route as `yardr
+	// route list` prints them, the id quiet at the end, and the head says the
+	// rule the order is read by.
 	routes := squash(f.get("/routes").body)
 	for _, want := range []string{
-		// The wide table: one row per route, as the command prints them.
+		`<article class="wv-page" data-kind="table">`,
+		`<h1 class="wv-title">Routes</h1><p class="wv-meta">2 routes, in match order: the first that matches takes the bead</p>`,
 		`<th>stage</th><th>type</th><th>depot</th><th>label</th><th>beads</th><th>group</th><th>id</th>`,
-		`<tr><td>new</td><td>bug</td><td>line</td><td>bug</td><td>-</td><td>decisions</td><td class="faint">` + narrow.ID + `</td></tr>`,
-		`<tr><td>new</td><td>-</td><td>-</td><td>-</td><td>-</td><td>builders</td><td class="faint">` + plain.ID + `</td></tr>`,
-		// The stacked cards below 700 px, the id quiet until opened.
-		`<h2>new → decisions</h2>`,
-		`<div><dt>type</dt><dd>bug</dd></div>`,
-		`<div><dt>depot</dt><dd>line</dd></div>`,
-		`<div><dt>label</dt><dd>bug</dd></div>`,
-		`<details class="route-id"><summary>id</summary>` + narrow.ID + `</details>`,
-		`<h2>new → builders</h2>`,
-		`<details class="route-id"><summary>id</summary>` + plain.ID + `</details>`,
+		`<tr><td class="wv-name">new</td><td>bug</td><td>line</td><td>bug</td><td><span class="wv-nil">–</span></td><td>decisions</td><td class="wv-id">` + narrow.ID + `</td></tr>`,
+		`<tr><td class="wv-name">new</td><td><span class="wv-nil">–</span></td><td><span class="wv-nil">–</span></td><td><span class="wv-nil">–</span></td><td><span class="wv-nil">–</span></td><td>builders</td><td class="wv-id">` + plain.ID + `</td></tr>`,
 		`<a class="wv-row" href="/routes" aria-current="page">`,
 	} {
 		if !strings.Contains(routes, want) {
 			t.Errorf("/routes lacks %s", want)
 		}
 	}
-	// Routes carry no priority, so neither view shows one.
-	if strings.Contains(routes, "<dt>priority</dt>") {
-		t.Errorf("/routes still names a priority")
+	// Routes carry no priority, so the view shows none, and the table is the
+	// one layout at every width: no stacked cards for a phone.
+	for _, gone := range []string{"<dt>priority</dt>", "routes-cards", "route-id"} {
+		if strings.Contains(routes, gone) {
+			t.Errorf("/routes still draws %s", gone)
+		}
 	}
 	// One table row per route, besides the header's.
-	if n := strings.Count(routes, "<tr><td>"); n != 2 {
+	if n := strings.Count(routes, `<tr><td class="wv-name">`); n != 2 {
 		t.Errorf("/routes has %d table rows, want one per route", n)
-	}
-	// The id takes no row of its own on a card.
-	if strings.Contains(routes, "<div><dt>id</dt>") {
-		t.Error("/routes still shows the id as a row of the stacked card")
 	}
 	// In match order: the higher priority first.
 	if strings.Index(routes, narrow.ID) > strings.Index(routes, plain.ID) {
@@ -312,15 +304,15 @@ func TestConfigPagesPeersDeps(t *testing.T) {
 	_, err = f.st.AllowPeer(ctx, "north", store.PeerAllow{Send: []string{"ping", "mail"}, Receive: []string{"ping"}}, "ada")
 	must(t, err)
 
+	// The peers are a table, a row to each peer as `yardr peer list` prints
+	// them: the url of a peer that cannot be called says it calls this yard.
 	peers := squash(f.get("/peers").body)
 	for _, want := range []string{
-		`<h2>north</h2>`,
-		`<div><dt>url</dt><dd>http://127.0.0.1:1</dd></div>`,
-		`<div><dt>send</dt><dd>mail, ping</dd></div>`,
-		`<div><dt>receive</dt><dd>ping</dd></div>`,
-		`<div><dt>waiting</dt><dd>0</dd></div>`,
-		`<h2>laptop</h2>`,
-		`<div><dt>url</dt><dd>none — it calls this yard</dd></div>`,
+		`<article class="wv-page" data-kind="table">`,
+		`<h1 class="wv-title">Peers</h1><p class="wv-meta">2 peers</p>`,
+		`<thead><tr><th>peer</th><th>url</th><th>send</th><th>receive</th><th class="wv-num">waiting</th></tr></thead>`,
+		`<tr><td class="wv-name">north</td><td><code>http://127.0.0.1:1</code></td><td>mail, ping</td><td>ping</td><td class="wv-num">0</td></tr>`,
+		`<tr><td class="wv-name">laptop</td><td><span class="wv-nil">none — it calls this yard</span></td><td><span class="wv-nil">–</span></td><td><span class="wv-nil">–</span></td><td class="wv-num">0</td></tr>`,
 		`<a class="wv-row" href="/peers" aria-current="page">`,
 	} {
 		if !strings.Contains(peers, want) {
@@ -413,6 +405,18 @@ func TestPeersRefusedWithoutOperator(t *testing.T) {
 					t.Errorf("%s (%s): the refusal tells %q", v.name, accept, told)
 				}
 			}
+			// The page is the shell's 403 page: the sentence on a bare stage,
+			// which has no row of Settings' list for a page the reader is
+			// refused.
+			if accept == "text/html" && (!strings.Contains(r.body, "the peers list is the operator&#39;s to read") ||
+				strings.Contains(r.body, `href="/peers"`) || strings.Contains(r.body, `data-kind=`)) {
+				t.Errorf("%s: the refusal is not the 403 page with the sentence and no row:\n%s", v.name, r.body)
+			}
+		}
+		// Settings' list holds no row for either page of the operator's, on a
+		// page the reader may open.
+		if list := listOf(t, v.f.get("/groups").body); strings.Contains(list, `href="/peers"`) || strings.Contains(list, `href="/telemetry"`) {
+			t.Errorf("%s: Settings' list has a row for a page the reader is refused: %s", v.name, list)
 		}
 	}
 	if r := f.as(t, "ada").get("/peers"); r.status != 200 {
@@ -567,10 +571,11 @@ func TestConfigEscapes(t *testing.T) {
 	}
 }
 
-// The hub links to the configuration pages, for the operator — the six
-// lists with Peers in its place, and Telemetry last — and each marks its
-// own Settings column row current and links back. The hub itself is static
-// links with no live part; the column keeps the operator and JWT filters.
+// The hub is a sheet of the pages of Settings, with Peers and Telemetry for
+// the operator, each by name with what it lists, and for the operator the
+// delegation switch; each page stands under Settings with its own row of the
+// list open and no link back to the hub, which is the list's first row. The
+// hub is a snapshot with no live part of its own.
 func TestConfigHub(t *testing.T) {
 	t.Parallel()
 	f, _ := talkFixture(t, "ada")
@@ -578,40 +583,42 @@ func TestConfigHub(t *testing.T) {
 	f.populate()
 	hub := squash(f.get("/config").body)
 	for _, want := range []string{
-		`<a href="/depots">Depots</a>`,
-		`<a href="/groups">Groups</a>`,
-		`<a href="/routes">Routes</a>`,
-		`<a href="/peers">Peers</a>`,
-		`<a href="/deps">Deps</a>`,
-		`<a href="/limits">Limits</a>`,
-		`<a href="/telemetry">Telemetry</a>`,
-		`the repositories and directories beads are worked in`,
-		`first match wins`,
-		`the yards this one is linked with`,
-		`what the subscriptions the yard burns still carry`,
-		`opt-in telemetry switch`,
+		`<article class="wv-page" data-kind="table">`,
+		`<h1 class="wv-title">Config</h1><p class="wv-meta">The yard's configuration, one table a page</p>`,
+		`<thead><tr><th>page</th><th>what it holds</th></tr></thead>`,
+		`<tr><td class="wv-name"><a href="/groups">Groups</a></td><td>who works a stage</td></tr>`,
+		`<tr><td class="wv-name"><a href="/routes">Routes</a></td><td>which group a stage sends its beads to, first match wins</td></tr>`,
+		`<tr><td class="wv-name"><a href="/peers">Peers</a></td><td>the yards this one is linked with</td></tr>`,
+		`<tr><td class="wv-name"><a href="/limits">Limits</a></td><td>what the subscriptions the yard burns still carry</td></tr>`,
+		`<tr><td class="wv-name"><a href="/telemetry">Telemetry</a></td><td>the yard&#39;s opt-in telemetry switch</td></tr>`,
 		`<a class="wv-row" href="/config" aria-current="page">`,
 	} {
 		if !strings.Contains(hub, want) {
 			t.Errorf("/config lacks %s", want)
 		}
 	}
-	if strings.Contains(hub, `hx-get="/config"`) {
-		t.Error("/config reads itself again: its links are static")
+	// Depots and Deps are rows of Lines' list, so the hub links neither.
+	stage := stageOf(t, f.get("/config").body)
+	for _, gone := range []string{`href="/depots"`, `href="/deps"`, `hx-get="/config"`} {
+		if strings.Contains(stage, gone) {
+			t.Errorf("/config still has %s", gone)
+		}
 	}
 	var got web.Config
 	f.getJSON("/config", &got)
-	if len(got.Links) != 7 || got.Links[0].Path != "/depots" || got.Links[2].Path != "/routes" ||
-		got.Links[3].Path != "/peers" || got.Links[4].Path != "/deps" || got.Links[5].Path != "/limits" ||
-		got.Links[6].Path != "/telemetry" || got.Head == 0 {
-		t.Errorf("the hub as JSON: %+v", got)
+	var paths []string
+	for _, l := range got.Links {
+		paths = append(paths, l.Path)
 	}
-	// A list page stands under Settings with its own row open (Depots and
+	if want := []string{"/groups", "/routes", "/peers", "/limits", "/telemetry"}; !slices.Equal(paths, want) || got.Head == 0 {
+		t.Errorf("the hub as JSON links %v, want %v: %+v", paths, want, got)
+	}
+	// A page of Settings stands under it with its own row open (Depots and
 	// Deps are Lines' rows), and has no link back to the hub: Config is the
 	// first row of Settings' list.
 	for path, tile := range map[string]string{
-		"/depots": "/flows", "/groups": "/config", "/routes": "/config",
-		"/peers": "/config", "/deps": "/flows", "/limits": "/config",
+		"/config": "/config", "/depots": "/flows", "/groups": "/config", "/routes": "/config", "/peers": "/config",
+		"/deps": "/flows", "/limits": "/config",
 	} {
 		body := f.get(path).body
 		if want := `<a class="wv-row" href="` + path + `" aria-current="page">`; !strings.Contains(body, want) {
@@ -623,6 +630,16 @@ func TestConfigHub(t *testing.T) {
 		if strings.Contains(body, "‹ Config") {
 			t.Errorf("%s links back to the hub", path)
 		}
+		// A page of the fourth stage kind draws its own head; the shell's
+		// stands over a page that does not.
+		if kind := strings.Contains(body, `data-kind="table"`) || strings.Contains(body, `data-kind="list"`); !kind || strings.Contains(body, `class="page-head"`) {
+			t.Errorf("%s is no page of a stage kind, or has the shell's heading over its own", path)
+		}
+	}
+	// Settings' list has a row for each page the reader may open: Peers and
+	// Telemetry for the operator alone.
+	if rows := listOf(t, f.get("/config").body); !strings.Contains(rows, `href="/peers"`) || !strings.Contains(rows, `href="/telemetry"`) {
+		t.Errorf("the operator's list lacks Peers or Telemetry: %s", rows)
 	}
 }
 

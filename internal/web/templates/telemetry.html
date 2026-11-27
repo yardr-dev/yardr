@@ -1,45 +1,60 @@
+{{- /* /telemetry, a table and a sheet, the fourth stage kind: the yard's opt-in
+       telemetry switch. The consent words stand as the sheet's lede for every
+       reader. For the operator the switch is a setting row with the button for
+       its other state, and with it on the install id and the next request as
+       facts, the next payload as a file block (or the reason there is none)
+       and how to have the data deleted. The switch turns only on an explicit
+       click: nothing here changes on a read. A write the store refused stands
+       as a red line under the head. The page is a snapshot. */}}
 {{define "content"}}
-{{- /* The yard's opt-in telemetry switch: the consent words for every
-       reader, and for the operator the switch, the install id and the
-       next payload as yardr telemetry show renders them. The switch turns
-       only on an explicit click: nothing here changes on a read. */}}
-{{- with .Data.Error}}
-<p class="item error">{{.}}</p>
-{{- end}}
-<article class="item">
-  <header class="item-head">
-    <h2>Telemetry</h2>
-    {{- if .Data.Operator}}
-    {{- if eq .Data.Switch "on"}}
-    <span class="state">on{{with .Data.Since}} (since {{.}}){{end}}</span>
-    {{- else}}
-    <span class="state faint">off — nothing is sent</span>
-    {{- end}}
+{{- with .Data}}
+<article class="wv-page" data-kind="{{$.Kind}}">
+  <header class="wv-head">
+    <h1 class="wv-title">Telemetry</h1>
+    {{- with .Error}}
+    <p class="wv-callout">{{.}}</p>
     {{- end}}
   </header>
-  <p>Off unless turned on. {{.Data.Questions}}</p>
-  <p>{{.Data.Profile}}</p>
-  <p>{{.Data.IDSentence}}</p>
-  {{- if .Data.Operator}}
-  {{- if eq .Data.Switch "on"}}
-  <dl class="facts">
-    <div><dt>install id</dt><dd>{{.Data.InstallID}}</dd></div>
-    <div><dt>next request</dt><dd>sending day {{.Data.SendingDay}} (UTC); {{.Data.SourceDaysSay}}</dd></div>
+  <p class="wv-lede">Off unless turned on. {{.Questions}}</p>
+  <p class="wv-lede">{{.Profile}}</p>
+  <p class="wv-lede">{{.IDSentence}}</p>
+  {{- if .Operator}}
+  <div class="wv-setting">
+    <div class="wv-setting__text">
+      <p class="wv-setting__name">Telemetry</p>
+      {{- if eq .Switch "on"}}
+      {{- with .Since}}
+      <p class="wv-setting__help">On since {{.}}.</p>
+      {{- end}}
+      {{- else}}
+      <p class="wv-setting__help">Nothing is sent.</p>
+      {{- end}}
+    </div>
+    <span class="wv-state{{if eq .Switch "on"}} wv-state--on{{end}}">{{.Switch}}</span>
+    <form method="post" action="/telemetry" hx-post="/telemetry" hx-push-url="false">{{template "csrf"}}
+      {{- if eq .Switch "on"}}<button class="wv-btn" type="submit" name="action" value="off">Turn off</button>
+      {{- else}}<button class="wv-btn" type="submit" name="action" value="on">Turn on</button>{{end}}
+    </form>
+  </div>
+  {{- if eq .Switch "on"}}
+  <dl class="wv-facts">
+    <dt>install id</dt><dd>{{.InstallID}}</dd>
+    <dt>next request</dt><dd>sending day {{.SendingDay}} (UTC); {{.SourceDaysSay}}</dd>
   </dl>
-  {{- with .Data.Payload}}
-  <h3 class="label">next payload</h3>
-  <pre class="text">{{.}}</pre>
+  {{- with .Payload}}
+  <section class="wv-block" aria-label="Next payload">
+    <h2 class="wv-sh"><span>next payload</span></h2>
+    <pre class="wv-text wv-file">{{.}}</pre>
+  </section>
   {{- end}}
-  {{- with .Data.NoBatch}}
-  <p>{{.}}</p>
+  {{- with .NoBatch}}
+  <p class="wv-lede">{{.}}</p>
   {{- end}}
-  <p>{{.Data.Deletion}}</p>
-  <form method="post" action="/telemetry" hx-post="/telemetry" hx-push-url="false">{{template "csrf"}}<button type="submit" name="action" value="off">Turn off</button></form>
+  <p class="wv-lede">{{.Deletion}}</p>
+  {{- end}}
   {{- else}}
-  <form method="post" action="/telemetry" hx-post="/telemetry" hx-push-url="false">{{template "csrf"}}<button type="submit" name="action" value="on">Turn on</button></form>
-  {{- end}}
-  {{- else}}
-  <p class="faint">Telemetry is the operator's to see and set.</p>
+  <p class="wv-none">Telemetry is the operator's to see and set.</p>
   {{- end}}
 </article>
+{{- end}}
 {{end}}

@@ -1,0 +1,15 @@
+{{- /* A conversation's head, the sixth stage kind's own: the party's name and,
+       for a crew member, its state in footplate's words with the agent it runs
+       and how long it has been up, the time it started in the uptime's title.
+       A conversation has no back link: the list's open row is the way back to
+       a thread. A person has no state line, and neither has a crew member that
+       has left. The talk page and a delegated run's record both stand under
+       it. */}}
+{{define "talkhead"}}
+<header class="wv-head">
+  <h1 class="wv-title">{{.Name}}</h1>
+  {{- if .State}}
+  <p class="wv-meta">{{.State}}{{with .Member}}<span class="wv-sep">·</span>{{.Agent}}{{with .Since}}<span class="wv-sep">·</span><time datetime="{{.UTC.Format "2006-01-02T15:04:05Z"}}" title="running since {{.Local.Format "Jan 2 15:04"}}">up {{$.Member.Up}}</time>{{end}}{{end}}</p>
+  {{- end}}
+</header>
+{{end}}

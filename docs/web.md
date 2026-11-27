@@ -747,7 +747,7 @@ origin; the test allows those and only those ([One bead](#one-bead)).
 |---|---|---|
 | `/` | Home, the overview ([The overview](#the-overview)): the answer (`3 wait for you`) with its subline of numbers, the one ask that stands whole, and the feed of what happened by the hour, newest first and live | `Home` |
 | `/?before=<seq>` | an older page of the feed: the 50 entries under that seq, without the overview | `Home` |
-| `/talk` | on a view that acts, for a browser that holds its cookie: the user's conversation with a crew member or another user, live, and the form that sends it mail as them; without a user, that the view does not act, or that this browser has not opened its token URL ([Talk](#talk)) | `Talk` |
+| `/talk` | the sixth stage kind, on a view that acts, for a browser that holds its cookie: the user's conversation with a crew member or another user, live, with the head, the letters by day and the composer that sends it mail as them; without a user, that the view does not act, or that this browser has not opened its token URL ([Talk](#talk)) | `Talk` |
 | `/talk?with=<member>` | the conversation with that member or user; without `?with=` the yardmaster's, else the first member's | `Talk` |
 | `/talk?with=<member>&before=<seq>` | an older page of the conversation: the 50 letters under that seq, a snapshot | `Talk` |
 | `/events` | the yard's events as they happen, as server-sent events ([The stream](#the-stream)) | `?format=json` |
@@ -765,21 +765,21 @@ origin; the test allows those and only those ([One bead](#one-bead)).
 | `/blobs/note/<seq>/<n>` | a note's file at its stable address: the note `<seq>`'s current bytes for its file `<n>`, counted from 1, so the address shows the page after a replace; a seq no note has or an `<n>` the note has no file at is a 404. A page opens inert as on the hash route, and on the sandbox origin under the scripted policy ([One bead](#one-bead)) | |
 | `/sessions` | the running sessions as rows of the stage, the oldest first, with bead, stage, group, originator, login, runner, state and age (`yardr session list`), each opening its bead, and under them the claims of manual groups, live ([List pages](#list-pages)) | `Sessions` |
 | `/sessions?all=1` | the same page; its JSON lists the ended sessions too, every one (`yardr session list -a --all`) | `Sessions` |
-| `/crew` | each crew member: whether it runs, since when, and its unread inbox count when there is one, live. Journals and handoffs are not shown | `Crew` |
+| `/crew` | Crew's root page: the conversation `/talk` opens without `?with=`, live, with the crew in Crew's list, each member's row saying whether it runs, since when and its own unread count. Its JSON is the crew, not the conversation. Journals and handoffs are not shown ([Talk](#talk)) | `Crew` |
 | `/previews` | the yard's previews: one row per preview with its state and a stale mark and, folded under it, the start command in full, the directory, the port, the depot commit and dirty mark beside the depot's HEAD now, the proposer and the lifetime and the running preview's log tail, live; on a view that acts, with Approve, Refuse, Open, Stop and Restart on the row. A card shows the host the [edge](edge.md#previews-through-the-edge) gave the preview as its address once it has one, and Open goes there; a card with no host draws no Open and says why in its place. A running [watch](watch.md) is a card of its own, with the bead, the directory and Open and Stop ([List pages](#list-pages)) | `Previews` |
-| `/config` | the hub of the configuration pages: links to the lists, with Telemetry for the operator, and, drawn for the operator alone, the yardmaster's delegation switch as it stands (`delegation`: `on` or `off`) with the button for the other state. Turning it off takes the operator check alone; turning it on takes the fresh sign-in a strong card takes, and on a view with no gateway to prove one it stays a terminal's ([users.md](users.md#the-yardmaster-for-the-operator)) | `Config` |
+| `/config` | the hub of the configuration pages, a table and a sheet, the fourth stage kind: the pages of Settings by name with what each holds (Groups, Routes, Peers and Telemetry for the operator, Limits) and, drawn for the operator alone, the yardmaster's delegation switch as a setting row with its state (`delegation`: `on` or `off`) and the button for the other. Turning it off takes the operator check alone; turning it on takes the fresh sign-in a strong card takes, and on a view with no gateway to prove one it stays a terminal's. A write the store refuses is a red line under the head. A snapshot ([users.md](users.md#the-yardmaster-for-the-operator)) | `Config` |
 | `/config/delegation/fresh/<state>` | the same return for the yardmaster's delegation switch on `/config`. It spends the one-use state that turning delegation on minted for its operator, turns the switch on and answers 303 to `/config`. The return writes nothing and draws Config again with why when its state was used already, expired, never raised or raised for something else, when the sign-in is not fresh, or when the yard is not hosted. Only the operator who raised the state can spend it ([users.md](users.md#the-yardmaster-for-the-operator)) | |
-| `/delegations/<id>` | a delegated run's record: what the yardmaster ran for an operator, on which of their mails, what each setting held before and how the run is taken back (`yardr delegation show`); in the JSON a pack apply's objects stand by name under `record.objects` and whole, with their diffs and before-states, under `record.plan`; an operator's alone, any operator's, and a 404 for anyone else | `DelegationPage` |
+| `/delegations/<id>` | a delegated run's record, Crew's page in the sixth stage kind: the conversation's head with the yardmaster's name and state, and under it one letter from the yardmaster whose body is the record, with no thread and no composer: what the yardmaster ran for an operator, on which of their mails, what each setting held before and how the run is taken back (`yardr delegation show`); in the JSON a pack apply's objects stand by name under `record.objects` and whole, with their diffs and before-states, under `record.plan`, and `member` is the yardmaster as `/crew` has it where it is still a crew member. An operator's alone, any operator's, and a 404 for anyone else. A snapshot ([Talk](#a-delegated-runs-record)) | `DelegationPage` |
 | `/depots` | the yard's depots as a table, the fourth stage kind: each with its kind, path, base and test command (`yardr depot list`), live | `Depots` |
 | `/depots/<name>` | one depot, the fifth stage kind at depot level: its four counts, its flows as the rows of a table with their stage strips, what waits on the viewer there, what landed in the last day ([One depot](#one-depot)) | `DepotPage` |
 | `/depots/<name>/<flow>` | one flow's list, the fifth stage kind: its open beads grouped by stage in flow order, the empty stages folded, the landing terminal as the last day's log ([One flow's list](#one-flows-list)) | `FlowPage` |
-| `/groups` | the yard's groups: each with its runner, limit, members and config (`yardr group list`), live | `Groups` |
-| `/routes` | the yard's routes in match order: each with its stage, filters and group, or its groups in order with their quota conditions (`yardr route list`), live | `Routes` |
-| `/peers` | the yards this one is linked with: each with its URL, what the link carries and what waits for it (`yardr peer list`), live | `Peers` |
+| `/groups` | the yard's groups as a table, the fourth stage kind: each with its runner, limit and members, its config folded under its row (`yardr group list`), live | `Groups` |
+| `/routes` | the yard's routes as a table in match order, the fourth stage kind: each with its stage, filters and group, or its groups in order with their quota conditions, the id quiet at the end, under the line `the first that matches takes the bead` (`yardr route list`), live | `Routes` |
+| `/peers` | the yards this one is linked with as a table, the fourth stage kind: each with its URL (`none — it calls this yard` where it cannot be called), what the link carries each way and what waits for it (`yardr peer list`), live. The operator's alone: anyone else gets the 403 page, `the peers list is the operator's to read`, and Settings' list has no row for them | `Peers` |
 | `/deps` | what waits on what: one row per blocked bead with the edges with an open end that hold it under it, each end with its title and stage, live ([List pages](#list-pages)) | `Deps` |
 | `/deps?all=1` | the same page; its edges are every edge of the yard, the ones between closed beads too | `Deps` |
-| `/limits` | what the subscriptions the yard burns still carry: each provider in use with its windows, how far each is used and when it resets, and who burns it (`yardr limits`), live | `Limits` |
-| `/telemetry` | the yard's opt-in telemetry switch: off, the consent words with the button that turns it on; on, the install id and the next batch as `yardr telemetry show` renders them; the operator's alone ([Telemetry](#telemetry)) | `Telemetry` |
+| `/limits` | what the subscriptions the yard burns still carry, the fourth stage kind: a block to each provider in use with who burns it, the source and plan, a table of its windows (how far each is used in words with a meter beside them, the target, when it resets, `used up` in red) and the window it waits for, a provider it cannot read saying `not known` with why, the sources that answer for themselves, and `Not asked` (`yardr limits`), live | `Limits` |
+| `/telemetry` | the yard's opt-in telemetry switch, a sheet, the fourth stage kind: the consent words as its lede for every reader; for the operator the switch as a setting row with the button for its other state, and on, the install id, the next request and the next batch as `yardr telemetry show` renders them ([Telemetry](#telemetry)) | `Telemetry` |
 | `/pairing` | in JWT mode ([Behind an auth gateway](#behind-an-auth-gateway)), the pairing page, which opens no pairing now. It shows no code and no QR, only a notice that pairing here no longer gives an app that can call through the edge, and that the yard's operator opens a pairing QR on the yard's own screen to scan instead ([users.md](users.md#enrolled-by-a-code)). Settings lists it as Pair device. Every signed-in user reads it, member and operator alike, and gets the same notice. A POST to it, taken from the view's own pages only, opens and ends nothing and answers the page again with why. A view that is not in JWT mode answers 403 | |
 | `/pairing.png` | the QR image the pairing page once showed. It serves none now: every signed-in user gets a 404 in plain text that carries the page's notice, and a view that is not in JWT mode gets 403 | |
 | `/health` | the yard's liveness facts for a monitor, a proxy or footplate ([Health](#health)) | `Health` |
@@ -956,7 +956,7 @@ Home as JSON:
   names none (manual, exec, peer), has neither.
 - `head` is the yard's newest seq from before the sessions were read.
 
-`/crew` as JSON:
+`/crew` as JSON, the page being the conversation `/talk` opens ([Talk](#talk)):
 
 ```json
 {
@@ -988,8 +988,8 @@ Home as JSON:
   command.
 - `unread` counts the events in its inbox it has not acknowledged
   (`yardr crew show`). The events themselves, its journal and its
-  handoffs are its own and are on no page. On the page the count shows
-  only when it is not zero.
+  handoffs are its own and are on no page. In Crew's list the member's
+  row shows the count (`N unread`) only when it is not zero.
 - `restart` is why a restart was asked for that has not happened yet.
 - `head` is the yard's newest seq from before the crew was read.
 
@@ -1127,8 +1127,10 @@ and the command's are added:
 `/depots`, `/groups`, `/routes`, `/peers`, `/deps` and `/limits` have one
 page each, as rows of the window's lists (Depots and Deps are Lines',
 the rest Settings'): the lists as their commands print them, each marking
-its own row open. The hub (`/config`), the first row of Settings' list,
-links to all six, with Telemetry for the operator.
+its own row open and none linking back to the hub. The hub (`/config`),
+the first row of Settings' list, is a table of the pages of Settings
+(Groups, Routes, Limits, and Peers and Telemetry for the operator), not of
+Depots and Deps, which are Lines' rows.
 `?all=1` is a list command's `--all`: every closed bead, every ended
 session the yard keeps, every edge between closed beads, with no limit.
 Any value but none, `0` or `false` asks for it.
@@ -2419,34 +2421,45 @@ always set there, `eta` beside it when there is more to say):
 
 ## Talk
 
-On a view that acts, `/talk` is its user's conversation
+`/talk` and `/crew` are the sixth of the window's six stage kinds
+(`data-kind="talk"`, [The stage kinds](#the-stage)): a conversation's head, the
+letters by day and sender, and the composer fixed under them. On a view that
+acts, `/talk` is its user's conversation
 (for a browser that holds the view's cookie, [The token and the cookie](#the-token-and-the-cookie))
 with a crew member or another user — the web's `yardr chat` for one party
 at a time — with
 the form that sends it mail as them. `?with=` names either; without it
-the page opens on the yardmaster, else on the first member. The crew and
-the other users stand
-above the letters, each linking to its conversation, with a dot where the
-user has unread mail from it. The conversation opens with its head, under
-that row: the party's name and, beside a crew member's, its state in the
-words footplate lists crew members with. A person shows none.
+the page opens on the yardmaster, else on the first member. `/crew`, Crew's
+root page, opens the conversation `/talk` opens without `?with=`: it takes no
+query, and its JSON is the crew's rows ([`/crew` as JSON](#pages)), where
+`/talk`'s is the conversation. The crew and the other users are Crew's list
+([What each list holds](#what-each-list-holds)), each row linking to its
+conversation, the one in conversation open, with `unread mail` in rust where
+the user has unread mail from it.
 
-The mail stands in a reading column: as wide as the centre up to 880
-pixels, centred past that. Each letter has its time in a gutter at the
-left, then its words with their lines kept, the files it carries, and
-`read` under the user's own where the other party acknowledged it.
+The conversation opens with its head: the party's name and, under it for a
+crew member, its state in the words footplate lists crew members with, the
+agent it runs (its runner, kind and model) and, for a running one, how long it
+has been up, with the time it started in the uptime's title (`running since
+Oct 8 09:14`). A person shows none of these, and neither does a member that
+has left the crew. A conversation has no back link: the list's open row is the
+way back to a thread.
+
+The mail stands in the stage's column, 760 pixels at most. Each letter has its
+time in a gutter at the left, then its words with their lines kept, the files
+it carries, and `read` under the user's own where the other party acknowledged
+it.
 
 Letters are grouped as footplate groups them. The day stands centred
 between two hairlines above the first letter of a day (Today, Yesterday, or
 the weekday with the date) and above the first letter of a page. A letter
-reads under the head above it, with no head of its own, when it has the
+reads under the head above it, with no sender on view, when it has the
 same sender as that letter, comes within five minutes of it and falls on
-the same day. Every other letter stands under a head: its time and the
-sender's name, dimmed for the user's own. Only the letter's `from` is the
-sender. The device it came through, the name it speaks as and its
-addressee are part of the line the page names it by, but they start no
-head; a letter whose line differs from the letter above says it, quietly,
-above its words.
+the same day; its sender stays with a screen reader. Every other letter names
+its sender above its words, dimmed for the user's own. Only the letter's `from`
+is the sender. The device it came through, the name it speaks as and its
+addressee are part of the line the page names it by, but they start no group; a
+letter whose line differs from the letter above names it all the same.
 
 Days and times are the reader's. Each time is a `<time datetime>`; `yard.js`
 shows it in the browser's zone and groups the whole pane by the browser's
@@ -2458,29 +2471,33 @@ letters, and its first opens the day.
 
 A page the mail carries is named without a link, never drawn as an image:
 no link here opens one. A file downloads from its link, `file <name>`.
-A file the yard no longer holds is a line saying so, never a broken image.
+A file the yard no longer holds is a line saying so, never a broken image;
+so is a file the peer's yard did not take (`not taken: <why>`).
 With no user the page says the view does not act; on a view that acts, for a
 browser that holds no cookie, it says that and where the token URL comes from
-(`yardr web open`, or the terminal the view started in).
+(`yardr web open`, or the terminal the view started in); with no crew it says
+`yardr crew add` makes the first member. Each notice stands under a head of its
+own, the page's name.
 
-The page reads as a messaging app: the crew and the people stay above the
-letters and
-the form below while the letters scroll between them, the newest in view
-on open with the form under it. The form posts to `/talk?with=<member>`
+The page reads as a messaging app: the stage does not scroll, the head stays
+above the letters and the composer below while the letters scroll between
+them, the newest in view on open with the form under it. The form posts to
+`/talk?with=<member>`
 ([Acting as a user](#acting-as-a-user)): mail sent, the page lands back on
 the conversation with the new letter at the bottom; mail refused stays in
 the form with the reason. A text over one mail's size is sent as numbered
 mails, as `yardr mail` sends it. The newest 50 letters are live: each event of
 the yard reads them again, so an answer shows without a reload. Past them
-an "Older mail" link reads the next 50 older, following itself as it
-scrolls into view, a page at a time; without scripts it is a plain link to
-the older page under `?before=`, a snapshot read undisturbed, with the way
-back above the letters.
+an `Older mail` link, at the top of the letters, reads the next 50 older,
+following itself as it scrolls into view, a page at a time; without scripts it
+is a plain link to the older page under `?before=`, a snapshot read
+undisturbed, with `Newest` above the letters to come back.
 
-The form is a composer: a framed box under the mail, on the raised ground
-with a hairline and the card radius, as wide as the mail and on its edges. It
+The form is a composer: a framed box fixed under the mail, on the raised ground
+with a hairline and the card radius, as wide as the mail. It
 holds the label `Mail to <member> as <user>`, the line to write in, and the
-Send button. Enter sends the mail and Shift+Enter breaks the line, as in
+Send button, the page's one filled button. Enter sends the mail and Shift+Enter
+breaks the line, as in
 footplate, so that a person who moves between the two never sends half a
 thought with the key that breaks a line in the other; Ctrl+Enter and
 Cmd+Enter, which sent before the keys moved, still send. A pasted line break
@@ -2488,8 +2505,9 @@ still breaks the line, and an Enter that confirms what an input method is
 composing sends nothing. The hint beside Send names Enter and Shift+Enter:
 `yard.js` puts it in from the words on the page, so without scripts the page
 names no key. There Enter breaks the line, as a text field's does, and the
-button sends. Mail refused says why above the composer, on its edge, and the
-words stay in its line.
+button sends. Mail refused says why in a red line above the composer, and the
+words stay in its line; the form it brings back has the id the page had, which
+a read of the page again leaves where it is (`hx-preserve`).
 
 As JSON:
 
@@ -2498,6 +2516,9 @@ As JSON:
   "as": "mckean",
   "with": "yardmaster",
   "with_status": "idle",
+  "member": {"name": "yardmaster", "state": "running", "running": true, "enabled": true,
+             "status": "idle", "since": "2026-10-08T03:38:02Z", "up": "5h 52m",
+             "agent": "herdr · claude · opus", "kind": "claude", "model": "opus", "unread": 3},
   "crew": [
     {"name": "yardmaster", "unread": true},
     {"name": "scribe", "unread": false}
@@ -2523,10 +2544,38 @@ the page names for it) beside them, and `grouped` (it reads under the head
 above it), `day` (the words of the day it opens) and `differs` (a grouped
 letter's `sender` differs from the one above it) where they hold, by the
 server's zone; and `more` beside them where older mail
-was left out. `error` and `draft` stand only on a POST that sent nothing:
+was left out. `member` is the crew member in conversation as `/crew` has it,
+whose agent and uptime the head shows; it is absent for a person. `error` and
+`draft` stand only on a POST that sent nothing:
 why, and the words back in the form. `max_mail` is how many bytes the form
 takes. `needs_token` stands, true, where `as` is empty because the view acts
 and this request holds no cookie.
+
+### A delegated run's record
+
+`/delegations/<id>` is Crew's page too, in the same stage kind: the
+conversation's head (the yardmaster the record names, with its state where it
+is still a crew member) and under it the day's separator and one letter from the
+yardmaster, whose body is the record, a card with the ask card's frame. No
+thread stands there and no composer; the yardmaster's row is open in Crew's
+list, and that is the way back to the conversation. Where the member has left
+the crew the head has no state line and no row is open. The record is the mail
+the yardmaster sends the operator in its long form, so its time is the
+letter's: the minute in the gutter, the day in the separator, and the seconds
+that a record of today prints (`15:04:05`; another day's reads `Jan 2 15:04`)
+in the time's title. The card is a section head, `Record <id>: <yardmaster> for
+<user>`, then what the record holds in the order `yardr delegation show` prints
+it, each a fact where it has one: the mail it was made on (its number and
+sender, none of its words), what changed, the command that ran, and for a pack
+apply the state (`started (unfinished)`, `done` or `failed`), the pack and its
+digest, where it came from and the digest that stood before it, what was
+written and why it failed (in red), and the command that takes the run back. The
+settings the run changed are a table of the setting, what it held before and
+what it holds now, `(unset)` for one that stood unset or is cleared, and a pack
+apply's objects are notes, each by kind and name with what the import does to
+it, and for an updated one its diff and before-state as file blocks. It is a
+snapshot, and an operator's alone, any operator's: anyone else gets the 404
+error page.
 
 ## The stream
 
@@ -2692,17 +2741,22 @@ head sequence is deliberately not among it.
 ## Telemetry
 
 `/telemetry` is the yard's opt-in telemetry switch for a browser: off
-unless turned on, and turning on only on an explicit click. Every reader
-gets the consent words the switch is
-turned on under — the five questions the batch answers and where it
+unless turned on, and turning on only on an explicit click. It is a sheet,
+the fourth stage kind (`data-kind="table"`): every reader gets the consent
+words the switch is
+turned on under as its lede — the five questions the batch answers and where it
 goes, the id-only profile, the pseudonymous sentence — while the
 switch itself, the install id and the next payload are the operator's
-alone: with the switch off the operator gets the words with the button
-that turns it on, and with it on the id and the next batch as `yardr
-telemetry show` renders them, with the button that turns it off. Anyone
-else is shown the words with no switch, no id and no control, and the
-hub links the page for the operator alone. The page is not live: the
-switch moves rarely, and a write answered lands on the page. Where the
+alone: with the switch off the operator gets the words with the switch as a
+setting row (its state, `Nothing is sent.` and the button that turns it on),
+and with it on the row's state and the day it was turned on, the id and the
+next request as facts, the next batch as a file block (or why there is none),
+how to have the data deleted, and the button that turns it off. Anyone
+else is shown the words and `Telemetry is the operator's to see and set`, with
+no switch, no id and no control, and Settings' list has no row for them. The
+page is not live: the
+switch moves rarely, and a write answered lands on the page, a write the store
+refused as a red line under its head. Where the
 batch goes reads without its scheme, since a page names no host but the
 yard's.
 
@@ -2773,7 +2827,20 @@ The list is built from what the shell has read for the page already, the overvie
 
 ### The stage
 
-`<main id="stage">` holds the phone's top bar, the page's leaf where it is live, the page's heading and the page's own content (a page of a stage kind, `Page.Kind`, draws its own head in place of the shell's heading, as [the overview](#the-overview), [a bead's page](#one-bead), [the list pages](#list-pages), [the flow lists](#flows) and `/depots` do): one column of 760 px at most, centred, with a 24 px gutter, and it starts 44 px down. The list and the stage scroll apart, each inside itself; the document does not. On load the list scrolls the open row to its middle, as far as its ends allow, in a browser that has `scroll-initial-target`, and opens at its top in one that has not. Wide text that must not wrap (a stage file, `.text.file`) scrolls sideways inside its block.
+`<main id="stage">` holds the phone's top bar, the page's leaf where it is live, the page's heading and the page's own content (a page of a stage kind, `Page.Kind`, draws its own head in place of the shell's heading): one column of 760 px at most, centred, with a 24 px gutter, and it starts 44 px down. The list and the stage scroll apart, each inside itself; the document does not. On load the list scrolls the open row to its middle, as far as its ends allow, in a browser that has `scroll-initial-target`, and opens at its top in one that has not. The stage of a conversation, which has a composer, fills the window instead and does not scroll: its letters do, between the head and the composer ([Talk](#talk)). Wide text that must not wrap (a stage file, `.wv-file`) scrolls sideways inside its block, and so does a table inside its own.
+
+A page draws itself as one of six stage kinds, which its article names in `data-kind` and its template draws once:
+
+| kind | `data-kind` | pages |
+|---|---|---|
+| 1 overview | `overview` | `/`, `/line` ([The overview](#the-overview)) |
+| 2 one bead | `bead` | `/beads/<id>`, and its pack file page as the record form ([One bead](#one-bead)) |
+| 3 list page | `list` | `/beads`, `/sessions`, `/previews`, `/deps` ([List pages](#list-pages)) |
+| 4 table | `table` | `/depots`, `/groups`, `/routes`, `/peers` and `/limits` as tables; `/config` and `/telemetry` as sheets, a lede, setting rows and a table or a file block |
+| 5 flow list | `flow` | `/flows`, `/depots/<name>`, `/depots/<name>/<flow>` ([Flows](#flows)) |
+| 6 talk | `talk` | `/crew`, `/talk`, `/delegations/<id>` ([Talk](#talk)) |
+
+A page in no row of the map (an error, `Not built yet`, the pairing notice) has no kind: the shell draws its heading over it, and the rail and the list stand around it as they do for every page. A table is a list read across: one hairline a row, its header in quiet words, and it scrolls sideways inside its own block where it must. A sheet's setting row is the name of a setting, one line of what it does, its state and its button.
 
 ### Swaps
 
@@ -2829,10 +2896,9 @@ anywhere else.
 | `--surface-sunken`, `--surface-hover`, `--surface-pressed`, `--border-hover` | `#101112`, `#232426`, `#2a2b2e`, `#46484c` | the design system's names, for the rail, the pointer's row, the open row and tile, and a control's hover |
 | `--text-accent` | `#e2794a` (light: `#8f3c19`) | rust as text, where `--accent` fills a mark |
 | `--chip`, `--chip-ink`, `--badge-ink` | rust 400 with the ground's ink (light: rust 600 with white) | the yard's chip, and the letters of a badge |
-| `--working` | the accent | status: a session is working |
+| `--pill`, `--pill-hover`, `--on-accent` | rust 600 and its hover, with white | the tile's badge fill and the one filled button, Send |
 | `--running` | `#4cc38a` | status: running only |
 | `--held` | `#e5675a` | status: blocked or held, and errors |
-| `--done` | faint | status: done |
 | `--mono` | | | the main face: `"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace` |
 | `--sans` | | | human words — the overview's answer, reasons and titles — and longer prose: `"IBM Plex Sans", system-ui, sans-serif` |
 | `--text`, `--small`, `--large` | | | 14px, 11px (labels), 20px (names and figures) |
@@ -2851,8 +2917,8 @@ without IBM Plex Sans or Plex Mono shows its system sans and monospace.
 
 Rules the stylesheet holds to, and a test checks the second:
 
-- Small uppercase labels with wide letter-spacing (`.label`) name things;
-  values are in the plain face.
+- Labels and table headers are in the plain face, in quiet words, never in
+  capitals; values stand beside them.
 - Weight: one large line per screen (`.wv-answer` on the overview,
   `--wv-answer`); human words (titles, reasons, the answer) in `--sans`, machine words
   (ids, counts, times, stages) monospace; every row and feed line one
@@ -2860,9 +2926,7 @@ Rules the stylesheet holds to, and a test checks the second:
 - Corners are square in the pages' bodies (`border-radius: 0`). The
   window's parts, `.wv-*`, take the design system's: 4, 6, 8px and full, by
   token, and a circle for a dot (`.wv-dot`, with `--wait`, `--run`,
-  `--idle` or `--fault`). The status dot of a body (`.dot`, with `.working`,
-  `.running` or `.held`) keeps the canvas's; the Beads filters' chips are
-  pills.
+  `--idle` or `--fault`); the Beads filters' chips are pills.
 - Words come from the yard: line, landed, held, waits for you.
 
 The overview's parts are the stage kind's own (`wv-page`, `.wv-answer` with
@@ -2882,17 +2946,19 @@ groups (`.wv-group`, with `__head`, `__count`, `__note` and `__who`, and `--fold
 `--off` for a stage `/flows` folds and the beads off the flow), `.wv-more` (`Show N
 more`), a closed row's check (`.wv-check`, with `.wv-srow--quiet`), the depot's counts
 (`.wv-counts`) and its stage strip (`.wv-strip`, with `.wv-strip__cell` and its `--open`,
-`--ask` and `--merged`).
+`--ask` and `--merged`). The settings tables add the fold under a table's row
+(`.wv-table__fold`, a group's config) and the sheet's parts: the lede (`.wv-lede`),
+the setting row (`.wv-setting`, with `__text`, `__name` and `__help`), the state in
+words (`.wv-state`, with `--on`) and a window's meter (`.wv-meter`). The talk pages add the
+conversation (`.wv-talk`), its letters (`.wv-letters`, `.wv-day`, `.wv-letter` with
+`__at`, `__who` and `__body` and `--own`, `.wv-read`, and `.wv-vh` for the sender a
+grouped letter names to a screen reader alone), the composer (`.wv-compose` with
+`__row`, `.wv-hint` and `.wv-btn--primary`) and a delegated run's record (`.wv-record`
+with `__label`).
 
-Classes the other pages build from: `.item` (one entry of a page, with a
-hairline under it), `.item-head`, `.label`, `.figures` (name and number
-pairs), `.peers` (the crew to talk to), `.talk-head` (the conversation's head), `.letter` (one mail
-of the talk page, with `.head`, `.day`, `.differs` and `.own` for how it reads, and
-`.day-break`, `.at`, `.who` and `.body` inside), `.error` (why a mail was not sent),
-`.facts` (name and value rows), `.routes` (one row per route, as `/routes` shows them on a wide window), `.text`
-(what someone wrote, lines kept), `.note`, `.bead` (a bead's
-id), `.state` (a status dot and its word),
-`.faint`, `.held` and `.dot`.
+Classes the pages in no stage kind build from: `.item` (one entry of a page, with a
+hairline under it), `.error`, `.faint`, `.held` and `.opens` (a summary card's sentence
+that opens the text it names).
 
 ## Adding a page
 

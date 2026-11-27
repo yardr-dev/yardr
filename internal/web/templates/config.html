@@ -1,31 +1,46 @@
+{{- /* /config, a table and a sheet, the fourth stage kind: the pages of Settings
+       by name with what each lists, and for an operator the yardmaster's
+       delegation switch as a setting row, with the button for its other
+       state. The switch turns only on an explicit click. A write the store
+       refused stands as a red line under the head. The page is a snapshot:
+       it has no live part of its own. */}}
 {{define "content"}}
-{{- /* The hub of the yard's configuration pages: static links, and for an
-       operator the yardmaster's delegation switch with the button for its
-       other state. The switch turns only on an explicit click. */}}
-{{- with .Data.Error}}
-<p class="item error">{{.}}</p>
-{{- end}}
-<section class="item">
-  {{- range .Data.Links}}
-  <p><a href="{{.Path}}">{{.Title}}</a> <span class="faint">— {{.Blurb}}</span></p>
-  {{- end}}
-</section>
-{{- with .Data.Delegation}}
-<article class="item">
-  <header class="item-head">
-    <h2>Yardmaster for the operator</h2>
-    {{- if eq . "on"}}
-    <span class="state">on</span>
-    {{- else}}
-    <span class="state faint">off</span>
+{{- with .Data}}
+<article class="wv-page" data-kind="{{$.Kind}}">
+  <header class="wv-head">
+    <h1 class="wv-title">Config</h1>
+    <p class="wv-meta">The yard's configuration, one table a page</p>
+    {{- with .Error}}
+    <p class="wv-callout">{{.}}</p>
     {{- end}}
   </header>
-  <p>On, the yardmaster may run an operator's defining commands for them on that operator's own mail to it: a group's kind, model, directories and permission preset, a crew member's beside the yardmaster's own, a depot's test command and base, where a user is told, and a new hook in its safe shape. Each run is recorded and mailed to the operator as it runs. Prompts, commands, secrets and free args stay on cards or at a terminal.</p>
-  {{- if eq . "on"}}
-  <form method="post" action="/config/delegation" hx-post="/config/delegation" hx-push-url="false">{{template "csrf"}}<button type="submit" name="action" value="off">Turn off</button></form>
-  {{- else}}
-  <p class="faint">Turning it on takes a fresh sign-in.</p>
-  <form method="post" action="/config/delegation" hx-post="/config/delegation" hx-push-url="false">{{template "csrf"}}<button type="submit" name="action" value="on">Turn on</button></form>
+  <div class="wv-scrollx">
+    <table class="wv-table">
+      <thead><tr><th>page</th><th>what it holds</th></tr></thead>
+      <tbody>
+        {{- range .Links}}
+        <tr><td class="wv-name"><a href="{{.Path}}">{{.Title}}</a></td><td>{{.Blurb}}</td></tr>
+        {{- end}}
+      </tbody>
+    </table>
+  </div>
+  {{- with .Delegation}}
+  <section class="wv-block" aria-label="Yardmaster for the operator">
+    <div class="wv-setting">
+      <div class="wv-setting__text">
+        <p class="wv-setting__name">Yardmaster for the operator</p>
+        <p class="wv-setting__help">On, the yardmaster may run an operator's defining commands for them on that operator's own mail to it: a group's kind, model, directories and permission preset, a crew member's beside the yardmaster's own, a depot's test command and base, where a user is told, and a new hook in its safe shape. Each run is recorded and mailed to the operator as it runs. Prompts, commands, secrets and free args stay on cards or at a terminal.</p>
+        {{- if ne . "on"}}
+        <p class="wv-setting__help">Turning it on takes a fresh sign-in.</p>
+        {{- end}}
+      </div>
+      <span class="wv-state{{if eq . "on"}} wv-state--on{{end}}">{{.}}</span>
+      <form method="post" action="/config/delegation" hx-post="/config/delegation" hx-push-url="false">{{template "csrf"}}
+        {{- if eq . "on"}}<button class="wv-btn" type="submit" name="action" value="off">Turn off</button>
+        {{- else}}<button class="wv-btn" type="submit" name="action" value="on">Turn on</button>{{end}}
+      </form>
+    </div>
+  </section>
   {{- end}}
 </article>
 {{- end}}

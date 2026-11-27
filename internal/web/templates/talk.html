@@ -1,95 +1,90 @@
 {{define "letter"}}
-  {{- /* One letter of the column. A letter that heads its group shows the
-         sender's name beside its time; one that reads under the head above
-         it shows its time alone, in the gutter at the left, and says who
-         wrote it only to a screen reader, unless its device, the name it
-         speaks as or its addressee differs from the letter above. A letter
-         that opens a day carries the day's separator above all of it. The
-         classes say which of these stand, as the server's zone reads the
-         letters; yard.js sets them again in the browser's, from the times
-         and the senders here. */}}
-  <article class="letter{{if not .Grouped}} head{{end}}{{if .Day}} day{{end}}{{if .Differs}} differs{{end}}{{if .Own}} own{{end}}" data-seq="{{.Seq}}" data-from="{{.From}}">
-    <p class="day-break">{{.Day}}</p>
-    <time class="at" datetime="{{.At.UTC.Format "2006-01-02T15:04:05Z"}}">{{clockTime .At}}</time>
-    <p class="who">{{.Sender}}</p>
-    <div class="body">
-    {{- if .Text}}
-    <pre class="text">{{.Text}}</pre>
-    {{- end}}
-    {{- $words := .Text}}
-    {{- $miss := .Missing}}
-    {{- range .Files}}
-    {{- $kind := .Kind}}
-    {{- if .NotTaken}}
-    <p class="faint">{{$kind}} {{slice .Hash 0 8}}: not taken: {{.NotTaken}}</p>
-    {{- else if index $miss .Hash}}
-    <p class="faint">{{$kind}} {{slice .Hash 0 8}}: the yard no longer has it</p>
-    {{- else if eq $kind "page"}}
-    <p class="faint">page {{slice .Hash 0 8}}: pages open from notes</p>
-    {{- else if eq $kind "image"}}
-    <img src="{{blobURL .Hash .Name}}" alt="{{$words}}">
-    {{- else if .Name}}
-    <a href="{{blobURL .Hash .Name}}" hx-boost="false">file {{.Name}}</a>
-    {{- else}}
-    <a href="{{blobURL .Hash .Name}}" hx-boost="false">file {{slice .Hash 0 8}}</a>
-    {{- end}}
-    {{- end}}
-    {{- if and .Own .Read}}
-    <p class="label faint">read</p>
-    {{- end}}
+  {{- /* One letter of the pane. The day it opens stands above it as a separator
+         of its own, centred between two hairlines. The time stands in the
+         gutter at the left. The sender is named on a letter that heads its
+         group, and on one whose device, whose name it speaks as or whose
+         addressee differs from the letter above; the letter that reads under
+         the head above it says who wrote it to a screen reader alone. The
+         server groups by its own zone; yard.js groups again by the reader's,
+         from the times and the senders here. */}}
+  {{- if .Day}}
+  <p class="wv-day">{{.Day}}</p>
+  {{- end}}
+  <article class="wv-letter{{if .Own}} wv-letter--own{{end}}" data-seq="{{.Seq}}" data-from="{{.From}}">
+    <time class="wv-letter__at" datetime="{{.At.UTC.Format "2006-01-02T15:04:05Z"}}">{{clockTime .At}}</time>
+    <div class="wv-letter__body">
+      <span class="{{if or (not .Grouped) .Differs}}wv-letter__who{{else}}wv-vh{{end}}">{{.Sender}}</span>
+      {{- if .Text}}
+      <p class="wv-text">{{.Text}}</p>
+      {{- end}}
+      {{- $words := .Text}}
+      {{- $miss := .Missing}}
+      {{- range .Files}}
+      {{- $kind := .Kind}}
+      {{- if .NotTaken}}
+      <p class="wv-faint">{{$kind}} {{slice .Hash 0 8}}: not taken: {{.NotTaken}}</p>
+      {{- else if index $miss .Hash}}
+      <p class="wv-faint">{{$kind}} {{slice .Hash 0 8}}: the yard no longer has it</p>
+      {{- else if eq $kind "page"}}
+      <p class="wv-faint">page {{slice .Hash 0 8}}: pages open from notes</p>
+      {{- else if eq $kind "image"}}
+      <img src="{{blobURL .Hash .Name}}" alt="{{$words}}">
+      {{- else if .Name}}
+      <a class="wv-note__file" href="{{blobURL .Hash .Name}}" hx-boost="false">file {{.Name}}</a>
+      {{- else}}
+      <a class="wv-note__file" href="{{blobURL .Hash .Name}}" hx-boost="false">file {{slice .Hash 0 8}}</a>
+      {{- end}}
+      {{- end}}
+      {{- if and .Own .Read}}
+      <span class="wv-read">read</span>
+      {{- end}}
     </div>
   </article>
 {{end}}
+{{- /* The talk page, the sixth stage kind: the conversation of the user the view
+       acts as with one crew member or user, and for /crew the conversation
+       /talk opens without ?with=. The head is the party's; the crew and the
+       people are Crew's list. The three notices stand in its place where there
+       is no conversation: no token, a view that does not act, no crew. */}}
 {{define "content"}}
-<div id="talk">
-  {{- if .Data.NeedsToken}}
-  {{- /* The view acts, but this browser has not shown its cookie. */}}
-  <p class="item">This view acts as a user, and only for a browser that has opened its token URL. Run <code>yardr web open</code> on the machine the view runs on, or open the URL it printed in its terminal when it started, and this page holds that user's conversation with a crew member or another user, with the form that writes to it.</p>
-  {{- else if not .Data.As}}
-  {{- /* The view does not act: no user to show a conversation of. */}}
-  <p class="item">This view does not act. Start it with <code>--as &lt;user&gt;</code>, a user of the yard, and this page holds that user's conversation with a crew member or another user, with the form that writes to it.</p>
-  {{- else if not .Data.With}}
-  <p class="item">The yard has no crew: <code>yardr crew add</code> makes its first member.</p>
-  {{- else}}
-  {{- /* The crew and the people to talk to, the one in conversation marked.
-         It stays above the letters while they scroll, with the way back on
-         an older page. */}}
-  <nav class="peers" aria-label="Crew and people">
-    <ul>
-      {{- range .Data.Crew}}
-      <li><a href="/talk?with={{.Name}}"{{if eq .Name $.Data.With}} aria-current="page"{{end}}>{{if .Unread}}<span class="dot unread" aria-label="unread mail"></span>{{end}}{{.Name}}</a></li>
-      {{- end}}
-      {{- range .Data.People}}
-      <li><a href="/talk?with={{.Name}}"{{if eq .Name $.Data.With}} aria-current="page"{{end}}>{{if .Unread}}<span class="dot unread" aria-label="unread mail"></span>{{end}}{{.Name}}</a></li>
-      {{- end}}
-    </ul>
-    {{- if ne .Data.Before 0}}
-    <p><a href="/talk?with={{.Data.With}}">Newest</a></p>
-    {{- end}}
-  </nav>
-  {{- /* The conversation's head: the party's name in the section face, with
-         the state of a crew member beside it in footplate's words. It
-         stands above the letters while they scroll. */}}
-  <header class="talk-head">
-    <h2 class="section-head">{{.Data.With}}</h2>
-    {{- if .Data.WithStatus}}
-    <span class="state">· {{.Data.WithStatus}}</span>
-    {{- end}}
-  </header>
-  {{- /* The letters, oldest first, scrolling between the crew and the form.
-         The pane runs bottom-up, so the newest letter is in view on open
-         with the form under it; each block inside keeps its own order. The
-         blocks stand in the reading column. */}}
-  <div id="letters">
-    {{- /* Every event of the stream reads the newest page again, by the leaf
-           in the shell, and puts the letters in place: mail sent and mail
-           read arrive with an event. An older page is a snapshot, read
-           undisturbed. */}}
+{{- with .Conversation}}
+{{- if .NeedsToken}}
+{{- /* The view acts, but this browser has not shown its cookie. */}}
+<article class="wv-page" data-kind="{{$.Kind}}">
+  <header class="wv-head"><h1 class="wv-title">{{$.Title}}</h1></header>
+  <p class="wv-lede">This view acts as a user, and only for a browser that has opened its token URL. Run <code>yardr web open</code> on the machine the view runs on, or open the URL it printed in its terminal when it started, and this page holds that user's conversation with a crew member or another user, with the form that writes to it.</p>
+</article>
+{{- else if not .As}}
+{{- /* The view does not act: no user to show a conversation of. */}}
+<article class="wv-page" data-kind="{{$.Kind}}">
+  <header class="wv-head"><h1 class="wv-title">{{$.Title}}</h1></header>
+  <p class="wv-lede">This view does not act. Start it with <code>--as &lt;user&gt;</code>, a user of the yard, and this page holds that user's conversation with a crew member or another user, with the form that writes to it.</p>
+</article>
+{{- else if not .With}}
+<article class="wv-page" data-kind="{{$.Kind}}">
+  <header class="wv-head"><h1 class="wv-title">{{$.Title}}</h1></header>
+  <p class="wv-lede">The yard has no crew: <code>yardr crew add</code> makes its first member.</p>
+</article>
+{{- else}}
+<article class="wv-page wv-talk" data-kind="{{$.Kind}}">
+  {{- template "talkhead" .Party}}
+  {{- /* An older page read on its own is a snapshot, and says the way back. */}}
+  {{- if ne .Before 0}}
+  <a class="wv-older" href="/talk?with={{.With}}">Newest</a>
+  {{- end}}
+  {{- /* The letters, oldest first, scrolling between the head and the form.
+         The pane runs bottom-up, so the newest letter is in view on open with
+         the form under it, and the link to older mail, at its top, is out of
+         view until it is scrolled to; each block inside keeps its own order.
+         Every event of the stream reads the newest page again, by the leaf in
+         the shell, and puts the letters in place: mail sent and mail read
+         arrive with an event. */}}
+  <div class="wv-letters" id="letters">
     <div id="live">
-      {{- if eq .Data.Before 0}}
-      {{- range .Data.Letters}}{{template "letter" .}}
+      {{- if eq .Before 0}}
+      {{- range .Letters}}{{template "letter" .}}
       {{- else}}
-      <p class="item faint">No mail between {{$.Data.As}} and {{$.Data.With}} yet.</p>
+      <p class="wv-none">No mail between {{$.Conversation.As}} and {{$.Conversation.With}} yet.</p>
       {{- end}}
       {{- end}}
     </div>
@@ -97,46 +92,45 @@
            link, which htmx follows by itself once it scrolls into view,
            putting that page's letters in the link's place. */}}
     <div id="earlier">
-      {{- if and .Data.More .Data.Letters}}
-      {{- with index .Data.Letters 0}}
-      <a class="item older label" href="/talk?with={{$.Data.With}}&amp;before={{.Seq}}" hx-get="/talk?with={{$.Data.With}}&amp;before={{.Seq}}" hx-trigger="intersect once" hx-select="#earlier > *" hx-target="this" hx-swap="outerHTML" hx-push-url="false" hx-select-oob="unset">Older mail</a>
+      {{- if and .More .Letters}}
+      {{- with index .Letters 0}}
+      <a class="wv-older" href="/talk?with={{$.Conversation.With}}&amp;before={{.Seq}}" hx-get="/talk?with={{$.Conversation.With}}&amp;before={{.Seq}}" hx-trigger="intersect once" hx-select="#earlier > *" hx-target="this" hx-swap="outerHTML" hx-push-url="false" hx-select-oob="unset">Older mail</a>
       {{- end}}
       {{- end}}
-      {{- if ne .Data.Before 0}}
-      {{- range .Data.Letters}}{{template "letter" .}}
+      {{- if ne .Before 0}}
+      {{- range .Letters}}{{template "letter" .}}
       {{- else}}
-      <p class="item faint">Nothing older.</p>
+      <p class="wv-none">Nothing older.</p>
       {{- end}}
       {{- end}}
     </div>
   </div>
-  {{- if .Data.Error}}
-  <p class="item error">{{.Data.Error}}</p>
+  {{- with .Error}}
+  <p class="wv-callout">{{.}}</p>
   {{- end}}
-  {{- /* The composer: a framed box in the reading column under the mail,
-         holding the label, the line and the Send row. The form posts and
-         puts the page's answer in the stage, letters and an emptied form
-         alike; without scripts it posts and loads the conversation it
-         lands on. A read of the page again leaves the form where it is
-         (hx-preserve), so what is typed survives what arrives: its id
-         names the conversation and the newest letter the user wrote, so
-         the form a send brings, and another conversation's, are new
-         ones. */}}
-  <form class="compose" id="{{.Data.Composer}}" hx-preserve="true" method="post" action="/talk?with={{.Data.With}}" hx-post="/talk?with={{.Data.With}}" hx-push-url="false">
+  {{- /* The composer: a framed box fixed under the mail, holding the label, the
+         line and the Send row. The form posts and puts the page's answer in the
+         stage, letters and an emptied form alike; without scripts it posts and
+         loads the conversation it lands on. A read of the page again leaves the
+         form where it is (hx-preserve), so what is typed survives what arrives:
+         its id names the conversation and the newest letter the user wrote, so
+         the form a send brings, and another conversation's, are new ones. */}}
+  <form class="wv-compose" id="{{.Composer}}" hx-preserve="true" method="post" action="/talk?with={{.With}}" hx-post="/talk?with={{.With}}" hx-push-url="false">
     {{template "csrf"}}
-    <label class="label" for="text">Mail to {{.Data.With}} as {{.Data.As}}</label>
-    <textarea id="text" name="text" rows="3" required maxlength="{{.Data.MaxMail}}" placeholder="Write to {{.Data.With}}…">{{.Data.Draft}}</textarea>
+    <label for="text">Mail to {{.With}} as {{.As}}</label>
+    <textarea id="text" name="text" rows="2" required maxlength="{{.MaxMail}}" placeholder="Write to {{.With}}…">{{.Draft}}</textarea>
     {{- /* The keys beside the Send button: Enter sends and Shift+Enter breaks
            the line, as in footplate. The words ride in data-hint, and yard.js
            puts them in the hint and shows it. The element stays empty, for a
            browser that shows hidden text would show them: without scripts the
            page names no key, which is true, since there Enter breaks the line
            and only the button sends. */}}
-    <div class="send-row">
-      <span class="hint" id="send-keys" data-hint="Enter to send · Shift+Enter for a new line" hidden></span>
-      <button type="submit">Send</button>
+    <div class="wv-compose__row">
+      <span class="wv-hint" id="send-keys" data-hint="Enter to send · Shift+Enter for a new line" hidden></span>
+      <button class="wv-btn wv-btn--primary" type="submit">Send</button>
     </div>
   </form>
-  {{- end}}
-</div>
+</article>
+{{- end}}
+{{- end}}
 {{end}}

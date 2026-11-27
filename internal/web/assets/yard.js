@@ -19,7 +19,9 @@
 // form in place of the talk, so the hint is shown again after every swap.
 //
 // The talk page's letters are grouped by the reader's day and clock, which
-// the browser sets over the whole pane (groupLetters, below).
+// the browser sets over the whole pane (groupLetters, below). A delegated run's
+// record stands in a letter's place on a page with no composer, and is left as
+// the server drew it.
 //
 // The overview's feed is grouped by the hour, each group under a head. A
 // stream carries one event at a time and knows nothing of what the page shows,
@@ -70,12 +72,15 @@ document.addEventListener("htmx:afterSwap", showSendKey);
 // which is the page as it reads where this script does not run, and its
 // first paint. A letter reads under the head above it, its time in the
 // gutter, when it is from the same sender, within five minutes of that
-// letter and on the same day; a letter that opens a day carries the day's
-// separator. That is talk.go's grouped, read again here in the browser's
-// zone over the whole pane: the newest page and the older pages htmx has put
-// above it, which no one page of the server sees across. The classes are the
-// template's (head, day, differs); the times and the day's words are
-// written in the browser's zone.
+// letter and on the same day; a letter that opens a day has the day's
+// separator above it. That is talk.go's grouped, read again here in the
+// browser's zone over the whole pane: the newest page and the older pages
+// htmx has put above it, which no one page of the server sees across. A letter
+// names its sender (wv-letter__who) where it heads a group or says something
+// the letter above it does not, and to a screen reader alone (wv-vh) where it
+// does not; the day's separator is the paragraph before the letter. The
+// classes are the template's; the times and the day's words are written in the
+// browser's zone.
 var WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -96,9 +101,12 @@ function pad(n) {
 }
 
 function groupLetters() {
+  var pane = document.getElementById("letters");
+  // Only a conversation is grouped: the page of a record has no composer.
+  if (!pane || !document.querySelector(".wv-compose")) return;
   // The pane holds the live block before the older ones in the document and
   // shows them after: the seqs are the order of the mail.
-  var letters = Array.prototype.slice.call(document.querySelectorAll("#letters .letter"));
+  var letters = Array.prototype.slice.call(pane.querySelectorAll(".wv-letter"));
   letters.sort(function (a, b) { return a.dataset.seq - b.dataset.seq; });
   var now = new Date();
   var before = null;
@@ -111,20 +119,29 @@ function groupLetters() {
       before = null;
       return;
     }
-    var who = letter.querySelector(".who").textContent;
+    var who = letter.querySelector(".wv-letter__who, .wv-vh");
     var head = true, day = true, differs = false;
     if (before) {
       day = !sameDay(before.at, at);
       var gap = Math.abs(Math.floor(at.getTime() / 1000) - Math.floor(before.at.getTime() / 1000));
       head = day || letter.dataset.from !== before.from || gap > 300;
-      differs = !head && who !== before.who;
+      differs = !head && who.textContent !== before.who;
     }
-    letter.classList.toggle("head", head);
-    letter.classList.toggle("day", day);
-    letter.classList.toggle("differs", differs);
+    who.className = head || differs ? "wv-letter__who" : "wv-vh";
     time.textContent = pad(at.getHours()) + ":" + pad(at.getMinutes());
-    letter.querySelector(".day-break").textContent = day ? dayWords(at, now) : "";
-    before = { at: at, from: letter.dataset.from, who: who };
+    var separator = letter.previousElementSibling;
+    if (separator && !separator.classList.contains("wv-day")) separator = null;
+    if (day) {
+      if (!separator) {
+        separator = document.createElement("p");
+        separator.className = "wv-day";
+        letter.parentNode.insertBefore(separator, letter);
+      }
+      separator.textContent = dayWords(at, now);
+    } else if (separator) {
+      separator.remove();
+    }
+    before = { at: at, from: letter.dataset.from, who: who.textContent };
   });
 }
 groupLetters();

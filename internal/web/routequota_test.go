@@ -68,7 +68,7 @@ func TestFlowsListARoutesGroupsInOrder(t *testing.T) {
 		}
 	}
 	routes := squash(f.get("/routes").body)
-	for _, want := range []string{`<h2>new → a@Weekly&lt;80 else b</h2>`, `<h2>review → people</h2>`} {
+	for _, want := range []string{`<td>a@Weekly&lt;80 else b</td>`, `<td>people</td>`} {
 		if !strings.Contains(routes, want) {
 			t.Errorf("/routes lacks %s", want)
 		}

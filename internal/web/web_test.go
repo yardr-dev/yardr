@@ -315,11 +315,11 @@ func TestHomeHTML(t *testing.T) {
 		}
 	}
 	// The overview draws its own head: the shell's heading is not above it,
-	// and stays above every page that is of no stage kind yet.
+	// and stays above a page that is of no stage kind (an error, a notice).
 	if strings.Contains(r.body, `class="page-head"`) {
 		t.Error("the shell's heading stands over the overview's own head")
 	}
-	if !strings.Contains(f.get("/groups").body, `<header class="page-head"><h1>Groups</h1></header>`) {
+	if !strings.Contains(f.get("/nowhere").body, `<header class="page-head"><h1>Not found</h1></header>`) {
 		t.Error("a page of no stage kind lost the shell's heading")
 	}
 	// No session runs and nothing is late, so neither is named, and no zero
@@ -1331,8 +1331,7 @@ func TestTokens(t *testing.T) {
 		"ink": "#e9e9ea", "dim": "#abadb0", "faint": "#808286",
 		"accent": "#d3602f", "accent-hover": "#e2794a",
 		"shade": "rgba(16, 17, 18, 0.45)", "link": "#7aa2f7",
-		"working": "var(--accent)", "running": "#4cc38a", "held": "#e5675a",
-		"done": "var(--faint)",
+		"running": "#4cc38a", "held": "#e5675a",
 	}
 	for name, value := range tokens {
 		if !strings.Contains(string(css), "--"+name+": "+value+";") {
@@ -1343,8 +1342,8 @@ func TestTokens(t *testing.T) {
 		"ground": "--surface-app", "panel": "--surface-raised", "hairline": "--border-subtle",
 		"hairline-strong": "--border-strong", "ink": "--text-primary", "dim": "--text-secondary",
 		"faint": "--text-disabled", "accent": "--yard-500", "accent-hover": "--yard-400", "pill": "--yard-600",
-		"shade": "--dusk-950", "working": "--yard-500",
-		"running": "--signal-green", "held": "--signal-red", "done": "--text-disabled",
+		"shade":   "--dusk-950",
+		"running": "--signal-green", "held": "--signal-red",
 		"link": "--text-link",
 	} {
 		line := regexp.MustCompile(`(?m)^\s*--` + regexp.QuoteMeta(name) + `: [^;]+; /\* ` + regexp.QuoteMeta(source) + ` \*/$`)
@@ -1384,7 +1383,8 @@ func TestTokens(t *testing.T) {
 	// Square corners in the pages' bodies, which the reset squares; the
 	// window's parts take the design system's: 4, 6, 8 and full, by token,
 	// and a circle for a dot. Circles stay for status dots, pills for the
-	// Beads filters' chips, and the talk page's composer keeps the canvas's.
+	// Beads filters' chips, and the talk page's composer and a record keep
+	// the canvas's.
 	radii := regexp.MustCompile(`(?m)^(.*)border-radius:\s*([^;]+);`).FindAllStringSubmatch(string(css), -1)
 	for _, r := range radii {
 		before := strings.TrimSpace(r[1])
@@ -1393,7 +1393,6 @@ func TestTokens(t *testing.T) {
 			if !slices.Contains([]string{"50%", "var(--radius-sm)", "var(--radius-md)", "var(--radius-lg)", "var(--radius-full)"}, r[2]) {
 				t.Errorf("a window corner outside the design system's: %s", r[0])
 			}
-		case strings.HasPrefix(before, ".dot "), strings.HasPrefix(before, ".chips a "), strings.HasPrefix(before, ".compose "):
 		default:
 			if r[2] != "0" {
 				t.Errorf("a corner that is not square: %s", r[0])
@@ -1421,13 +1420,13 @@ func cssRule(t *testing.T, selector string) string {
 // their indent. What a person wrote in a body or a note still wraps.
 func TestStageFileKeepsItsLines(t *testing.T) {
 	t.Parallel()
-	file := cssRule(t, ".text.file")
+	file := cssRule(t, ".wv-file")
 	for _, want := range []string{"white-space: pre;", "overflow-x: auto;"} {
 		if !strings.Contains(file, want) {
-			t.Errorf(".text.file lacks %s: %s", want, file)
+			t.Errorf(".wv-file lacks %s: %s", want, file)
 		}
 	}
-	if text := cssRule(t, ".text"); !strings.Contains(text, "white-space: pre-wrap;") {
-		t.Errorf(".text does not wrap: %s", text)
+	if text := cssRule(t, ".wv-text"); !strings.Contains(text, "white-space: pre-wrap;") {
+		t.Errorf(".wv-text does not wrap: %s", text)
 	}
 }

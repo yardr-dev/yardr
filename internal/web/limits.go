@@ -22,6 +22,16 @@ type Limits struct {
 	Head     uint64           `json:"head"`
 }
 
+// Line is the stage head's line under the title: how many providers the yard
+// burns, and the sources that answer for themselves where there are any.
+func (l Limits) Line() string {
+	line := countWords(len(l.Limits), "provider", "providers")
+	if len(l.Sources) > 0 {
+		line += " and " + countWords(len(l.Sources), "source", "sources")
+	}
+	return line
+}
+
 // ProviderLimits is what one ask came to, for one provider: who burns it,
 // the provider's report and what the yard reads from it, or why nothing is
 // known. It is what `yardr limits --json` prints per provider, field for
@@ -303,7 +313,7 @@ func (s *Server) handleLimits(w http.ResponseWriter, r *http.Request) {
 		}
 		out.Sources = append(out.Sources, src)
 	}
-	s.respond(w, r, Page{Template: "limits", Title: "Limits", Data: out, head: head, stream: "seq", live: liveStage})
+	s.respond(w, r, Page{Template: "limits", Kind: "table", Title: "Limits", Data: out, head: head, stream: "seq", live: liveStage})
 }
 
 // askProvider asks for the provider once through its source, and says what

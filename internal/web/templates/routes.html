@@ -1,59 +1,37 @@
+{{- /* /routes, a table, the fourth stage kind: one row to a route, in match
+       order, as `yardr route list` prints them, the id quiet at the end. The
+       head says the rule the order is read by. The page's leaf in the shell
+       reads it again whenever something happens in the yard: the stream
+       carries each event's seq and nothing else. */}}
 {{define "content"}}
-{{- /* The page's leaf in the shell reads it again whenever something
-       happens in the yard: the stream carries each event's seq and nothing
-       else. */}}
-<div id="routes">
-  {{- if .Data.Routes}}
-  {{- /* One row per route on a wide window, as `yardr route list` prints
-         them, the id quiet at the end; below 700 px the stacked cards
-         after it, and the stylesheet shows one. Both walk the same
-         routes, in match order. */}}
-  <section class="item routes-table">
-    <table class="routes">
-      <thead>
-        <tr><th>stage</th><th>type</th><th>depot</th><th>label</th><th>beads</th><th>group</th><th>id</th></tr>
-      </thead>
+{{- with .Data}}
+<article class="wv-page" data-kind="{{$.Kind}}">
+  <header class="wv-head">
+    <h1 class="wv-title">Routes</h1>
+    <p class="wv-meta">{{.Line}}</p>
+  </header>
+  {{- if .Routes}}
+  <div class="wv-scrollx">
+    <table class="wv-table">
+      <thead><tr><th>stage</th><th>type</th><th>depot</th><th>label</th><th>beads</th><th>group</th><th>id</th></tr></thead>
       <tbody>
-        {{- range .Data.Routes}}
+        {{- range .Routes}}
         <tr>
-          <td>{{.Stage}}</td>
-          <td>{{with .Type}}{{.}}{{else}}-{{end}}</td>
-          <td>{{with .Depot}}{{.}}{{else}}-{{end}}</td>
-          <td>{{with .Label}}{{.}}{{else}}-{{end}}</td>
-          <td>{{with .BeadPriorities}}{{.}}{{else}}-{{end}}</td>
+          <td class="wv-name">{{.Stage}}</td>
+          <td>{{with .Type}}{{.}}{{else}}<span class="wv-nil">–</span>{{end}}</td>
+          <td>{{with .Depot}}{{.}}{{else}}<span class="wv-nil">–</span>{{end}}</td>
+          <td>{{with .LabelList}}{{.}}{{else}}<span class="wv-nil">–</span>{{end}}</td>
+          <td>{{with .BeadPriorities}}{{.}}{{else}}<span class="wv-nil">–</span>{{end}}</td>
           <td>{{.GroupList}}</td>
-          <td class="faint">{{.ID}}</td>
+          <td class="wv-id">{{.ID}}</td>
         </tr>
         {{- end}}
       </tbody>
     </table>
-  </section>
-  <div class="routes-cards">
-  {{- range .Data.Routes}}
-  <article class="item">
-    <header class="item-head">
-      <h2>{{.Stage}} → {{.GroupList}}</h2>
-      <details class="route-id"><summary>id</summary>{{.ID}}</details>
-    </header>
-    <dl class="facts">
-      {{- with .Type}}
-      <div><dt>type</dt><dd>{{.}}</dd></div>
-      {{- end}}
-      {{- with .Depot}}
-      <div><dt>depot</dt><dd>{{.}}</dd></div>
-      {{- end}}
-      {{- with .LabelList}}
-      <div><dt>label</dt><dd>{{.}}</dd></div>
-      {{- end}}
-      {{- with .BeadPriorities}}
-      <div><dt>beads</dt><dd>{{.}}</dd></div>
-      {{- end}}
-    </dl>
-  </article>
-  {{- end}}
   </div>
   {{- else}}
-  <p class="item faint">This yard has no routes.</p>
+  <p class="wv-none">This yard has no routes.</p>
   {{- end}}
-</div>
+</article>
+{{- end}}
 {{end}}
