@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,6 +18,7 @@ import (
 
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/dispatch"
+	"yardr.dev/yardr/internal/runner"
 	"yardr.dev/yardr/internal/scripttest"
 	"yardr.dev/yardr/internal/store"
 )
@@ -1047,5 +1049,90 @@ func TestLoginShellPATH(t *testing.T) {
 	stub(t, &loginShell, func() string { return "" })
 	if got := loginShellPATH(context.Background()); got != "" {
 		t.Fatalf("PATH with no shell = %q", got)
+	}
+}
+
+// A live crew member whose pane cannot be captured while herdr says working
+// reads as unknown, and down still asks it for its handoff: the prompt goes
+// through herdr, not the pane read. The capture failure reads as unknown
+// since yardr-0nn4, which protects the crew retry deadline; down skipped
+// the handoff with it and stopped the session.
+func TestDownAsksAnUnreadableWorkingPaneForItsHandoff(t *testing.T) {
+	dir := t.TempDir()
+	calls := filepath.Join(dir, "calls")
+	bin := filepath.Join(dir, "herdr")
+	scripttest.Write(t, bin, `printf '%s\n' "$*" >> "`+calls+`"
+case "$1 $2" in
+  "agent get") echo '{"result":{"agent":{"agent":"claude","agent_status":"working"}}}' ;;
+  "pane read") echo 'herdr pane read: no such pane' >&2; exit 1 ;;
+  "agent prompt") echo '{"result":{"agent":{"agent_status":"working"},"type":"agent_prompted"}}' ;;
+  "tab close") echo '{"result":{"type":"ok"}}' ;;
+  *) echo '{"result":{"type":"ok"}}' ;;
+esac
+`)
+	_, st, _, _, a, _ := downYard(t, map[string]string{"yardmaster": "idle"})
+	ctx := context.Background()
+	if err := st.CrewStarted(ctx, "yardmaster", map[string]any{"agent": "yardmaster", "tab": "w1:t1", "pane": "w1:p1", "kind": "claude"}); err != nil {
+		t.Fatal(err)
+	}
+	stub(t, &yardRunners, func(string, store.API) map[string]dispatch.Runner {
+		return map[string]dispatch.Runner{"herdr": &runner.Herdr{Bin: bin}}
+	})
+	out, err := run(t, a(true).rootCmd(), "down", "--yes", "--json", "--handoff-wait", "20ms")
+	var rep downReport
+	if jerr := json.Unmarshal([]byte(out), &rep); err != nil || jerr != nil {
+		t.Fatalf("down --json: %v %v\n%s", err, jerr, out)
+	}
+	if len(rep.Agents) != 1 || rep.Agents[0].Kind != "crew" || rep.Agents[0].State != agentUnknown || !rep.Agents[0].Stopped {
+		t.Fatalf("down agents = %+v, want the one crew member unknown and stopped", rep.Agents)
+	}
+	if rep.Working != 1 || rep.Idle != 0 {
+		t.Fatalf("working %d idle %d, want the unknown member busy", rep.Working, rep.Idle)
+	}
+	log, rerr := os.ReadFile(calls)
+	if rerr != nil || strings.Count(string(log), "agent prompt") != 1 || !strings.Contains(string(log), "yardr crew handoff yardmaster") {
+		t.Fatalf("herdr calls:\n%s\nwant the one handoff prompt (err %v)", log, rerr)
+	}
+}
+
+// A handoff prompt herdr rejects because the agent is not found is not a
+// stalled prompt: down still asks the live unknown member, but waits for no
+// handoff the missing agent can never write, and stops it all the same.
+func TestDownSkipsTheHandoffWaitForAnAgentHerdrCannotFind(t *testing.T) {
+	dir := t.TempDir()
+	calls := filepath.Join(dir, "calls")
+	bin := filepath.Join(dir, "herdr")
+	scripttest.Write(t, bin, `printf '%s\n' "$*" >> "`+calls+`"
+case "$1 $2" in
+  "agent get") echo '{"result":{"agent":{"agent":"claude","agent_status":"working"}}}' ;;
+  "pane read") echo 'herdr pane read: no such pane' >&2; exit 1 ;;
+  "agent prompt") echo '{"error":{"code":"agent_not_found","message":"agent yardmaster not found"},"id":"x"}' >&2; exit 1 ;;
+  "tab close") echo '{"result":{"type":"ok"}}' ;;
+  *) echo '{"result":{"type":"ok"}}' ;;
+esac
+`)
+	_, st, _, _, a, _ := downYard(t, map[string]string{"yardmaster": "idle"})
+	ctx := context.Background()
+	if err := st.CrewStarted(ctx, "yardmaster", map[string]any{"agent": "yardmaster", "tab": "w1:t1", "pane": "w1:p1", "kind": "claude"}); err != nil {
+		t.Fatal(err)
+	}
+	stub(t, &yardRunners, func(string, store.API) map[string]dispatch.Runner {
+		return map[string]dispatch.Runner{"herdr": &runner.Herdr{Bin: bin}}
+	})
+	cmd := a(false).rootCmd()
+	var warned bytes.Buffer
+	cmd.SetErr(&warned)
+	if out, err := run(t, cmd, "down", "--yes", "--handoff-wait", "20ms"); err != nil {
+		t.Fatalf("down: %v\n%s", err, out)
+	}
+	if strings.Contains(warned.String(), "waiting up to") {
+		t.Fatalf("down waited for the handoff of an agent herdr cannot find:\n%s", warned.String())
+	}
+	log, rerr := os.ReadFile(calls)
+	if rerr != nil || strings.Count(string(log), "agent prompt") != 1 || !strings.Contains(string(log), "yardr crew handoff yardmaster") {
+		t.Fatalf("herdr calls:\n%s\nwant the one handoff prompt (err %v)", log, rerr)
+	}
+	if !strings.Contains(string(log), "tab close") {
+		t.Fatalf("herdr calls:\n%s\nwant the missing member's tab closed", log)
 	}
 }
