@@ -219,6 +219,93 @@ Never run plain `yardr web open` there: it opens the machine's own browser.
 The printed URL holds the view's token, as the view's record does, and is
 for the trial alone.
 
+## Looking at a page of the view
+
+A builder whose change shows in the web view looks at the page in a browser and
+shoots it at the commit they hand on. A bare yard holds what the page draws and
+`agent-browser` drives it, so no herdr starts and no agent runs. This is the
+recipe for one ask card. Another page takes the same steps with its own data.
+Everything of the yard goes through `D/e`:
+
+```
+contrib/isolated-yard/isolated-yard bare      # builds yardr from this checkout, prints D
+D/e yardr version                             # names the commit the page is shot at
+D/e yardr init --harness claude --operator ada    # no --start: no agent starts
+mkdir D/depot
+D/e yardr --actor ada depot add notes D/depot --kind dir
+D/e yardr --actor ada bead create "a title" --depot notes    # prints the bead's id
+D/e yardr --actor yardmaster bead ask <id> --recommend 1 - <<'ASK'
+Q: the question
+C: a line of context
+O: a label: its consequence
+O: another label: its consequence
+W: why the recommended one
+ASK
+D/e yardr web serve --as ada --addr 127.0.0.1:0 --pages-addr 127.0.0.1:0 > D/web.log 2>&1 &
+D/e yardr web open --print                    # the URL with the view's token, for the browser alone
+```
+
+Before opening the URL in the browser, wait for `D/web.log` to show `serving
+the yard`; that line names the two ports it took. Build the yard after your
+last commit. `yardr version` prints 12 characters of the commit it was built
+from, and `-modified` after them when the tree has changes not committed. A
+version that begins as `git rev-parse --short HEAD` does, with no `-modified`,
+is the commit the shot shows.
+
+Then the browser. Choose a session name of your own and use that same value on
+every `agent-browser` command: a builder's shell starts afresh for each one.
+Put the picture in a directory of its own outside the worktree; `mktemp -d`
+makes one.
+
+```
+AGENT_BROWSER_SESSION=<a name of its own> agent-browser set viewport 1280 800
+AGENT_BROWSER_SESSION=<a name of its own> agent-browser open <the URL>                  # the token becomes the browser's cookie
+AGENT_BROWSER_SESSION=<a name of its own> agent-browser fill "input[name=words]" "..."  # to drive the card: type in it,
+AGENT_BROWSER_SESSION=<a name of its own> agent-browser press Enter                     # and press a key
+AGENT_BROWSER_SESSION=<a name of its own> agent-browser wait --load networkidle
+AGENT_BROWSER_SESSION=<a name of its own> agent-browser open <the URL>                  # / again, for the shot
+AGENT_BROWSER_SESSION=<a name of its own> agent-browser wait --load networkidle
+AGENT_BROWSER_SESSION=<a name of its own> agent-browser screenshot <that directory>/shot.png
+file <that directory>/shot.png                # PNG image data, 1280 x 800
+AGENT_BROWSER_SESSION=<a name of its own> agent-browser close                           # this session's browser, never --all
+contrib/isolated-yard/isolated-yard down D
+```
+
+Leave out `fill`, `press` and the second `open` where the page needs no
+driving. Put the picture on the bead's note with `--file`, and remove its
+directory. `down` stops the view as well, since it stops everything whose home
+is D.
+
+### Traps
+
+Each of these cost calls the first time the view was shot by hand.
+
+- `/` draws one card, the newest asked wait's, however many wait. The rail
+  lists the rest. Create the bead whose card is to be shot last.
+- A run ask is refused where its asker may run the command themselves, with
+  `needs no approval: run it yourself`, so ask it `--actor yardmaster` and not
+  as the operator. `--run` is refused beside `-`. Write a run ask in the
+  labelled stdin form with an `R:` line, such as `R: settings set
+  max_sessions 4`, and no `O:` or `W:` lines, since it takes no options.
+- Under `D/e` there is no `USER`, so a command acts as the login name, and an
+  operator's act such as `depot add` is refused. Give every operator act
+  `--actor <operator>`, `bead create` too, so the bead is the operator's. The
+  traps of "Rehearsing the Telegram pack", above, say the same.
+- `web serve` has a second address, `--pages-addr`, beside its own. Give both
+  `127.0.0.1:0`, never a port the real yard uses. 8791 is its view's.
+- The page's main column, `#stage`, scrolls inside its own container, so
+  `AGENT_BROWSER_SESSION=<a name of its own> agent-browser scroll down` does
+  nothing there. Use `eval` to scroll that container, for example:
+  `AGENT_BROWSER_SESSION=<a name of its own> agent-browser eval "document.querySelector('#stage').scrollTo(0, document.querySelector('#stage').scrollHeight)"`.
+- A form post from `/` lands on the bead's page, whether it comes from the
+  Send button or from Enter in the words field. Open `/` again for the shot.
+- `AGENT_BROWSER_SESSION=<a name of its own> agent-browser network requests`
+  shows whether a key press sent anything. Empty the log with
+  `AGENT_BROWSER_SESSION=<a name of its own> agent-browser network requests --clear`
+  before the press, and list it with the first command after. `No requests
+  captured` means the press sent nothing. A reload is the control: it lists
+  its GETs, so an empty list is no dead listing.
+
 ## The yard-shape matrix
 
 `matrix_test.go` walks every way a yard is set up through the same list of

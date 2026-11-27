@@ -14,6 +14,7 @@ The questions the core asks of a session's program, and the keys that answer the
 | Did it stop on an error the yard knows, and which? | `errors` (a `reason` of `store.Reasons`, `internal/store/harness.go:Reasons`) and `marks.error` | `dispatch.HarnessError` (`internal/dispatch/harness.go:HarnessError`) |
 | Which dialog is on the screen, and may the yard answer it? | `trust`, `api_key` and `onboarding` are answered; `dialogs` and `login` are told of | the herdr runner (`TrustAcceptor`, `DialogReader`, `LoginReader`), `dispatch.HarnessDialog` (`internal/dispatch/harness_dialog.go:HarnessDialog`) |
 | Which model is it using, how much context, how many tokens did it use? | `model`, `context`, `usage` | the daemon, through the herdr runner (`Modeler`, `ContextReader`, `UsageReader`) |
+| Where is a live session's transcript, and which conversation is the launch's own? | `session`: `home` and `glob`. For a harness whose id herdr does not report and whose transcript names no directory to match, also an `index` that finds the id by the session's directory, and `index.prompt`, the wrapper the transcript puts the launch's first prompt in. A file with no `session` has the `model` source's home and glob (`internal/store/harness_session.go:Harness.SessionFile`) | the herdr runner (`internal/runner/model.go:Herdr.SessionID`, `internal/runner/context.go:Herdr.Context`), and the daemon through it (`internal/dispatch/model.go:SessionIDer`); `yardr harness show` (`internal/cli/harness.go:printHarness`) |
 | What arguments start it, unattended, with a model and an effort? | `flags` | the herdr runner at start, and the checks and forms that hold a group's kind, model, effort and permission preset (`internal/store`, `internal/cli`) |
 | How does the yard make it forget a session it started? | `forget` | the daemon, through the herdr runner (`Forgetter`) |
 | Which version is installed, and is the program the harness? | `flags.version`, `flags.version_contains` | `agents.HarnessVersion` (`internal/agents/harness.go:HarnessVersion`), `yardr doctor` |
@@ -70,6 +71,7 @@ A group's config keys that a file bounds (`kind`, `model`, `effort`, `args`), th
 | 17 | The fields of a harness file that become arguments of the program, answer a dialog on its screen or name a command the yard runs come only from reviewed bytes: the files built into the binary. | unchecked |
 | 18 | Every handle key that dispatch or the store keeps for a harness is listed under Stored data, and a new one is listed there with the code that writes it. | unchecked |
 | 19 | `strong` is a guarded key: a harness file that is not built into the binary and sets it is refused. | `TestYardFileMayNotMarkStrong` |
+| 20 | A `session` names a home and a glob that holds `{session}` and stays under the home. An `index` names its file under the home, a field, a time and the first prompt's type, field, open and close. A `session` with neither an `index` nor a `model` source is refused, since there is no session id to read it by. | `TestLoadRefuses`, `TestHarnessFiles` |
 
 ## Planned
 

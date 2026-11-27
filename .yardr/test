@@ -161,6 +161,19 @@ unset YARDR_TEST_LOAD YARDR_CEILINGS_PAGE
 # directory.
 GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath"
 export GOFLAGS
+# mktemp makes the gate's files in TMPDIR, as GNU mktemp does. macOS's, given
+# no template, makes them in the user's own temp directory and ignores TMPDIR,
+# so a fixture's check that a run left nothing in the TMPDIR it set could not
+# fail there. The function takes the one argument the script's calls give it,
+# -d, and shadows the command for the whole script, so a call written bare
+# later gets the same treatment without a rule of its own.
+mktemp() {
+  if [ "${1-}" = -d ]; then
+    command mktemp -d "${TMPDIR:-/tmp}/yardr-test.XXXXXXXX"
+  else
+    command mktemp "${TMPDIR:-/tmp}/yardr-test.XXXXXXXX"
+  fi
+}
 # The run's own test line is printed by finish, on exit, from these: the wall
 # seconds since started, the race-lock seconds the legs waited, the packages go
 # test printed `ok` and `FAIL` for, and what the run compared with. tmp is

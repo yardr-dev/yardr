@@ -371,6 +371,22 @@ func gateScript(t *testing.T) []byte {
 	return b
 }
 
+// scriptFunc is the function name of the gate script b, from its first line to
+// the next closing brace at the margin. A script the cut no longer follows fails
+// the test, which tells its editor to move the probe with it.
+func scriptFunc(t *testing.T, b []byte, name string) string {
+	t.Helper()
+	head := "\n" + name + "() {"
+	_, fn, ok := strings.Cut(string(b), head)
+	if ok {
+		fn, _, ok = strings.Cut(head+fn, "\n}\n")
+	}
+	if !ok {
+		t.Fatalf("cannot cut %s out of %s: move the probe with the script", name, yardTest)
+	}
+	return fn + "\n}\n"
+}
+
 type ciStep struct {
 	Run string `yaml:"run"`
 }
@@ -3009,35 +3025,20 @@ func TestYardTestRerunsFailedPackagesOnce(t *testing.T) {
 func TestYardTestRefusesASplitFlag(t *testing.T) {
 	t.Parallel()
 	b := gateScript(t)
-	// The functions as the script has them, from their first line to the next
-	// closing brace at the margin: a script the cuts no longer follow fails the
-	// test, telling its editor to move the probe with it.
-	cut := func(name string) string {
-		t.Helper()
-		head := "\n" + name + "() {"
-		_, fn, ok := strings.Cut(string(b), head)
-		if ok {
-			fn, _, ok = strings.Cut(head+fn, "\n}\n")
-		}
-		if !ok {
-			t.Fatalf("cannot cut %s out of %s: move the probe with the script", name, yardTest)
-		}
-		return fn + "\n}\n"
-	}
 	// The script runs under set -e, where again reads splitflag in a command
 	// substitution: a status of its own would end the run without the line that
 	// says why, so the probe runs under it too, and a row fails on a non-zero one.
 	dir := t.TempDir()
-	writeFile(t, dir, "splitflag.sh", "set -e\n"+cut("splitflag")+"\"$@\"\n")
+	writeFile(t, dir, "splitflag.sh", "set -e\n"+scriptFunc(t, b, "splitflag")+"\"$@\"\n")
 	// again's other functions are not in this probe: a refused step stops at its
 	// first lines, and a step it let through would fail on the first of them.
 	// The || is the caller's, as the script's own are: only an exit ends the
-	// probe there, and a return would go on to print. Its mktemp writes down
-	// that it was called and makes no file: a file left in TMPDIR would show
-	// the call only where mktemp takes TMPDIR, and macOS's, given no template,
-	// does not.
+	// probe there, and a return would go on to print. Nor is the script's own
+	// mktemp(), which makes its files in TMPDIR on any system. This mktemp is the
+	// probe's: it writes down that it was called and makes no file, so the call
+	// shows in the file it names whatever TMPDIR holds.
 	writeFile(t, dir, "again.sh", "set -e\nmktemp() { echo called >>\"$MKTEMP_CALLS\"; echo \"$MKTEMP_CALLS.file\"; }\n"+
-		cut("splitflag")+cut("again")+"again \"$@\" || echo \"again returned $?\"\n")
+		scriptFunc(t, b, "splitflag")+scriptFunc(t, b, "again")+"again \"$@\" || echo \"again returned $?\"\n")
 	for _, c := range []struct {
 		name string
 		step string // the words of the step, split on spaces
@@ -3083,6 +3084,54 @@ func TestYardTestRefusesASplitFlag(t *testing.T) {
 	})
 }
 
+// TestYardTestMakesItsTempFilesInTMPDIR checks that the script's mktemp()
+// makes the gate's files in TMPDIR on any system. The command it wraps does
+// that only where it takes TMPDIR when given no template. GNU's does. macOS's
+// makes its file in the user's own temp directory, so a fixture that gives a
+// run a TMPDIR of its own and checks with wantEmpty that the run left nothing
+// in it could not fail there for a leaked file, as it can on Linux. The probe
+// cuts the function out of the script and runs it as the script's calls do:
+// bare, for a file, and with -d, for a directory. Each must stand directly in
+// the TMPDIR it was given. A macOS session's TMPDIR ends in a slash, so one row
+// gives it that too.
+func TestYardTestMakesItsTempFilesInTMPDIR(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeFile(t, dir, "mktemp.sh", scriptFunc(t, gateScript(t), "mktemp")+"\"$@\"\n")
+	for _, c := range []struct {
+		name  string
+		args  []string // what the call gives mktemp
+		slash string   // what follows the TMPDIR it is given
+		dir   bool     // whether it makes a directory
+	}{
+		{"a file", nil, "", false},
+		{"a directory", []string{"-d"}, "", true},
+		{"a file, under a TMPDIR that ends in a slash", nil, "/", false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			tmp := t.TempDir()
+			cmd := exec.Command("sh", append([]string{filepath.Join(dir, "mktemp.sh"), "mktemp"}, c.args...)...)
+			cmd.Env = append(os.Environ(), "TMPDIR="+tmp+c.slash)
+			out, code := runCmd(t, cmd)
+			if code != 0 {
+				t.Fatalf("mktemp %v ended with status %d:\n%s", c.args, code, out)
+			}
+			made := strings.TrimSuffix(out, "\n")
+			if filepath.Dir(made) != tmp {
+				t.Errorf("mktemp %v made %s, want it directly in TMPDIR %s", c.args, made, tmp)
+			}
+			fi, err := os.Stat(made)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if fi.IsDir() != c.dir {
+				t.Errorf("mktemp %v made %s, a directory: %v, want %v", c.args, made, fi.IsDir(), c.dir)
+			}
+		})
+	}
+}
+
 // utf8Locale names a locale of this machine that reads UTF-8, "" where it has
 // none under the usual names. A tool takes a multibyte character for one only
 // in such a locale: macOS's tr stops at an invalid sequence in one and passes
@@ -3099,15 +3148,16 @@ func utf8Locale() string {
 	return ""
 }
 
-// What the flaky log line keeps of the first run (flakyfails), the tests a
-// failure names without a FAIL line (flakystuck), which of its lines name a
-// test (flakylines), the beads it says it tested (flakybeads), which open
-// bead stands for a test (flakyopen) and what a repeat does with it
-// (flakyfile), through the script's own functions, cut out of it and run on
-// output as go prints it and on a listing as yardr prints it: a shell and an
-// awk a case, where a gate run costs seconds.
-// TestYardTestRerunsFailedPackagesOnce pins that the gate writes and reads
-// them. A block is a test's `--- FAIL:` line and the lines indented deeper
+// TestYardTestKeepsTheFailingLinesOfAFlake checks what the flaky log line
+// keeps of the first run (flakyfails), the tests a failure names without a FAIL
+// line (flakystuck), which of its lines name a test (flakylines), the beads it
+// says it tested (flakybeads), which open bead stands for a test (flakyopen)
+// and what a repeat does with it (flakyfile), through the script's own
+// functions, cut out of it and run on output as go prints it and on a listing
+// as yardr prints it: a shell and an awk a case, where a gate run costs
+// seconds. That the gate writes the log line and reads it back is
+// TestYardTestRerunsFailedPackagesOnce's.
+// A block is a test's `--- FAIL:` line and the lines indented deeper
 // than it, so a subtest has a block of its own and its parent's holds it;
 // output between reports ends a block; a panic's line, which go prints
 // unindented after the FAIL line, joins the blocks it follows; a block keeps

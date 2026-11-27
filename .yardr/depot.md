@@ -80,6 +80,6 @@ server and daemon replace themselves with what is installed, so the
 yardmaster installs after merge. Test with `go build -o` into a temp dir,
 or `go test`.
 
-A bead labelled `eyes` (its change shows: a page, a window, a view) reads the yardr design system first, before it draws anything: `readme.md` in the repository yardr-dev/yardr-design, cloned beside this one on this yard at /Users/mckean/projects/repos/yardr-design. Its tokens, type, marks and the railway vocabulary rule are the brand; copy tokens from `tokens/`, never invent colours or words.
+A bead labelled `eyes` (its change shows: a page, a window, a view) reads the yardr design system first, before it draws anything: `readme.md` in the repository yardr-dev/yardr-design, cloned beside this one on this yard at /Users/mckean/projects/repos/yardr-design. Its tokens, type, marks and the railway vocabulary rule are the brand; copy tokens from `tokens/`, never invent colours or words. A shot of the web view is taken in an isolated yard, as `contrib/isolated-yard/README.md`, "Looking at a page of the view", says.
 
 A change that moves or adds a package updates AGENTS.md in the same commit.
