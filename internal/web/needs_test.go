@@ -28,9 +28,6 @@ func answerSection(t *testing.T, text string) string {
 	return s
 }
 
-// shortID is a bead id as the depot's rows show it.
-func shortID(id string) string { return web.DepotWait{Bead: id}.ShortID() }
-
 // sameReason reports whether two reasons say the same in the JSON: kind,
 // text and note. The struct itself is not comparable, since an ask carries
 // its options.

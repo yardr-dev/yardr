@@ -186,15 +186,16 @@ func TestFlowsReadError(t *testing.T) {
 	}
 	// The depot's error stays on the page beside its beads, folded stages or none.
 	if r := f.get("/flows"); r.status != 200 || !strings.Contains(r.body, `id="off/loose"`) ||
-		!strings.Contains(r.body, `<p class="held">repository is unavailable</p>`) {
+		!strings.Contains(r.body, `<p class="wv-callout">repository is unavailable</p>`) {
 		t.Errorf("the page: status %d", r.status)
 	}
 }
 
-// section is the id of the element that holds a card on /flows.
+// section is the id of the element that holds a card on /flows: the list of a
+// stage's rows, or of the rows off the flow. A card is one of its items.
 var (
-	sectionRE = regexp.MustCompile(`<div class="cards" id="([^"]+)" sse-swap="[^"]+" hx-target="this" hx-swap="afterbegin settle:0ms">(.*?)</div>`)
-	cardRE    = regexp.MustCompile(`<article class="card( arrived)?" id="([^"]+)"`)
+	sectionRE = regexp.MustCompile(`<ol id="([^"]+)" sse-swap="[^"]+" hx-target="this" hx-swap="afterbegin settle:0ms" hx-select-oob="[^"]+">(.*?)</ol>`)
+	cardRE    = regexp.MustCompile(`<li( class="arrived")? id="([^"]+)"`)
 )
 
 // sections reads /flows as a browser shows it: the id of each card's
@@ -217,7 +218,7 @@ func (f *fixture) sections() map[string]string {
 func squashLines(s string) string { return strings.ReplaceAll(s, "\n", " ") }
 
 // foldedRE finds the stages /flows folds to their head line.
-var foldedRE = regexp.MustCompile(`<li class="stage quiet[^"]*"><details><summary><h4>([^<]*)</h4>`)
+var foldedRE = regexp.MustCompile(`<div class="wv-group wv-group--fold"><details class="wv-fold"><summary>` + regexp.QuoteMeta(chevron) + `<span class="wv-fold__label">([^<]*)</span>`)
 
 // folded are the stages /flows stands folded, in the page's order: a stage
 // folds while it holds no bead.
@@ -230,9 +231,19 @@ func (f *fixture) folded() []string {
 	return out
 }
 
-// The page: one section per stage, named so the stream can put a card in
-// it, each bead a card that links to its page; and the stream it listens
-// to, after the page's head.
+// stageList is the opening tag of the list the stream puts a section's rows in:
+// a stage's, or the rows off the flow.
+func stageList(id string) string {
+	return `<ol id="` + id + `" sse-swap="` + id + `" hx-target="this" hx-swap="afterbegin settle:0ms" ` +
+		`hx-select-oob="#rail:outerHTML,#drawer:outerHTML,#list:outerHTML">`
+}
+
+// The page, the fifth stage kind: a head for each depot and each flow, one
+// list to each stage named so the stream can put a row in it, each bead a row
+// that links to its page; and the stream it listens to, after the page's
+// head. A stage with no bead is folded to its head line and keeps its list in
+// the page; the beads off the flow stand last, in a group the stylesheet shows
+// only while it holds one.
 func TestFlowsHTML(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
@@ -247,15 +258,19 @@ func TestFlowsHTML(t *testing.T) {
 	bs := f.byTitle()
 	for _, want := range []string{
 		shellOpen(head, "card"),
-		// settle:0ms: a card the stream brought listens at once, so the
+		`<article class="wv-page" data-kind="flow">`,
+		`<h1 class="wv-title">Flows</h1>`,
+		`<h2 class="wv-sh"><span>line</span><span class="wv-sh__count">git depot</span></h2>`,
+		`<h3 class="wv-meta">flow <span class="wv-id">code</span><span class="wv-sep">·</span>store</h3>`,
+		`<h3 class="wv-meta">flow <span class="wv-id">bugs</span><span class="wv-sep">·</span>bug beads<span class="wv-sep">·</span>store, type bug</h3>`,
+		// settle:0ms: a row the stream brought listens at once, so the
 		// bead's next event, however soon, takes it out again.
-		`<div class="cards" id="at/line//backlog" sse-swap="at/line//backlog" hx-target="this" hx-swap="afterbegin settle:0ms">`,
-		`<div class="cards" id="at/line//merged" sse-swap="at/line//merged" hx-target="this" hx-swap="afterbegin settle:0ms">`,
-		`<div class="cards" id="at/line/bug/triage" sse-swap="at/line/bug/triage" hx-target="this" hx-swap="afterbegin settle:0ms">`,
-		`<div class="cards" id="off/loose" sse-swap="off/loose" hx-target="this" hx-swap="afterbegin settle:0ms">`,
-		`<article class="card" id="bead/` + bs["three"].ID + `" sse-swap="bead/` + bs["three"].ID + `" hx-target="this" hx-swap="delete">`,
-		`<a class="bead" href="/beads/` + bs["three"].ID + `">` + bs["three"].ID + `</a>`,
-		`<p class="card-title">three</p>`,
+		stageList("at/line//backlog"),
+		stageList("at/line//merged"),
+		stageList("at/line/bug/triage"),
+		stageList("off/loose"),
+		`<li id="bead/` + bs["three"].ID + `" sse-swap="bead/` + bs["three"].ID + `" hx-target="this" hx-swap="delete">`,
+		`<span class="wv-srow__name">three</span>`,
 		`<a class="wv-row" href="/flows" aria-current="page">`,
 	} {
 		if !strings.Contains(r.body, want) {
@@ -263,15 +278,17 @@ func TestFlowsHTML(t *testing.T) {
 		}
 	}
 	// A stage with no bead is folded to its head line: a closed details whose
-	// body is the section the stream fills, the count after it. A stage with
-	// a bead has the head and cards it always had, in no details.
+	// body is the list the stream fills, the count after it. A stage with a
+	// bead has its head, who works it and its rows, in no details. A row in a
+	// stage leaves out the depot and the stage its head says already.
 	page := squash(r.body)
 	for _, want := range []string{
-		`<li class="stage quiet terminal"><details><summary><h4>merged</h4><span class="label stage-who">closes the bead</span></summary>` +
-			`<div class="cards" id="at/line//merged" sse-swap="at/line//merged" hx-target="this" hx-swap="afterbegin settle:0ms"></div></details>` +
-			`<span class="count num" aria-hidden="true"></span></li>`,
-		`<li class="stage"><h4>new</h4><p class="label stage-who">no route: waits for a person</p>` +
-			`<div class="cards" id="at/line//new" sse-swap="at/line//new" hx-target="this" hx-swap="afterbegin settle:0ms"><article class="card"`,
+		`<div class="wv-group wv-group--fold"><details class="wv-fold"><summary>` + chevron +
+			`<span class="wv-fold__label">merged</span><span class="wv-fold__value">closes the bead</span></summary>` +
+			stageList("at/line//merged") + `</ol></details><span class="wv-group__count" aria-hidden="true"></span></div>`,
+		`<section class="wv-group"><h4 class="wv-group__head"><span>new</span></h4>` +
+			`<p class="wv-group__who">no route: waits for a person</p>` + stageList("at/line//new") + `<li id="bead/`,
+		`<span class="wv-id">` + bs["three"].ID + `</span><span class="wv-sep">·</span>task</span></span></a></li>`,
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the page lacks %s", want)
@@ -280,13 +297,58 @@ func TestFlowsHTML(t *testing.T) {
 	if got, want := f.folded(), []string{"review", "merged", "fixed"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("folded stages %v, want %v", got, want)
 	}
-	// The stylesheet shows a folded stage while a card is in it: a closed
-	// details leaves its body, and the count, out. What the pixels do is the
-	// bead's screenshots.
+	// A row's link says the shell's own target and swap again: htmx's
+	// attributes inherit, and the row's (hx-target="this", hx-swap="delete")
+	// would otherwise reach the link, so that a click deleted the row where it
+	// should open the bead.
+	var shell, link map[string]string
+	for _, d := range startTags(r.body, "div") {
+		if d["class"] == "wv-shell" {
+			shell = d
+		}
+	}
+	for _, a := range startTags(r.body, "a") {
+		if a["href"] == "/beads/"+bs["three"].ID {
+			link = a
+		}
+	}
+	if shell == nil || link == nil || shell["hx-target"] == "" || link["hx-target"] != shell["hx-target"] || link["hx-swap"] != shell["hx-swap"] {
+		t.Errorf("the row's link says target %q and swap %q, want the shell's %q and %q", link["hx-target"], link["hx-swap"], shell["hx-target"], shell["hx-swap"])
+	}
+	// The beads off the flow stand last under their depot, and each depot has
+	// the list for them in the page, empty or not, so the stream finds it. A
+	// row there says its own depot and stage.
+	for _, want := range []string{
+		`<section class="wv-group wv-group--off"><h3 class="wv-group__head"><span>off the flow</span></h3>` + stageList("off/line") + `</ol>`,
+		`<section class="wv-group wv-group--off"><h3 class="wv-group__head"><span>off the flow</span></h3>` + stageList("off/loose") + `<li id="bead/` + bs["six"].ID + `"`,
+		`<span class="wv-id">` + bs["six"].ID + `</span><span class="wv-sep">·</span><span class="wv-nw">loose</span><span class="wv-sep">·</span>inbox<span class="wv-sep">·</span>task`,
+		`<p class="wv-none">No flow governs this depot.</p>`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the page lacks %s", want)
+		}
+	}
+	if last := strings.LastIndex(page, `<h3 class="wv-group__head"><span>off the flow</span>`); last < strings.LastIndex(page, `<span>merged</span>`) {
+		t.Error("the beads off the flow do not stand last")
+	}
+	// The stylesheet shows a folded stage while a row is in it, since a closed
+	// details leaves its body, and the count, out, and shows the group off
+	// the flow only while it holds one. A stage's count is a counter over its
+	// rows, drawn from the empty span after them, so it needs no message of
+	// its own as the stream moves rows. What the pixels do is the bead's
+	// screenshots.
 	css, err := os.ReadFile("assets/yard.css")
 	must(t, err)
-	if !strings.Contains(string(css), ".stage.quiet:has(.card) details::details-content { content-visibility: visible; }") {
-		t.Error("the stylesheet does not show a folded stage that holds a card")
+	for _, rule := range []string{
+		".wv-group--fold:has(li) details::details-content { content-visibility: visible; }",
+		".wv-group--off:not(:has(li)) { display: none; }",
+		".wv-group { position: relative; counter-reset: rows; }",
+		".wv-group li { counter-increment: rows; }",
+		".wv-group__count:empty::before { content: counter(rows); }",
+	} {
+		if !strings.Contains(string(css), rule) {
+			t.Errorf("the stylesheet lacks %s", rule)
+		}
 	}
 	got := f.sections()
 	want := map[string]string{
@@ -354,8 +416,7 @@ func TestFlowsStream(t *testing.T) {
 	f.getJSON("/flows", &flows)
 	// The stage the first move fills is folded on the page the stream is
 	// open on, and its section is inside the fold: the card lands there.
-	if !strings.Contains(squash(f.get("/flows").body), `<li class="stage quiet"><details><summary><h4>review</h4>`) ||
-		!reflect.DeepEqual(f.folded(), []string{"review", "merged", "fixed"}) {
+	if !reflect.DeepEqual(f.folded(), []string{"review", "merged", "fixed"}) {
 		t.Fatalf("review is not folded: %v", f.folded())
 	}
 	s := f.stream(t, fmt.Sprintf("/events?after=%d&format=card", flows.Head))
@@ -380,7 +441,7 @@ func TestFlowsStream(t *testing.T) {
 		_, err := f.st.Advance(ctx, three.ID, "review", store.Expect{}, "me")
 		must(t, err)
 	}, 1)
-	if page[card] != "at/line//review" || !strings.Contains(put(fr), `<article class="card arrived" id="`+card+`"`) {
+	if page[card] != "at/line//review" || !strings.Contains(put(fr), `<li class="arrived" id="`+card+`"`) {
 		t.Errorf("the move to review: section %q, frame %s", page[card], put(fr))
 	}
 	// A reload folds the stages as the open page's stylesheet does: review
@@ -393,7 +454,7 @@ func TestFlowsStream(t *testing.T) {
 		_, err := f.st.SetHold(ctx, three.ID, true, store.Expect{}, "me")
 		must(t, err)
 	}, 1)
-	if page[card] != "at/line//review" || strings.Contains(put(fr), "arrived") || !strings.Contains(put(fr), `<span class="held">held</span>`) {
+	if page[card] != "at/line//review" || strings.Contains(put(fr), "arrived") || !strings.Contains(put(fr), `<span class="wv-fault">held</span>`) {
 		t.Errorf("the hold: section %q, frame %s", page[card], put(fr))
 	}
 	// A note changes no card: its seq alone, for the right column.
@@ -411,7 +472,7 @@ func TestFlowsStream(t *testing.T) {
 		made, err = f.st.CreateBead(ctx, store.NewBead{Title: "seven", Type: "bug", Depot: "line"}, "me")
 		must(t, err)
 	}, 1)
-	if page["bead/"+made.ID] != "at/line/bug/triage" || !strings.Contains(put(fr), "card arrived") {
+	if page["bead/"+made.ID] != "at/line/bug/triage" || !strings.Contains(put(fr), `<li class="arrived"`) {
 		t.Errorf("the new bead: section %q, frame %s", page["bead/"+made.ID], put(fr))
 	}
 	// A bead of a depot with no flow stays off the flow.
@@ -1405,19 +1466,21 @@ func TestManualClaimIsNotWorking(t *testing.T) {
 
 	// cardOf is the bead's card on a page, "" when the page has none.
 	cardOf := func(body, id string) string {
-		at := strings.Index(body, `<article class="card" id="bead/`+id+`"`)
+		at := strings.Index(body, `<li id="bead/`+id+`"`)
 		if at < 0 {
 			return ""
 		}
-		return body[at : at+strings.Index(body[at:], "</article>")]
+		return body[at : at+strings.Index(body[at:], "</li>")]
 	}
-	// /flows still draws its beads as cards.
+	// /flows draws its beads as the rows of a flow list.
 	flowsPage := f.get("/flows").body
-	if c := cardOf(flowsPage, idea.ID); c == "" || strings.Contains(c, "working") || !strings.Contains(c, `<span class="dot"></span>`) {
-		t.Errorf("/flows: the manual claim's card: %q", c)
+	if c := cardOf(flowsPage, idea.ID); c == "" || strings.Contains(c, "working") || strings.Contains(c, "wv-dot--run") ||
+		!strings.Contains(c, `<span class="wv-dot wv-dot--idle"></span>`) {
+		t.Errorf("/flows: the manual claim's row: %q", c)
 	}
-	if c := cardOf(flowsPage, door.ID); !strings.Contains(c, `<span class="dot working"></span>`) || !strings.Contains(c, "· working") {
-		t.Errorf("/flows: the agent's bead's card: %q", c)
+	if c := cardOf(flowsPage, door.ID); !strings.Contains(c, `<span class="wv-dot wv-dot--run"></span>`) ||
+		!strings.Contains(c, `<span class="wv-sep">·</span>working`) {
+		t.Errorf("/flows: the agent's bead's row: %q", c)
 	}
 	// /beads has them as rows of the stage, and the train's page as the rows of
 	// its Linked beads fold.
@@ -1491,7 +1554,8 @@ func TestFlowsStreamManualClaim(t *testing.T) {
 	}
 	_, err = f.st.Claim(ctx, door.ID, "builders", "new", "yard")
 	must(t, err)
-	if c := put(s.next(t)); !strings.Contains(c, `id="bead/`+door.ID+`"`) || !strings.Contains(c, `<span class="dot working"></span>`) || !strings.Contains(c, "· working") {
+	if c := put(s.next(t)); !strings.Contains(c, `id="bead/`+door.ID+`"`) || !strings.Contains(c, `<span class="wv-dot wv-dot--run"></span>`) ||
+		!strings.Contains(c, `<span class="wv-sep">·</span>working`) {
 		t.Errorf("the agent's bead's card: %s", c)
 	}
 	s.quiet(t)

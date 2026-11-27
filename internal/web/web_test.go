@@ -1329,10 +1329,10 @@ func TestTokens(t *testing.T) {
 	tokens := map[string]string{
 		"ground": "#161718", "panel": "#1c1d1f", "hairline": "#27282b", "hairline-strong": "#333538",
 		"ink": "#e9e9ea", "dim": "#abadb0", "faint": "#808286",
-		"accent": "#d3602f", "accent-hover": "#e2794a", "landed": "var(--faint)",
+		"accent": "#d3602f", "accent-hover": "#e2794a",
 		"shade": "rgba(16, 17, 18, 0.45)", "link": "#7aa2f7",
 		"working": "var(--accent)", "running": "#4cc38a", "held": "#e5675a",
-		"late": "#e8a33d", "done": "var(--faint)",
+		"done": "var(--faint)",
 	}
 	for name, value := range tokens {
 		if !strings.Contains(string(css), "--"+name+": "+value+";") {
@@ -1343,7 +1343,7 @@ func TestTokens(t *testing.T) {
 		"ground": "--surface-app", "panel": "--surface-raised", "hairline": "--border-subtle",
 		"hairline-strong": "--border-strong", "ink": "--text-primary", "dim": "--text-secondary",
 		"faint": "--text-disabled", "accent": "--yard-500", "accent-hover": "--yard-400", "pill": "--yard-600",
-		"landed": "--text-disabled", "shade": "--dusk-950", "working": "--yard-500",
+		"shade": "--dusk-950", "working": "--yard-500",
 		"running": "--signal-green", "held": "--signal-red", "done": "--text-disabled",
 		"link": "--text-link",
 	} {
@@ -1384,8 +1384,7 @@ func TestTokens(t *testing.T) {
 	// Square corners in the pages' bodies, which the reset squares; the
 	// window's parts take the design system's: 4, 6, 8 and full, by token,
 	// and a circle for a dot. Circles stay for status dots, pills for the
-	// Beads filters' chips, and the depot page's cards, table, rows and
-	// segments, and the talk page's composer, keep the canvas's.
+	// Beads filters' chips, and the talk page's composer keeps the canvas's.
 	radii := regexp.MustCompile(`(?m)^(.*)border-radius:\s*([^;]+);`).FindAllStringSubmatch(string(css), -1)
 	for _, r := range radii {
 		before := strings.TrimSpace(r[1])
@@ -1394,8 +1393,7 @@ func TestTokens(t *testing.T) {
 			if !slices.Contains([]string{"50%", "var(--radius-sm)", "var(--radius-md)", "var(--radius-lg)", "var(--radius-full)"}, r[2]) {
 				t.Errorf("a window corner outside the design system's: %s", r[0])
 			}
-		case strings.HasPrefix(before, ".dot "), strings.HasPrefix(before, ".chips a "), strings.HasPrefix(before, ".compose "),
-			strings.HasPrefix(before, ".depot-"), strings.HasPrefix(before, ".seg "):
+		case strings.HasPrefix(before, ".dot "), strings.HasPrefix(before, ".chips a "), strings.HasPrefix(before, ".compose "):
 		default:
 			if r[2] != "0" {
 				t.Errorf("a corner that is not square: %s", r[0])
@@ -1416,23 +1414,6 @@ func cssRule(t *testing.T, selector string) string {
 		t.Fatalf("the stylesheet has no rule for %s", selector)
 	}
 	return string(m[1])
-}
-
-// A flow names its stage .stage: the flow's rule (a border on the left, a
-// grid) is the flow's alone, under .column, and no bare .stage rule draws
-// it beside anything else that takes the name.
-func TestStageRuleIsTheFlows(t *testing.T) {
-	t.Parallel()
-	css, err := os.ReadFile("assets/yard.css")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if bare := regexp.MustCompile(`(?m)(^|,\s*)\.stage\s*[{,]`).Find(css); bare != nil {
-		t.Errorf("a rule for every .stage: %q", bare)
-	}
-	if rule := cssRule(t, ".column > .stage"); !strings.Contains(rule, "border-left:") {
-		t.Errorf("a flow's stage has no rule on its left: %s", rule)
-	}
 }
 
 // A stage file keeps the lines it was written in and scrolls inside its

@@ -1,69 +1,77 @@
+{{- /* /flows, the fifth stage kind, once to each flow: a head for each depot, and
+       under it each flow's stages in the flow's order as groups of rows, then
+       the beads off the flow. A stage's head says who works it. The shell's
+       stream moves the rows (format=card): at each event of a bead the row the
+       page has takes itself out, and the list the bead now stands in, which
+       listens for the event named after it, puts the new row on top.
+       settle:0ms has htmx make the new row listen at once: with its default
+       20ms, a second event of the bead in that time finds a row that does not
+       yet hear it leave, and the page has two. The bead rows of a stage are
+       a block whose links all leave the mode (a bead's page stands in Decide),
+       so it swaps the whole list. The page has no leaf. */}}
 {{define "content"}}
 {{- with .Data}}
-{{- /* The shell's stream moves the cards (format=card): at each event of
-       a bead the card the page has takes itself out, and the section the
-       bead now stands in, which listens for the event named after it, puts
-       the new card on top. settle:0ms has htmx make the new card listen
-       at once: with its default 20ms, a second event of the bead in that
-       time finds a card that does not yet hear it leave, and the page has
-       two. */}}
-<div id="flows">
-{{- range .Depots}}
-<article class="item">
-  <header class="item-head">
-    <h2>{{.Name}}</h2>
-    <span class="label">{{.Kind}} depot</span>
+<article class="wv-page" data-kind="{{$.Kind}}">
+  <header class="wv-head">
+    <h1 class="wv-title">Flows</h1>
+    <p class="wv-meta">each flow's stages, and who works them</p>
   </header>
-  {{- if .Error}}
-  <p class="held">{{.Error}}</p>
-  {{- end}}
-  {{- range .Flows}}
-  <section class="flow">
-    <h3 class="label">flow {{.Name}}{{if .Type}} · {{.Type}} beads{{end}} · {{.Source}}</h3>
-    <ol class="column">
+  {{- range .Depots}}
+  <section class="wv-block">
+    <h2 class="wv-sh"><span>{{.Name}}</span><span class="wv-sh__count">{{.Kind}} depot</span></h2>
+    {{- if .Error}}
+    <p class="wv-callout">{{.Error}}</p>
+    {{- end}}
+    {{- range .Flows}}
+    <section>
+      <h3 class="wv-meta">flow <span class="wv-id">{{.Name}}</span>{{if .Type}}<span class="wv-sep">·</span>{{.Type}} beads{{end}}<span class="wv-sep">·</span>{{.Source}}</h3>
       {{- range .Stages}}
       {{- /* A stage holding no bead is folded to its head line, a closed
-             details whose body is the cards: the section stays in the page,
-             so the stream puts an arriving card in it as in any other, and
-             the stylesheet shows the stage open from then on (and folds it
-             again when the card leaves). */}}
+             details whose body is the list the stream fills: the list stays
+             in the page, so the stream puts an arriving row in it as in any
+             other, and the stylesheet shows the stage open from then on (and
+             folds it again when the row leaves). The count is the
+             stylesheet's: it counts the rows as they come and go, so it
+             never needs a message of its own, and it stands after them, since
+             a counter reads only what comes before it. */}}
       {{- if .Beads}}
-      <li class="stage{{if .Terminal}} terminal{{end}}">
-        <h4>{{.Stage}}</h4>
-        <p class="label stage-who">{{template "stagewho" .}}</p>
-        {{template "stagecards" .}}
-        {{- /* The count is the stylesheet's: it counts the cards as they
-               come and go, so it never needs a message of its own. */}}
-        <span class="count num" aria-hidden="true"></span>
-      </li>
+      <section class="wv-group">
+        <h4 class="wv-group__head"><span>{{.Stage}}</span></h4>
+        <p class="wv-group__who">{{template "stagewho" .}}</p>
+        {{template "stagerows" .}}
+        <span class="wv-group__count" aria-hidden="true"></span>
+      </section>
       {{- else}}
-      <li class="stage quiet{{if .Terminal}} terminal{{end}}">
-        <details>
-          <summary><h4>{{.Stage}}</h4> <span class="label stage-who">{{template "stagewho" .}}</span></summary>
-          {{template "stagecards" .}}
+      <div class="wv-group wv-group--fold">
+        <details class="wv-fold">
+          <summary>{{template "chev"}}<span class="wv-fold__label">{{.Stage}}</span><span class="wv-fold__value">{{template "stagewho" .}}</span></summary>
+          {{template "stagerows" .}}
         </details>
-        {{- /* The count stands after the details, not in its summary: a
-               counter only reaches what follows the cards it counts. */}}
-        <span class="count num" aria-hidden="true"></span>
-      </li>
+        <span class="wv-group__count" aria-hidden="true"></span>
+      </div>
       {{- end}}
       {{- end}}
-    </ol>
+    </section>
+    {{- else}}
+    {{- if not .Error}}
+    <p class="wv-none">No flow governs this depot.</p>
+    {{- end}}
+    {{- end}}
+    {{- /* The beads in no stage of these flows stand last, and only while
+           there is one: the stylesheet hides the group while its list is
+           empty, so the list is still in the page for the stream to fill. */}}
+    <section class="wv-group wv-group--off">
+      <h3 class="wv-group__head"><span>off the flow</span></h3>
+      <ol id="{{.Section}}" sse-swap="{{.Section}}" hx-target="this" hx-swap="afterbegin settle:0ms" hx-select-oob="#rail:outerHTML,#drawer:outerHTML,#list:outerHTML">
+        {{- range .Elsewhere}}{{template "card" .}}{{end}}
+      </ol>
+      <span class="wv-group__count" aria-hidden="true"></span>
+    </section>
   </section>
   {{- else}}
-  {{- if not .Error}}<p class="faint">No flow governs this depot.</p>{{end}}
+  <p class="wv-none">This yard has no depot yet.</p>
   {{- end}}
-  <section class="flow off">
-    <h3 class="label">off the flow</h3>
-    <div class="cards" id="{{.Section}}" sse-swap="{{.Section}}" hx-target="this" hx-swap="afterbegin settle:0ms">
-      {{- range .Elsewhere}}{{template "card" .}}{{end}}
-    </div>
-  </section>
 </article>
-{{- else}}
-<p class="item faint">This yard has no depot yet.</p>
-{{- end}}
-</div>
 {{- end}}
 {{end}}
 {{- /* Who works a stage: its group and the rest of its route, by hand with
@@ -74,7 +82,7 @@
 {{- if .Terminal}}{{if .Group}} · {{end}}closes the bead{{end}}
 {{- if .StageFile}} · stage file{{end -}}
 {{end}}
-{{- /* The element the stream puts a stage's cards in, named after the stage. */}}
-{{define "stagecards"}}<div class="cards" id="{{.Section}}" sse-swap="{{.Section}}" hx-target="this" hx-swap="afterbegin settle:0ms">
+{{- /* The list the stream puts a stage's rows in, named after the stage. */}}
+{{define "stagerows"}}<ol id="{{.Section}}" sse-swap="{{.Section}}" hx-target="this" hx-swap="afterbegin settle:0ms" hx-select-oob="#rail:outerHTML,#drawer:outerHTML,#list:outerHTML">
   {{- range .Beads}}{{template "card" .}}{{end}}
-</div>{{end}}
+</ol>{{end}}

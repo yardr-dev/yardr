@@ -336,9 +336,17 @@ func TestFlowJSON(t *testing.T) {
 	}
 }
 
-// The same request without the header is the page: the breadcrumb, the
-// groups with their rows to their beads, the folded stage, the plain
-// terminal rows. No Board/Map toggle, no filter bar, no New bead.
+// chevron and checkMark are the glyphs of the stage's back link and folds, and
+// of a row that has closed.
+const (
+	chevron   = `<svg class="wv-glyph wv-chev" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>`
+	checkMark = `<svg class="wv-glyph wv-check" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/></svg>`
+)
+
+// The same request without the header is the page, the fifth stage kind: the
+// back link to the depot, the groups with their rows to their beads, six rows
+// to a group and Show N more behind them, the empty stages in one fold, the
+// plain terminal rows. No Board/Map toggle, no filter bar, no New bead.
 func TestFlowHTML(t *testing.T) {
 	t.Parallel()
 	f, bs := stockFlow(t)
@@ -350,41 +358,59 @@ func TestFlowHTML(t *testing.T) {
 	s := squash(r.body)
 	for _, want := range []string{
 		"<title>code · depot</title>",
-		`<a href="/depots/line">line</a><span aria-hidden="true">›</span> code`,
-		`<span class="flow-name">backlog</span><span class="flow-count">2</span><span class="flow-note">· waits on shaping</span>`,
-		`<a href="/beads/` + bs["bulk-0"].ID + `">`,
-		`<span class="flow-next">→ review</span>`,
-		`<a class="flow-more" href="/beads?depot=line&amp;stage=new">Show 1 more</a>`,
-		`<span class="flow-empty-n">1 empty stage</span><span class="flow-empty-names">review</span>`,
-		`<span class="flow-name">review</span><span class="flow-count">0</span>`,
-		`<span class="flow-name">merged</span><span class="flow-count">1</span><span class="flow-note">· last 24h · terminal</span>`,
-		`<span class="flow-id">` + shortID(bs["seven"].ID) + `</span><span class="flow-title">seven</span><span class="flow-next">landed `,
-		`<span class="flow-name">closed</span><span class="flow-count">2</span><span class="flow-note">· terminal</span>`,
-		`<span class="flow-title">eight</span><span class="flow-next">closed `,
+		`<article class="wv-page" data-kind="flow">`,
+		`<a class="wv-back" href="/depots/line">` + chevron + `line</a><h1 class="wv-title">code</h1>` +
+			`<p class="wv-meta">flow of line<span class="wv-sep">·</span>9 open</p>`,
+		`<h2 class="wv-group__head"><span>backlog</span><span class="wv-group__count">2</span><span class="wv-group__note">waits on shaping</span></h2>`,
+		`<a class="wv-srow" href="/beads/` + bs["bulk-0"].ID + `"><span class="wv-dot wv-dot--idle"></span>` +
+			`<span class="wv-srow__name">bulk-0</span><span class="wv-srow__end"><span>→ review</span></span></a>`,
+		`<a class="wv-more" href="/beads?depot=line&amp;stage=new">Show 1 more</a>`,
+		`<span class="wv-fold__label">1 empty stage</span><span class="wv-fold__value">review</span>`,
+		`<h2 class="wv-group__head"><span>review</span><span class="wv-group__count">0</span><span class="wv-group__note">→ merged</span></h2>`,
+		`<h2 class="wv-group__head"><span>merged</span><span class="wv-group__count">1</span><span class="wv-group__note">last 24h · terminal</span></h2>`,
+		`<li class="wv-srow wv-srow--quiet">` + checkMark + `<span><span class="wv-srow__name">seven</span><br>` +
+			`<span class="wv-srow__meta"><span class="wv-id">` + bs["seven"].ID + `</span></span></span>` +
+			`<span class="wv-srow__end"><span>landed `,
+		`<h2 class="wv-group__head"><span>closed</span><span class="wv-group__count">2</span><span class="wv-group__note">terminal</span></h2>`,
+		`<span class="wv-srow__name">eight</span><br><span class="wv-srow__meta"><span class="wv-id">` + bs["eight"].ID + `</span></span></span>` +
+			`<span class="wv-srow__end"><span>closed `,
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("the page lacks %q", want)
 		}
 	}
-	// The terminal rows are plain: seven's id stands short, and no link
-	// carries it or eight to its bead. Three's row stands past the cap of
-	// six, behind Show 1 more.
-	if strings.Contains(s, "/beads/"+bs["seven"].ID) || strings.Contains(s, "/beads/"+bs["eight"].ID) {
-		t.Errorf("a terminal row links its bead")
+	// A group names six rows and the rest stand behind Show N more: new holds
+	// seven, so the seventh, three, is not among its rows.
+	newGroup := s[strings.Index(s, `<span>new</span><span class="wv-group__count">7`):]
+	newGroup = newGroup[:strings.Index(newGroup, `</section>`)]
+	if n := strings.Count(newGroup, `<a class="wv-srow" href="/beads/`); n != 6 {
+		t.Errorf("new names %d rows, want 6: %s", n, newGroup)
 	}
 	if strings.Contains(s, "/beads/"+bs["three"].ID) {
 		t.Errorf("three's row stands past the cap")
 	}
-	for _, not := range []string{"New bead", ">Board<", ">Map<", "Filter"} {
+	// The empty stages stand in one fold, whatever their number; the block of
+	// rows that open a bead's page swaps the whole list, as no other block does.
+	if n := strings.Count(s, `<details class="wv-fold">`); n != 1 {
+		t.Errorf("the page has %d folds, want the empty stages' one", n)
+	}
+	if n := strings.Count(s, `<ol hx-select-oob="#rail:outerHTML,#drawer:outerHTML,#list:outerHTML">`); n != 2 {
+		t.Errorf("the page has %d blocks of bead rows that swap the whole list, want one for each group of open beads", n)
+	}
+	// The terminal rows are plain: no link carries seven or eight to its bead.
+	if strings.Contains(s, "/beads/"+bs["seven"].ID) || strings.Contains(s, "/beads/"+bs["eight"].ID) {
+		t.Errorf("a terminal row links its bead")
+	}
+	for _, not := range []string{"New bead", ">Board<", ">Map<", "Filter", `class="filters"`, "flow-head"} {
 		if strings.Contains(s, not) {
 			t.Errorf("the page draws %q: nothing dead is drawn", not)
 		}
 	}
-	closedAt := strings.Index(s, `<span class="flow-name">closed</span>`)
-	if closedAt < 0 {
-		t.Error("the page lacks its closed group")
-	} else if closed := s[closedAt:]; !strings.Contains(closed, `class="flow-dot"`) || strings.Contains(closed, `class="flow-check"`) {
-		t.Errorf("closed beads use a landing check, want the neutral terminal mark: %s", closed)
+	// A group of the flow that holds nothing says so in a line of its own: the
+	// bugs flow has no landing terminal and has closed nothing.
+	if bugs := squash(f.get("/depots/line/bugs").body); !strings.Contains(bugs, `<p class="wv-none">Nothing closed.</p>`) ||
+		strings.Contains(bugs, "Nothing landed") {
+		t.Errorf("the bugs flow's closed group is not drawn empty, or it draws a landing log: %s", bugs)
 	}
 }
 

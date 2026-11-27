@@ -62,7 +62,7 @@ func TestFlowsListARoutesGroupsInOrder(t *testing.T) {
 		t.Errorf("stage review = %+v, want people by hand, as before", s)
 	}
 	page := squashLines(f.get("/flows").body)
-	for _, want := range []string{`<p class="label stage-who">a, else b</p>`, `<p class="label stage-who">people · by hand: ada</p>`} {
+	for _, want := range []string{`<p class="wv-group__who">a, else b</p>`, `<p class="wv-group__who">people · by hand: ada</p>`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("/flows lacks %s", want)
 		}

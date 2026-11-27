@@ -108,9 +108,9 @@ func TestPanelAndHomeParametersAnswerAsThePage(t *testing.T) {
 	}
 }
 
-// /flows is the page of cards: the stream moves each bead's card between the
-// stages, so it has no leaf, and Flows is the row of the Lines list that
-// stands open. The yard panel's markup is gone.
+// /flows is the page of cards: the stream moves each bead's card, a row of
+// the flow list, between the stages, so it has no leaf, and Flows is the row of
+// the Lines list that stands open. The yard panel's markup is gone.
 func TestFlowsIsTheCardPage(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
@@ -119,8 +119,8 @@ func TestFlowsIsTheCardPage(t *testing.T) {
 	for _, want := range []string{
 		`format=card`,
 		`<a class="wv-row" href="/flows" aria-current="page">`,
-		`<h3 class="label">off the flow</h3>`,
-		`<a class="bead" href="/beads/` + six.ID + `">`,
+		`<h3 class="wv-group__head"><span>off the flow</span></h3>`,
+		`<a class="wv-srow" href="/beads/` + six.ID + `"`,
 	} {
 		if !strings.Contains(r.body, want) {
 			t.Errorf("/flows lacks %s", want)

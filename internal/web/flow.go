@@ -32,6 +32,16 @@ type FlowPage struct {
 	Closed FlowTerminal `json:"closed"`
 }
 
+// Open is how many open beads the flow holds: the head's line, which the
+// flow's row in Lines' list ends with too.
+func (p FlowPage) Open() int {
+	n := 0
+	for _, g := range p.Groups {
+		n += g.Count
+	}
+	return n
+}
+
 // EmptyLabel is the folded empty-stages row's words.
 func (p FlowPage) EmptyLabel() string {
 	if len(p.Empty) == 1 {
@@ -94,9 +104,6 @@ type FlowClosed struct {
 	Age      string    `json:"age"`
 	ClosedAt time.Time `json:"closed_at"`
 }
-
-// ShortID is the bead's short id for the row.
-func (r FlowClosed) ShortID() string { return shortBead(r.ID) }
 
 // Words is the row's right side: how it closed, and how long ago.
 func (r FlowClosed) Words() string { return r.Verb + " " + r.Age }
@@ -289,6 +296,6 @@ func (s *Server) handleFlow(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	s.respond(w, r, Page{Template: "flow", Title: flow,
+	s.respond(w, r, Page{Template: "flow", Kind: "flow", Title: flow,
 		Data: flowPage(d, j, ov.yard.beads, all, time.Now()), ov: ov, head: head, depot: name, flow: flow})
 }

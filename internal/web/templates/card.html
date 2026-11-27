@@ -1,11 +1,22 @@
-{{- /* One bead as a list shows it: in a stage of /flows, in /beads, on a bead's page.
-       On /flows the card listens to the stream for the event named after it,
-       which comes when its bead moved or closed, and takes itself out. */ -}}
+{{- /* One bead as a row of a stage of /flows: the flow list's row. A row under
+       its stage's head leaves out the depot and the stage, which the head says
+       already; one off the flow names both. It has no age, for the page is not
+       read again and an age would only go stale. The row listens to the stream
+       for the event named after its bead, which comes when the bead moved or
+       closed, and takes itself out. Its target and swap would reach its link,
+       which inherits htmx's attributes, and a click would then delete the row
+       where it should open the bead's page: the link says the shell's own
+       target and swap again. */ -}}
 {{define "card"}}
-<article class="card{{if .Arrived}} arrived{{end}}" id="{{.DOM}}"{{if .Live}} sse-swap="{{.DOM}}" hx-target="this" hx-swap="delete"{{end}}>
-  <p class="card-head"><span class="dot{{if .Held}} held{{else if .Working}} working{{end}}"></span><a class="bead" href="/beads/{{.ID}}">{{.ID}}</a> <span class="label">{{if not .Placed}}{{with .Depot}}{{.}} · {{end}}{{.Stage}} · {{end}}{{.Type}}{{if .Held}} · <span class="held">held</span>{{else if .Working}} · working{{end}}{{if eq .Status "closed"}} · closed{{end}}{{with .Late}} · <span class="late" title="{{.Line}}">⚠ late</span>{{end}}</span></p>
-  <p class="card-title">{{.Title}}</p>
-</article>
+<li{{if .Arrived}} class="arrived"{{end}} id="{{.DOM}}"{{if .Live}} sse-swap="{{.DOM}}" hx-target="this" hx-swap="delete"{{end}}>
+  <a class="wv-srow" href="/beads/{{.ID}}"{{if .Live}} hx-target="#stage" hx-swap="innerHTML scroll:top"{{end}}>
+    <span class="wv-dot {{if .Held}}wv-dot--fault{{else if .Working}}wv-dot--run{{else}}wv-dot--idle{{end}}"></span>
+    <span>
+      <span class="wv-srow__name">{{.Title}}</span><br>
+      <span class="wv-srow__meta"><span class="wv-id">{{.ID}}</span>{{if not .Placed}}{{with .Depot}}<span class="wv-sep">·</span><span class="wv-nw">{{.}}</span>{{end}}<span class="wv-sep">·</span>{{.Stage}}{{end}}<span class="wv-sep">·</span>{{.Type}}{{if .Held}}<span class="wv-sep">·</span><span class="wv-fault">held</span>{{else if .Working}}<span class="wv-sep">·</span>working{{end}}{{with .Late}}<span class="wv-sep">·</span><span class="wv-late" title="{{.Line}}">late</span>{{end}}</span>
+    </span>
+  </a>
+</li>
 {{end}}
 {{- /* One bead as a row of the stage: the dot says it is held or worked, the
        line under its title says where it stands, and the age of its last change

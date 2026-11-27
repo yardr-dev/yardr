@@ -366,10 +366,10 @@ func (s *Server) handleFlows(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	// The cards move as the stream says: the page has no leaf. The old yard
+	// The rows move as the stream says: the page has no leaf. The old yard
 	// panel, ?panel=1, is the list beside the stage now, so it answers as the
 	// page without it.
-	s.respond(w, r, Page{Template: "flows", Title: "Flows", Data: d, head: d.Head, stream: "card"})
+	s.respond(w, r, Page{Template: "flows", Kind: "flow", Title: "Flows", Data: d, head: d.Head, stream: "card"})
 }
 
 // placement is where the stream puts a bead's card on /flows: the card as

@@ -193,26 +193,25 @@ func TestConfigPages(t *testing.T) {
 	narrow, err := f.st.AddRoute(ctx, store.Route{Stage: "new", Depot: &line, Type: &bug, Label: &bug, Group: "decisions"}, "me")
 	must(t, err)
 
+	// The depots are a table, the fourth stage kind, a row to each depot as
+	// `yardr depot list` prints it; a directory depot has no base and no test
+	// command, and its cells say so, not leave a row of facts out.
 	depots := squash(f.get("/depots").body)
 	for _, want := range []string{
-		`<h2>line</h2>`,
-		`<div><dt>kind</dt><dd>git</dd></div>`,
-		`<div><dt>path</dt><dd>/tmp/line</dd></div>`,
-		`<div><dt>base</dt><dd>origin/main</dd></div>`,
-		`<div><dt>test</dt><dd>make test</dd></div>`,
-		`<h2>docs</h2>`,
-		`<div><dt>kind</dt><dd>dir</dd></div>`,
+		`<article class="wv-page" data-kind="table">`,
+		`<h1 class="wv-title">Depots</h1><p class="wv-meta">3 depots</p>`,
+		`<thead><tr><th>name</th><th>kind</th><th>path</th><th>base</th><th>test</th></tr></thead>`,
+		`<tr><td class="wv-name">line</td><td>git</td><td><code>/tmp/line</code></td><td><code>origin/main</code></td><td><code>make test</code></td></tr>`,
+		`<tr><td class="wv-name">docs</td><td>dir</td><td><code>/tmp/docs</code></td><td><span class="wv-nil">–</span></td><td><span class="wv-nil">–</span></td></tr>`,
 		`<a class="wv-row" href="/depots" aria-current="page">`,
 	} {
 		if !strings.Contains(depots, want) {
 			t.Errorf("/depots lacks %s", want)
 		}
 	}
-	// A directory depot has no base: no empty row for it.
-	at := strings.Index(depots, "<h2>docs</h2>")
-	article := depots[at : at+strings.Index(depots[at:], "</article>")]
-	if strings.Contains(article, "<dt>base</dt>") {
-		t.Error("/depots shows a base for the directory depot")
+	// Depots is a row of Lines' list, so the page has no way back to the hub.
+	if strings.Contains(depots, "‹ Config") {
+		t.Error("/depots links back to the hub")
 	}
 
 	groups := squash(f.get("/groups").body)

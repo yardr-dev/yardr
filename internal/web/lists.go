@@ -19,6 +19,10 @@ type Depots struct {
 	Head   uint64        `json:"head"`
 }
 
+// Line is the stage head's line under the title: how many depots the table
+// lists.
+func (d Depots) Line() string { return countWords(len(d.Depots), "depot", "depots") }
+
 // Groups is /groups: `yardr group list --json`, each row with the
 // subscription it burns beside the command's fields.
 type Groups struct {
@@ -135,8 +139,10 @@ func all(r *http.Request) bool {
 // listedPage answers r with one list that has a page: read reads it, wrap
 // puts it and the head from before the read into the route's answer, and
 // the page renders that answer, live on the shell's stream. A list the
-// store has nothing for is empty, never null.
-func listedPage[T any](s *Server, w http.ResponseWriter, r *http.Request, read func() ([]T, error), wrap func([]T, uint64) any, template, title string) {
+// store has nothing for is empty, never null. kind is the stage kind the
+// page draws itself as (Page.Kind), "" for a list whose template does not
+// draw its own head yet.
+func listedPage[T any](s *Server, w http.ResponseWriter, r *http.Request, read func() ([]T, error), wrap func([]T, uint64) any, template, kind, title string) {
 	// The head first, as on a page: the stream after it brings whatever
 	// changed while the list was read.
 	head, err := s.st.Head(r.Context())
@@ -152,12 +158,12 @@ func listedPage[T any](s *Server, w http.ResponseWriter, r *http.Request, read f
 	if rows == nil {
 		rows = []T{}
 	}
-	s.respond(w, r, Page{Template: template, Title: title, Data: wrap(rows, head), head: head, stream: "seq", live: liveStage})
+	s.respond(w, r, Page{Template: template, Kind: kind, Title: title, Data: wrap(rows, head), head: head, stream: "seq", live: liveStage})
 }
 
 func (s *Server) handleDepots(w http.ResponseWriter, r *http.Request) {
 	listedPage(s, w, r, func() ([]store.Depot, error) { return s.st.Depots(r.Context()) },
-		func(rows []store.Depot, head uint64) any { return Depots{rows, head} }, "depots", "Depots")
+		func(rows []store.Depot, head uint64) any { return Depots{rows, head} }, "depots", "table", "Depots")
 }
 
 func (s *Server) handleGroups(w http.ResponseWriter, r *http.Request) {
@@ -175,7 +181,7 @@ func (s *Server) handleGroups(w http.ResponseWriter, r *http.Request) {
 			rows = append(rows, GroupRow{Group: g, Provider: providerOf(g.Runner, g.Config, as)})
 		}
 		return rows, nil
-	}, func(rows []GroupRow, head uint64) any { return Groups{rows, head} }, "groups", "Groups")
+	}, func(rows []GroupRow, head uint64) any { return Groups{rows, head} }, "groups", "", "Groups")
 }
 
 func (s *Server) handleRoutes(w http.ResponseWriter, r *http.Request) {
@@ -183,7 +189,7 @@ func (s *Server) handleRoutes(w http.ResponseWriter, r *http.Request) {
 		rs, err := s.st.Routes(r.Context())
 		store.SortRoutes(rs)
 		return rs, err
-	}, func(rows []store.Route, head uint64) any { return Routes{rows, head} }, "routes", "Routes")
+	}, func(rows []store.Route, head uint64) any { return Routes{rows, head} }, "routes", "", "Routes")
 }
 
 // Config is /config: the hub of the yard's configuration pages, the links
@@ -255,7 +261,7 @@ func (s *Server) handlePeers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	listedPage(s, w, r, func() ([]store.Peer, error) { return s.st.Peers(r.Context()) },
-		func(rows []store.Peer, head uint64) any { return Peers{rows, head} }, "peers", "Peers")
+		func(rows []store.Peer, head uint64) any { return Peers{rows, head} }, "peers", "", "Peers")
 }
 
 func (s *Server) handleDeps(w http.ResponseWriter, r *http.Request) {

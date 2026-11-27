@@ -1,7 +1,6 @@
 /* yardr web: the one stylesheet. The tokens below are the whole palette and
    scale; a page uses them and adds none without need (docs/web.md). The
-   colours come from the yardr design system, except the late warning,
-   which has no matching token. */
+   colours come from the yardr design system. */
 
 :root {
   color-scheme: dark light;
@@ -24,8 +23,6 @@
   --pill: #b54e22; /* --yard-600 */
   /* links and the depot's transit counts, in link blue */
   --link: #7aa2f7; /* --text-link */
-  /* A landed bead is done, so it shares the quiet done text tier. */
-  --landed: var(--faint); /* --text-disabled */
   /* The phone's drawer dims the page with a translucent dusk ground. */
   --shade: rgba(16, 17, 18, 0.45); /* --dusk-950 */
 
@@ -52,9 +49,6 @@
   --working: var(--accent); /* --yard-500 */
   --running: #4cc38a; /* --signal-green */
   --held: #e5675a; /* --signal-red */
-  /* The design system has no warning colour, so late keeps the nearest
-     existing amber. */
-  --late: #e8a33d;
   --done: var(--faint); /* --text-disabled */
 
   /* faces: the design system's Plex pair, with the system faces behind
@@ -487,6 +481,9 @@ a.wv-btn { display: inline-block; }
 .wv-table td { padding: 10px 16px 10px 4px; border-bottom: 1px solid var(--hairline); vertical-align: top; }
 .wv-table tbody tr:hover { background: var(--surface-hover); }
 .wv-table td.wv-name { font-weight: 500; white-space: nowrap; }
+.wv-table td.wv-name small { display: block; font: 400 12px/16px var(--mono); color: var(--dim); }
+.wv-table .wv-num { text-align: right; font-variant-numeric: tabular-nums; }
+.wv-table .wv-nil { color: var(--faint); }
 .wv-table code { font: 400 12.5px/18px var(--mono); color: var(--ink); }
 
 /* A bead as a row of the stage, the list's row at the stage's width. */
@@ -543,6 +540,7 @@ li:has(> .wv-waits) { border-bottom: 1px solid var(--hairline); }
   .wv-fold > summary { min-height: 48px; }
   .wv-fold__label { min-width: 84px; }
   .wv-srow { min-height: 48px; }
+  .wv-more { display: flex; align-items: center; min-height: 48px; }
   /* A phone's chips keep one scrolling line each, bled to the window's edge. */
   .wv-pill { min-height: 48px; flex: none; }
   .wv-chips p { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 calc(-1 * var(--wv-gutter)); padding: 0 var(--wv-gutter); }
@@ -552,6 +550,73 @@ li:has(> .wv-waits) { border-bottom: 1px solid var(--hairline); }
   .wv-pager { gap: 8px; }
   .wv-pager a, .wv-pager span { display: flex; align-items: center; min-height: 48px; padding: 0 8px; }
 }
+
+/* --- the flow lists, the fifth stage kind -------------------------------- */
+
+/* The stage of /flows, /depots/<name> and /depots/<name>/<flow> (docs/web.md,
+   The stage kinds): groups of rows under group heads, a stage's or, at depot
+   level, the flows' table and two groups of rows, the empty ones folded. The
+   kit's parts in yard.css's names for its tokens. A group's head says its
+   name and, in quiet words, its count and what else it says; a stage of
+   /flows says who works it under its head. */
+.wv-group { margin-top: 28px; }
+.wv-group__head { display: flex; align-items: baseline; gap: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--hairline); font: 600 15px/20px var(--sans); }
+.wv-group__count { font: 400 13px/18px var(--sans); color: var(--dim); }
+.wv-group__note { margin-left: auto; font: 400 13px/18px var(--sans); color: var(--dim); text-align: right; }
+.wv-group__who { margin: 6px 0 2px; font: 400 13px/18px var(--sans); color: var(--dim); }
+.wv-group .wv-srow__end { font-family: var(--sans); font-size: 13px; }
+.wv-more { display: block; padding: 10px 4px; font: 400 13px/18px var(--sans); color: var(--link); }
+/* A row that has closed is plain, its check in the dot's column. */
+.wv-srow--quiet .wv-srow__name { font-weight: 400; color: var(--dim); }
+.wv-check { flex: none; color: var(--faint); }
+/* The depot's page: the four counts in one quiet line, and the stage strip, a
+   cell to each stage of a flow, lit where a bead stands, rust where an ask
+   waits. */
+.wv-counts { display: flex; flex-wrap: wrap; gap: 4px 24px; margin: 14px 0 4px; font: 400 13px/18px var(--sans); color: var(--dim); }
+.wv-counts strong { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.wv-strip { display: flex; gap: 2px; }
+.wv-strip__cell { min-width: 26px; height: 22px; padding: 0 6px; border-radius: var(--radius-sm); background: var(--surface-hover); font: 400 12px/22px var(--mono); color: var(--dim); text-align: center; }
+.wv-strip__cell--open { background: var(--surface-pressed); color: var(--ink); }
+.wv-strip__cell--ask { background: var(--accent); color: var(--badge-ink); font-weight: 600; }
+.wv-strip__cell--merged { color: var(--faint); }
+
+/* /flows: the stream moves a row out of the stage it left and into the one it
+   entered, so a stage's count is the stylesheet's, a counter over its rows
+   that follows them as they come and go and needs no message of its own. A
+   counter reads only what comes before it, so the count stands after the rows
+   in the page and is drawn at the head's right end, over the line's reserved
+   end, which lets a tap through. A count with words in it is the server's. */
+.wv-group { position: relative; counter-reset: rows; }
+.wv-group li { counter-increment: rows; }
+.wv-group__count:empty { position: absolute; top: 0; right: 0; pointer-events: none; }
+.wv-group__count:empty::before { content: counter(rows); }
+/* A row the stream brought into a stage is seen arriving. */
+.wv-group li.arrived { animation: arrive 2.4s ease-out; }
+@keyframes arrive {
+  from { box-shadow: inset 3px 0 0 var(--accent); transform: translateY(-8px); opacity: 0; }
+  15% { transform: none; opacity: 1; }
+  70% { box-shadow: inset 3px 0 0 var(--accent); }
+  to { box-shadow: inset 0 0 0 var(--accent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wv-group li.arrived { animation-duration: 0.01s; }
+}
+/* A stage holding no bead is folded to its head line, a closed details whose
+   body is the list the stream fills. A closed details leaves its body out of
+   rendering, and so out of the counter: a row the stream puts in a folded
+   stage would sit unseen under a count of 0. Where the browser lets the
+   stylesheet say so, the body shows while it holds a row, and the stage folds
+   again when the row leaves; a browser that cannot keeps the stage folded,
+   with the row inside, until it is opened. */
+.wv-group--fold { margin-top: 0; }
+.wv-group--fold > details > summary { padding-right: 40px; }
+.wv-group--fold > .wv-group__count:empty { top: 10px; right: 4px; }
+.wv-group--fold:has(li) .wv-chev { transform: rotate(90deg); }
+@supports selector(details::details-content) {
+  .wv-group--fold:has(li) details::details-content { content-visibility: visible; }
+}
+/* Shown only while a bead stands off its flow. */
+.wv-group--off:not(:has(li)) { display: none; }
 
 /* --- what goes in the columns ------------------------------------------- */
 
@@ -563,7 +628,6 @@ li:has(> .wv-waits) { border-bottom: 1px solid var(--hairline); }
 }
 .faint { color: var(--faint); }
 .held { color: var(--held); }
-.late { color: var(--late); }
 
 /* One entry of the stage's feed. */
 .item { padding: var(--gap); border-bottom: 1px solid var(--hairline); }
@@ -577,77 +641,6 @@ li:has(> .wv-waits) { border-bottom: 1px solid var(--hairline); }
    since the card's sentences read as plain text otherwise. It stays under
    the link states above (a:hover, a:focus-visible). */
 .opens { color: var(--dim); text-decoration: underline; text-decoration-color: var(--faint); text-underline-offset: 3px; }
-
-.flow { margin-top: var(--gap); }
-
-/* A bead as a list shows it. */
-.card-head { overflow-wrap: anywhere; }
-.card .card-title { color: var(--dim); font-family: var(--sans); overflow-wrap: anywhere; }
-.cards .card { padding: 8px 10px; background: var(--panel); border: 1px solid var(--hairline); }
-.cards .card + .card { margin-top: 6px; }
-/* A card the stream brought into a stage: it is seen arriving. */
-.card.arrived { animation: arrive 2.4s ease-out; }
-@keyframes arrive {
-  from { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); transform: translateY(-8px); opacity: 0; }
-  15% { transform: none; opacity: 1; }
-  70% { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
-  to { border-color: var(--hairline); box-shadow: inset 0 0 0 var(--accent); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .card.arrived { animation-duration: 0.01s; }
-}
-
-/* A flow: one column, its stages in order, each with the beads in it. */
-.column { margin-top: 8px; }
-/* Under .column only: a bare .stage would draw this rule beside anything
-   else that takes the name. */
-.column > .stage {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  column-gap: 10px;
-  padding: 10px 0 12px 12px;
-  border-left: 1px solid var(--hairline-strong);
-  counter-reset: cards;
-}
-.stage h4 { grid-column: 1; }
-.stage .count { grid-column: 2; grid-row: 1; color: var(--dim); }
-.stage .count::before { content: counter(cards); }
-.stage-who, .stage .cards { grid-column: 1 / -1; }
-.stage .cards { margin-top: 8px; }
-.stage .card { counter-increment: cards; }
-.stage.terminal h4 { color: var(--landed); }
-/* A stage holding no bead is folded to one line, its name and who under a
-   closed details whose body is the cards, with the count at the right as in
-   any stage (the count rides over the line's reserved end, and lets a tap
-   through). The summary's padding and the margin that takes it back make
-   the whole row the target. */
-.stage.quiet details { grid-column: 1 / -1; grid-row: 1; }
-.stage.quiet summary { padding-right: 3ch; }
-.stage.quiet .count { pointer-events: none; }
-.stage.quiet:not(:has(.card)) summary { margin: -10px 0 -12px; padding-block: 10px 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-.stage.quiet:not(:has(.card)) summary > * { display: inline; }
-.stage.quiet:not(:has(.card)) .stage-who { margin-left: 10px; }
-.stage.quiet:not(:has(.card)) summary:hover h4 { color: var(--accent-hover); }
-/* A closed details leaves its body out of rendering, and so out of the
-   counter: a card the stream puts in a folded stage would sit unseen under
-   a count of 0. Where the browser lets the stylesheet say so, the body shows
-   while it holds a card, under the head as any stage has it, and the stage
-   folds again when the card leaves. */
-@supports selector(details::details-content) {
-  .stage.quiet:has(.card) details::details-content { content-visibility: visible; }
-  .stage.quiet:has(.card) summary { list-style: none; }
-}
-/* Shown only while a bead stands off its flow. */
-.off:not(:has(.card)) { display: none; }
-.off .cards { margin-top: 8px; }
-
-/* The beads in no stage of a depot's flows, under its lists. */
-.off-line { margin-top: 8px; }
-
-.filters p + p { margin-top: 6px; }
-.filters .label { display: inline-block; min-width: 56px; }
-.filters a { margin-right: 10px; color: var(--dim); overflow-wrap: anywhere; }
-.filters a[aria-current] { color: var(--accent); }
 
 /* A bead's own page. */
 .facts div { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 10px; padding: 2px 0; }
@@ -788,118 +781,3 @@ code { font: inherit; color: var(--dim); overflow-wrap: anywhere; }
 .dot.working { background: var(--working); }
 .dot.running { background: var(--running); }
 .dot.held { background: var(--held); }
-
-/* One depot: the canvas's depot board — the title block, four counts, the
-   flows with their stage strips, what waits on the viewer, what landed.
-   The page reads in the sans face throughout, as the list does, with
-   bead ids in mono; the cards, the table and the segments keep the
-   canvas's rounded corners. */
-.depot { display: flex; flex-direction: column; gap: 28px; padding: 28px var(--gap); font-family: var(--sans); font-size: 13px; }
-.depot-title h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; overflow-wrap: anywhere; }
-.depot-title p { margin-top: 6px; color: var(--dim); }
-/* The four counts: the Waiting card links to Decide and stands in rust,
-   the transit counts in link blue, the rest plain. */
-.depot-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-.depot-card { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border: 1px solid var(--hairline); border-radius: 10px; background: var(--panel); }
-.depot-card-label { font-size: 12px; color: var(--dim); }
-.depot-card-num { font-size: var(--large); font-weight: 600; font-variant-numeric: tabular-nums; }
-.depot-wait { border-color: var(--hairline-strong); background: var(--panel); border-color: color-mix(in srgb, var(--accent) 35%, var(--hairline)); background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
-.depot-wait .depot-card-num { color: var(--accent); }
-a.depot-card:hover .depot-card-num { color: var(--accent-hover); }
-.depot-transit { color: var(--link); }
-.depot-onyou { color: var(--accent); }
-.depot-error { overflow-wrap: anywhere; }
-/* The flows: one row per flow that is not quiet, with its strip and its
-   four counts, and one folded row for the quiet ones. The head row stands
-   on the ground, the rows on the panel. */
-.depot-flows { border: 1px solid var(--hairline); border-radius: 10px; background: var(--panel); overflow: hidden; }
-.depot-scroll { overflow-x: auto; }
-.depot-flow { display: grid; grid-template-columns: minmax(170px, 1.2fr) minmax(260px, 2fr) 80px 80px 80px 80px; gap: 12px; align-items: center; min-width: 640px; padding: 12px 16px; }
-.depot-flow + .depot-flow { border-top: 1px solid var(--hairline); }
-.depot-head { padding: 10px 16px; background: var(--ground); font-size: 12px; color: var(--dim); }
-.depot-flow-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-weight: 500; overflow-wrap: anywhere; }
-.depot-src { font-size: 12px; font-weight: 400; color: var(--dim); overflow-wrap: anywhere; }
-.depot-strip { display: flex; align-items: center; gap: 3px; flex-wrap: wrap; }
-.depot-n { text-align: right; font-variant-numeric: tabular-nums; }
-/* A strip's segments: orange holds the viewer's asks, green is merged,
-   grey the first stage and closed, blue any other stage with beads, and
-   an empty stage a tick. The tints mix the token over the row, with a
-   plain hairline where the browser cannot mix. */
-.seg { display: inline-flex; align-items: center; justify-content: center; height: 20px; min-width: 26px; padding: 0 5px; border-radius: 4px; font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; }
-.seg-ask { background: var(--pill); color: #fff; }
-.seg-merged { color: var(--running); background: var(--hairline); background: color-mix(in srgb, var(--running) 16%, transparent); }
-.seg-muted { color: var(--dim); background: var(--hairline); }
-.seg-open { color: var(--link); background: var(--hairline); background: color-mix(in srgb, var(--link) 16%, transparent); }
-.seg-empty { min-width: 0; width: 12px; height: 6px; padding: 0; background: var(--hairline-strong); }
-.depot-quiet { border-top: 1px solid var(--hairline); }
-.depot-quiet summary { display: flex; align-items: center; gap: 8px; padding: 12px 16px; color: var(--dim); cursor: pointer; list-style: none; }
-.depot-quiet summary::-webkit-details-marker { display: none; }
-.depot-quiet summary::marker { content: ""; }
-.depot-quiet summary:hover { color: var(--accent-hover); }
-.depot-quiet[open] > summary .chev { transform: rotate(90deg); }
-.depot-quiet ul { padding: 0 16px 12px 36px; color: var(--dim); }
-.depot-quiet li { padding: 2px 0; }
-/* What waits and what landed, side by side where there is room. A waiting
-   row links to its bead; a landed row is plain. */
-.depot-cols { display: flex; flex-wrap: wrap; gap: 20px; }
-.depot-sec { flex: 1 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.depot-sec-head { display: flex; align-items: baseline; gap: 8px; }
-.depot-sec-head h3 { font-size: 14px; font-weight: 600; }
-.depot-sec-sub { color: var(--dim); }
-.depot-open { margin-left: auto; font-size: 12px; color: var(--dim); white-space: nowrap; }
-.depot-rows { display: flex; flex-direction: column; border: 1px solid var(--hairline); border-radius: 10px; background: var(--panel); overflow: hidden; }
-.depot-rows li { display: flex; align-items: center; gap: 10px; padding: 10px 14px; }
-.depot-rows li + li { border-top: 1px solid var(--hairline); }
-.depot-rows li:has(> a) { padding: 0; }
-.depot-rows li > a { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; padding: 10px 14px; }
-.depot-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
-.depot-check { flex: none; color: var(--running); }
-.depot-id { font-family: var(--mono); font-size: 12px; color: var(--dim); flex: none; }
-.depot-row-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.depot-where { font-size: 12px; color: var(--dim); flex: none; }
-.depot-none { color: var(--faint); }
-
-/* One flow's list: the canvas's list board — the open beads grouped by
-   stage in flow order, the empty stages folded into one row, the landing
-   terminal as the last day's log above every other closed bead. The page
-   reads in the sans face throughout, as the depot's page does, with bead
-   ids in mono. The head rows stand on the ground, the rows on the panel,
-   as the depot's table does; every corner stays square. */
-.flow { display: flex; flex-direction: column; gap: 20px; padding: 28px var(--gap); font-family: var(--sans); font-size: 13px; }
-.flow-tag { font-size: 12px; color: var(--dim); padding-left: 4px; }
-.flow-list { display: flex; flex-direction: column; border: 1px solid var(--hairline); background: var(--panel); overflow: hidden; }
-.flow-list > * + * { border-top: 1px solid var(--hairline); }
-.flow-head { display: flex; align-items: center; gap: 10px; padding: 9px 20px; background: var(--ground); }
-.flow-chev { color: var(--dim); transform: rotate(90deg); flex: none; }
-.flow-dot { color: var(--faint); flex: none; }
-.flow-check { color: var(--running); flex: none; }
-.flow-name { font-weight: 600; }
-.flow-count { color: var(--dim); }
-.flow-note { font-size: 12px; color: var(--dim); }
-/* An open row links to its bead; a terminal row is plain. */
-.flow-rows li { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 0 20px 0 42px; }
-.flow-rows li + li { border-top: 1px solid var(--hairline); }
-.flow-rows li:has(> a) { padding: 0; }
-.flow-rows li > a { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; min-height: 40px; padding: 0 20px 0 42px; }
-.flow-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.flow-next { font-size: 12px; color: var(--dim); flex: none; min-width: 72px; text-align: right; white-space: nowrap; }
-.flow-id { font-family: var(--mono); font-size: 12px; color: var(--dim); flex: none; min-width: 40px; }
-.flow-more { display: flex; align-items: center; min-height: 36px; padding: 0 20px 0 42px; font-size: 12px; color: var(--dim); }
-.flow-none { padding: 10px 20px 10px 42px; color: var(--faint); }
-/* The folded empty stages: their count and names, opening to their empty
-   headers. */
-.flow-empty summary { display: flex; align-items: center; gap: 10px; padding: 9px 20px; background: var(--ground); cursor: pointer; list-style: none; }
-.flow-empty summary::-webkit-details-marker { display: none; }
-.flow-empty summary::marker { content: ""; }
-.flow-empty summary:hover { color: var(--accent-hover); }
-.flow-empty[open] > summary .chev { transform: rotate(90deg); }
-.flow-empty-n { font-weight: 600; color: var(--dim); }
-.flow-empty-names { font-size: 12px; color: var(--dim); overflow-wrap: anywhere; }
-.flow-empty .flow-head { border-top: 1px solid var(--hairline); }
-@media (max-width: 699px) {
-  .depot-cards { grid-template-columns: 1fr; }
-  .flow-head { padding: 9px 12px; }
-  .flow-rows li, .flow-rows li > a { padding-left: 28px; padding-right: 12px; }
-  .flow-more, .flow-none { padding-left: 28px; padding-right: 12px; }
-  .flow-empty summary { padding: 9px 12px; }
-}

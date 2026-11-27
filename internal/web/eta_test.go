@@ -129,20 +129,17 @@ func TestBeadPageRealEstimate(t *testing.T) {
 	}
 }
 
-// The cards of /flows and the rows of /beads carry the late mark, and
-// their JSON the estimate's objects under internal/eta's field names. The
-// mark is a word with the whole line as its title: the card's keeps the sign
-// before it until /flows is rebuilt, the row's, as the design says, has none.
+// The rows of /flows and of /beads carry the late mark, and their JSON the
+// estimate's objects under internal/eta's field names. The mark is a word
+// with the whole line as its title, and no sign before it.
 func TestCardsCarryLateMark(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	f.populate()
 	three := f.byTitle()["three"]
 	g := serveEstimates(t, f, map[string]*eta.Result{three.ID: etaRunning})
-	for path, mark := range map[string]string{
-		"/flows": `<span class="late" title="` + etaRunning.Late.Line + `">⚠ late</span>`,
-		"/beads": `<span class="wv-sep">·</span><span class="wv-late" title="` + etaRunning.Late.Line + `">late</span>`,
-	} {
+	mark := `<span class="wv-sep">·</span><span class="wv-late" title="` + etaRunning.Late.Line + `">late</span>`
+	for _, path := range []string{"/flows", "/beads"} {
 		r := g.get(path)
 		if r.status != 200 {
 			t.Fatalf("%s: status %d: %s", path, r.status, r.body)
@@ -150,9 +147,9 @@ func TestCardsCarryLateMark(t *testing.T) {
 		if !strings.Contains(r.body, mark) {
 			t.Errorf("%s lacks the late mark %s:\n%s", path, mark, r.body)
 		}
-	}
-	if strings.Contains(g.get("/beads").body, "⚠") {
-		t.Error("/beads draws the sign before the late mark")
+		if strings.Contains(r.body, "⚠") {
+			t.Errorf("%s draws the sign before the late mark", path)
+		}
 	}
 	var flows web.Flows
 	g.getJSON("/flows", &flows)
@@ -224,7 +221,7 @@ func TestFlowsStreamCardLateMark(t *testing.T) {
 	_, err := g.st.Advance(ctx, three.ID, "review", store.Expect{}, "me")
 	must(t, err)
 	fr := s.next(t)
-	if !strings.Contains(put(fr), "⚠ late") {
+	if !strings.Contains(put(fr), `<span class="wv-late" title="`+etaRunning.Late.Line+`">late</span>`) {
 		t.Errorf("the moved card lacks the late mark: %+v", fr.msgs)
 	}
 	s.quiet(t)

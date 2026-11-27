@@ -256,9 +256,11 @@ func TestDepotStrips(t *testing.T) {
 	}
 }
 
-// The same request without the header is the page: the breadcrumb, the
-// title block, the four counts with only Waiting a link, the flows with
-// their strips, the waiting rows to their beads, the landed rows plain.
+// The same request without the header is the page, the fifth stage kind at
+// depot level: the back link, the title block, the four counts in one line
+// with only Waiting a link, the flows as the rows of a table with their
+// strips, the quiet ones folded, the waiting rows to their beads, the landed
+// rows plain.
 func TestDepotHTML(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -282,46 +284,51 @@ func TestDepotHTML(t *testing.T) {
 		t.Fatalf("status %d, type %q", r.status, r.header.Get("Content-Type"))
 	}
 	s := squash(r.body)
+	const wholeList = `hx-select-oob="#rail:outerHTML,#drawer:outerHTML,#list:outerHTML"`
 	for _, want := range []string{
 		"<title>line · depot</title>",
-		`<a href="/depots">Depots</a><span aria-hidden="true">›</span> line`,
-		`<h2>line</h2>`,
-		`Depot · 2 active flows, 1 quiet`,
-		`<a class="depot-card depot-wait" href="/"><span class="depot-card-label">Waiting on you</span><span class="depot-card-num">1</span></a>`,
-		`<span class="depot-card-label">In transit</span><span class="depot-card-num depot-transit">1</span>`,
-		`<span class="depot-card-label">Backlog · waits on shaping</span><span class="depot-card-num">3</span>`,
-		`<span class="depot-card-label">Landed · last 24h</span><span class="depot-card-num">1</span>`,
-		`bug · store, type bug`,
-		`<span class="seg seg-ask" title="new · 1">1</span>`,
-		`<span class="seg seg-merged" title="merged · 1">1</span>`,
-		`<span class="seg seg-muted" title="backlog · 2">2</span>`,
-		`<span class="seg seg-empty" title="review · empty"></span>`,
-		`1 quiet flow`,
-		`<span class="depot-sec-sub">1 in line</span>`,
-		`<a class="depot-open" href="/">Open Decide</a>`,
-		`<a href="/beads/` + bs["three"].ID + `"><span class="depot-dot" aria-hidden="true"></span><span class="depot-id">` + shortID(bs["three"].ID) + `</span><span class="depot-row-title">three</span><span class="depot-where">code · new</span></a>`,
-		`<span class="depot-sec-sub">1 in the last 24h</span>`,
-		`<span class="depot-row-title">seven</span>`,
-		` ago</span></li>`,
+		`<article class="wv-page" data-kind="flow">`,
+		`<a class="wv-back" href="/depots">` + chevron + `Depots</a><h1 class="wv-title">line</h1>` +
+			`<p class="wv-meta">Depot · 2 active flows, 1 quiet</p>`,
+		`<a href="/" ` + wholeList + `><strong>1</strong> waiting on you</a>`,
+		`<span><strong>1</strong> in transit</span>`,
+		`<span><strong>3</strong> backlog · waits on shaping</span>`,
+		`<span><strong>1</strong> landed · last 24h</span>`,
+		`<small>bug · store, type bug</small>`,
+		`<span class="wv-strip__cell wv-strip__cell--ask" title="new · 1">1</span>`,
+		`<span class="wv-strip__cell wv-strip__cell--merged" title="merged · 1">1</span>`,
+		`<span class="wv-strip__cell wv-strip__cell--muted" title="backlog · 2">2</span>`,
+		`<span class="wv-strip__cell wv-strip__cell--empty" title="review · empty"></span>`,
+		`<span class="wv-fold__label">1 quiet flow</span><span class="wv-fold__value">docs</span>`,
+		`<h2 class="wv-group__head"><span>Waiting on you</span><span class="wv-group__count">1 in line</span>` +
+			`<a class="wv-group__note" href="/" ` + wholeList + `>Open Decide</a></h2>`,
+		`<a class="wv-srow" href="/beads/` + bs["three"].ID + `"><span class="wv-dot wv-dot--wait"></span>` +
+			`<span><span class="wv-srow__name">three</span><br><span class="wv-srow__meta"><span class="wv-id">` + bs["three"].ID + `</span></span></span>` +
+			`<span class="wv-srow__end"><span>code · new</span></span></a>`,
+		`<h2 class="wv-group__head"><span>Landed</span><span class="wv-group__count">1 in the last 24h</span></h2>`,
+		`<li class="wv-srow wv-srow--quiet">` + checkMark + `<span><span class="wv-srow__name">seven</span><br>` +
+			`<span class="wv-srow__meta"><span class="wv-id">` + seven.ID + `</span></span></span>`,
+		` ago</span></span></li>`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("the page lacks %q", want)
 		}
 	}
-	if n := strings.Count(s, `<div class="depot-card">`); n != 3 {
-		t.Errorf("the page has %d plain cards, want 3: only Waiting links", n)
+	// Only Waiting links, in the line of counts.
+	counts := s[strings.Index(s, `<p class="wv-counts">`):]
+	counts = counts[:strings.Index(counts, "</p>")]
+	if n := strings.Count(counts, "<a "); n != 1 {
+		t.Errorf("the counts' line has %d links, want Waiting's alone: %s", n, counts)
 	}
-	// The landed row is plain: seven's id stands short, and no link
-	// carries it to its bead.
-	if !strings.Contains(s, `<span class="depot-id">`+shortID(seven.ID)+`</span>`) {
-		t.Errorf("the landed row names no short id for seven")
-	}
+	// The landed row is plain: no link carries seven to its bead.
 	if strings.Contains(s, "/beads/"+seven.ID) {
 		t.Errorf("the landed row links seven to its bead")
 	}
 	// No New bead button: not in this chain, nothing dead is drawn.
-	if strings.Contains(s, "New bead") {
-		t.Errorf("the page draws a New bead button")
+	for _, not := range []string{"New bead", `class="filters"`, "depot-card"} {
+		if strings.Contains(s, not) {
+			t.Errorf("the page draws %q: nothing dead is drawn", not)
+		}
 	}
 }
 

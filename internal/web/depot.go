@@ -68,6 +68,9 @@ func (p DepotPage) QuietLabel() string {
 	return "1 quiet flow"
 }
 
+// QuietNames is the folded row's flow names, in the depot's order.
+func (p DepotPage) QuietNames() string { return strings.Join(p.Quiet, " · ") }
+
 // DepotFlowRow is one of the depot's flows: its strip and its four
 // counts, the depot's sliced by flow.
 type DepotFlowRow struct {
@@ -159,9 +162,6 @@ type DepotWait struct {
 	Stage string `json:"stage"`
 }
 
-// ShortID is the bead's short id for the row.
-func (w DepotWait) ShortID() string { return shortBead(w.Bead) }
-
 // Where is where the bead waits: its flow and stage.
 func (w DepotWait) Where() string {
 	if w.Flow == "" {
@@ -177,18 +177,6 @@ type DepotLanding struct {
 	// Age is how long ago it landed, in the feed's words.
 	Age      string    `json:"age"`
 	ClosedAt time.Time `json:"closed_at"`
-}
-
-// ShortID is the bead's short id for the row.
-func (l DepotLanding) ShortID() string { return shortBead(l.ID) }
-
-// shortBead is the bead's short id: what stands after the last dash, the
-// whole id when there is none.
-func shortBead(id string) string {
-	if i := strings.LastIndex(id, "-"); i >= 0 {
-		return id[i+1:]
-	}
-	return id
 }
 
 // landedShown is how many landed beads the depot page names.
@@ -415,6 +403,6 @@ func (s *Server) handleDepot(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	s.respond(w, r, Page{Template: "depot", Title: name,
+	s.respond(w, r, Page{Template: "depot", Kind: "flow", Title: name,
 		Data: depotPage(d, ov.yard.beads, l, all, time.Now()), line: l, ov: ov, head: head, depot: name})
 }

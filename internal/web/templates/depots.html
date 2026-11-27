@@ -1,28 +1,34 @@
+{{- /* /depots, a table, the fourth stage kind: one row to a depot, as
+       `yardr depot list` prints them. The page's leaf in the shell reads it
+       again whenever something happens in the yard: the stream carries each
+       event's seq and nothing else. */}}
 {{define "content"}}
-{{- /* The page's leaf in the shell reads it again whenever something
-       happens in the yard: the stream carries each event's seq and nothing
-       else. */}}
-<div id="depots">
-  {{- range .Data.Depots}}
-  <article class="item">
-    <header class="item-head">
-      <h2>{{.Name}}</h2>
-    </header>
-    <dl class="facts">
-      <div><dt>kind</dt><dd>{{.Kind}}</dd></div>
-      {{- if .Path}}
-      <div><dt>path</dt><dd>{{.Path}}</dd></div>
-      {{- end}}
-      {{- if .Base}}
-      <div><dt>base</dt><dd>{{.Base}}</dd></div>
-      {{- end}}
-      {{- if .Test}}
-      <div><dt>test</dt><dd>{{.Test}}</dd></div>
-      {{- end}}
-    </dl>
-  </article>
+{{- with .Data}}
+<article class="wv-page" data-kind="{{$.Kind}}">
+  <header class="wv-head">
+    <h1 class="wv-title">Depots</h1>
+    <p class="wv-meta">{{.Line}}</p>
+  </header>
+  {{- if .Depots}}
+  <div class="wv-scrollx">
+    <table class="wv-table">
+      <thead><tr><th>name</th><th>kind</th><th>path</th><th>base</th><th>test</th></tr></thead>
+      <tbody>
+        {{- range .Depots}}
+        <tr>
+          <td class="wv-name">{{.Name}}</td>
+          <td>{{.Kind}}</td>
+          <td>{{with .Path}}<code>{{.}}</code>{{else}}<span class="wv-nil">–</span>{{end}}</td>
+          <td>{{with .Base}}<code>{{.}}</code>{{else}}<span class="wv-nil">–</span>{{end}}</td>
+          <td>{{with .Test}}<code>{{.}}</code>{{else}}<span class="wv-nil">–</span>{{end}}</td>
+        </tr>
+        {{- end}}
+      </tbody>
+    </table>
+  </div>
   {{- else}}
-  <p class="item faint">This yard has no depots.</p>
+  <p class="wv-none">This yard has no depots.</p>
   {{- end}}
-</div>
+</article>
+{{- end}}
 {{end}}
