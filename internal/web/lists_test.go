@@ -336,27 +336,33 @@ func TestConfigPagesPeersDeps(t *testing.T) {
 	must(t, f.st.AddDep(ctx, three, five, store.DepDiscoveredFrom, "", "", "me"))
 	deps := squash(f.get("/deps").body)
 	for _, want := range []string{
-		// The toggle: the open ends by default, every edge behind all.
-		`<a href="/deps" aria-current="true">open</a>`,
-		`<a href="/deps?all=1">all</a>`,
-		// Each blocked bead's card, with the edges that hold it under it:
-		// the bead, the kind, its title cut short, its stage. A staged
-		// edge names the stages it names.
-		`<a class="bead" href="/beads/` + three + `">` + three + `</a><span class="label">line · new · task</span>`,
-		`<p class="card-title">three</p>`,
-		`<a class="bead" href="/beads/` + one + `">` + one + `</a><span class="faint">blocks</span><span class="edge-title">one</span><span class="label">backlog</span></li>`,
-		`<a class="bead" href="/beads/` + one + `">` + one + `</a><span class="faint">blocks</span><span class="faint">at review</span><span class="edge-title">one</span><span class="label">backlog</span></li>`,
-		`<a class="bead" href="/beads/` + five + `">` + five + `</a><span class="label">line · triage · bug</span>`,
-		`<a class="bead" href="/beads/` + three + `">` + three + `</a><span class="faint">discovered-from</span><span class="edge-title">three</span><span class="label">new</span></li>`,
+		// The stage's own head, with the edges it lists counted.
+		`<article class="wv-page" data-kind="list"><header class="wv-head"><h1 class="wv-title">Deps</h1><p class="wv-meta">3 edges with an open end, the oldest first</p></header>`,
+		// The chips: the open ends by default, every edge behind all.
+		`<nav class="wv-chips" aria-label="Edges"><p><span class="wv-chips__label">edges</span><a class="wv-pill" href="/deps" aria-current="true">open</a><a class="wv-pill" href="/deps?all=1">all</a></p></nav>`,
+		// Each blocked bead as a row of the stage, with the edges that hold it
+		// under it: the bead, the kind, its title cut short, its stage. A staged
+		// edge names the stages it names. The links leave the mode, so their
+		// block swaps the whole list.
+		`<ol hx-select-oob="#rail:outerHTML,#drawer:outerHTML,#list:outerHTML"><li><a class="wv-srow" href="/beads/` + three + `">`,
+		`<span class="wv-id">` + three + `</span><span class="wv-sep">·</span><span class="wv-nw">line</span><span class="wv-sep">·</span>new<span class="wv-sep">·</span>task`,
+		`<span class="wv-srow__name">three</span>`,
+		`<ul class="wv-waits"><li><a href="/beads/` + one + `">` + one + `</a><span class="wv-dim">blocks</span><span class="wv-waits__title">one</span><span class="wv-dim">backlog</span></li>`,
+		`<li><a href="/beads/` + one + `">` + one + `</a><span class="wv-dim">blocks</span><span class="wv-dim">at review</span><span class="wv-waits__title">one</span><span class="wv-dim">backlog</span></li>`,
+		`<span class="wv-id">` + five + `</span><span class="wv-sep">·</span><span class="wv-nw">line</span><span class="wv-sep">·</span>triage<span class="wv-sep">·</span>bug`,
+		`<li><a href="/beads/` + three + `">` + three + `</a><span class="wv-dim">discovered-from</span><span class="wv-waits__title">three</span><span class="wv-dim">new</span></li>`,
 		`<a class="wv-row" href="/deps" aria-current="page">`,
 	} {
 		if !strings.Contains(deps, want) {
 			t.Errorf("/deps lacks %s", want)
 		}
 	}
+	if strings.Contains(deps, `class="page-head"`) {
+		t.Error("the shell's heading stands over the list page's own head")
+	}
 	// Grouped by the blocked bead, the longest waiting first: three's
 	// oldest edge came before five's.
-	if strings.Index(deps, `<p class="card-title">three</p>`) > strings.Index(deps, `<p class="card-title">five</p>`) {
+	if strings.Index(deps, `<span class="wv-srow__name">three</span>`) > strings.Index(deps, `<span class="wv-srow__name">five</span>`) {
 		t.Error("/deps does not group by the blocked bead, longest waiting first")
 	}
 
@@ -441,30 +447,22 @@ func TestDepsOpenEnds(t *testing.T) {
 	// the closed-closed edge is nowhere on the page.
 	deps := squash(f.get("/deps").body)
 	for _, want := range []string{
-		`<p class="card-title">three</p>`,
-		`<a class="bead" href="/beads/` + one + `">` + one + `</a><span class="faint">blocks</span><span class="edge-title">one</span><span class="label">backlog</span></li>`,
-		`<p class="card-title">five</p>`,
-		`<a class="bead" href="/beads/` + three + `">` + three + `</a><span class="faint">discovered-from</span><span class="edge-title">three</span><span class="label">new</span></li>`,
-		`<i class="wv-live" hidden hx-get="/deps" hx-trigger="sse:message" hx-push-url="false" hx-swap="innerHTML ignoreTitle:true" hx-select-oob="#rail:outerHTML,#list-head:innerHTML,#list-rows:innerHTML"></i>`,
-		`<a href="/deps?all=1">all</a>`,
+		`<span class="wv-srow__name">three</span>`,
+		`<a href="/beads/` + one + `">` + one + `</a><span class="wv-dim">blocks</span><span class="wv-waits__title">one</span><span class="wv-dim">backlog</span></li>`,
+		`<span class="wv-srow__name">five</span>`,
+		`<a href="/beads/` + three + `">` + three + `</a><span class="wv-dim">discovered-from</span><span class="wv-waits__title">three</span><span class="wv-dim">new</span></li>`,
+		leafOf("/deps", "innerHTML ignoreTitle:true"),
+		`<a class="wv-pill" href="/deps?all=1">all</a>`,
 	} {
 		if !strings.Contains(deps, want) {
 			t.Errorf("/deps lacks %s", want)
 		}
 	}
-	// Five is closed, so its card says so; four's edge is behind the link.
-	if !strings.Contains(deps, `<span class="label">line · triage · bug · closed</span>`) {
+	// Five is closed, so its row says so; four's edge is behind the link.
+	if !strings.Contains(deps, `<span class="wv-sep">·</span>bug<span class="wv-sep">·</span>closed</span>`) {
 		t.Error("/deps does not mark the closed blocked bead closed")
 	}
-	start := strings.Index(deps, `<div id="deps"`)
-	if start < 0 {
-		t.Fatal("/deps has no list to hide the closed edge from")
-	}
-	centre := deps[start:]
-	if end := strings.Index(centre, "<aside"); end >= 0 {
-		centre = centre[:end]
-	}
-	if strings.Contains(centre, four) {
+	if centre := stageOf(t, f.get("/deps").body); strings.Contains(centre, four) {
 		t.Error("/deps shows the edge between two closed beads")
 	}
 
@@ -487,10 +485,11 @@ func TestDepsOpenEnds(t *testing.T) {
 	// Behind the link, every edge, the closed ends marked, and the way back.
 	every := squash(f.get("/deps?all=1").body)
 	for _, want := range []string{
-		`<a class="bead" href="/beads/` + four + `">` + four + `</a><span class="faint">blocks</span><span class="edge-title">four</span><span class="label">new · closed</span></li>`,
-		`<i class="wv-live" hidden hx-get="/deps?all=1" hx-trigger="sse:message" hx-push-url="false" hx-swap="innerHTML ignoreTitle:true" hx-select-oob="#rail:outerHTML,#list-head:innerHTML,#list-rows:innerHTML"></i>`,
-		`<a href="/deps">open</a>`,
-		`<a href="/deps?all=1" aria-current="true">all</a>`,
+		`<a href="/beads/` + four + `">` + four + `</a><span class="wv-dim">blocks</span><span class="wv-waits__title">four</span><span class="wv-dim">new · closed</span></li>`,
+		leafOf("/deps?all=1", "innerHTML ignoreTitle:true"),
+		`<p class="wv-meta">3 edges, closed ends included, the oldest first</p>`,
+		`<a class="wv-pill" href="/deps">open</a>`,
+		`<a class="wv-pill" href="/deps?all=1" aria-current="true">all</a>`,
 	} {
 		if !strings.Contains(every, want) {
 			t.Errorf("/deps?all=1 lacks %s", want)
@@ -512,11 +511,11 @@ func TestDepsOpenEnds(t *testing.T) {
 	must(t, err)
 	must(t, f.st.AddDep(ctx, train.ID, one, store.DepParent, "", "", "me"))
 	parent := squash(f.get("/deps").body)
-	if !strings.Contains(parent, `<p class="card-title">train</p>`) ||
-		!strings.Contains(parent, `<a class="bead" href="/beads/`+one+`">`+one+`</a><span class="faint">parent</span><span class="edge-title">one</span><span class="label">backlog</span></li>`) {
+	if !strings.Contains(parent, `<span class="wv-srow__name">train</span>`) ||
+		!strings.Contains(parent, `<a href="/beads/`+one+`">`+one+`</a><span class="wv-dim">parent</span><span class="wv-waits__title">one</span><span class="wv-dim">backlog</span></li>`) {
 		t.Error("/deps does not group a parent edge under its waiting train with the child as its other end")
 	}
-	if strings.Contains(parent, `<p class="card-title">one</p>`) {
+	if strings.Contains(parent, `<span class="wv-srow__name">one</span>`) {
 		t.Error("/deps groups the parent edge under its child instead of its waiting train")
 	}
 
@@ -535,13 +534,13 @@ func TestDepsOpenEnds(t *testing.T) {
 	none := squash(closed.get("/deps").body)
 	for _, want := range []string{
 		`No edges with an open end.`,
-		`<a href="/deps?all=1">all</a>`,
+		`<a class="wv-pill" href="/deps?all=1">all</a>`,
 	} {
 		if !strings.Contains(none, want) {
 			t.Errorf("/deps without an open end lacks %s", want)
 		}
 	}
-	if !strings.Contains(squash(closed.get("/deps?all=1").body), `<p class="card-title">three</p>`) {
+	if !strings.Contains(squash(closed.get("/deps?all=1").body), `<span class="wv-srow__name">three</span>`) {
 		t.Error("/deps?all=1 without an open end shows no group")
 	}
 }
@@ -702,12 +701,17 @@ func TestBeadsAll(t *testing.T) {
 	text := squash(f.get("/beads?all=1&depot=line").body)
 	for _, part := range []string{
 		`hx-get="/beads?all=1&amp;depot=line"`,
-		`<a href="/beads?all=1&amp;depot=line&amp;stage=new">new · <span class="num">2</span></a>`,
-		` · closed</span></p><p class="card-title">four</p>`,
+		`<p class="wv-meta">5 beads, closed ones included, the newest change first</p>`,
+		`<a class="wv-pill" href="/beads?all=1&amp;depot=line&amp;stage=new">new <span class="wv-num">2</span></a>`,
 	} {
 		if !strings.Contains(text, part) {
 			t.Errorf("the page of all beads lacks %q", part)
 		}
+	}
+	// The closed bead's row says so, after the words that place it.
+	four := got.Beads[slices.IndexFunc(got.Beads, func(r web.BeadRow) bool { return r.Title == "four" })].ID
+	if row := srowOf(text, four); !strings.Contains(row, `<span class="wv-sep">·</span>closed</span></span><span class="wv-srow__end">`) {
+		t.Errorf("the closed bead's row does not say it is closed: %q", row)
 	}
 	if text := f.get("/beads").body; strings.Contains(text, "four") || strings.Contains(text, "all=1") {
 		t.Error("the page of the open beads shows the closed one, or links to all")

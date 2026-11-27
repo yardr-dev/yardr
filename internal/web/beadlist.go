@@ -2,6 +2,7 @@ package web
 
 import (
 	"cmp"
+	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
@@ -60,6 +61,16 @@ func (r BeadRow) Card() Card {
 	c.Working = r.Working
 	c.ETA, c.Late = r.ETA, r.Late
 	return c
+}
+
+// Line is the stage head's line under the title: how many beads the page
+// lists and in what order. With ?all=1 the closed ones are among them, so it
+// does not say open.
+func (b Beads) Line() string {
+	if b.All {
+		return countWords(len(b.Beads), "bead", "beads") + ", closed ones included, the newest change first"
+	}
+	return fmt.Sprintf("%d open, the newest change first", len(b.Beads))
 }
 
 // Link is the page with its filters set to depot and stage.
@@ -184,5 +195,5 @@ func (s *Server) handleBeads(w http.ResponseWriter, r *http.Request) {
 	slices.SortStableFunc(d.Beads, func(a, b BeadRow) int {
 		return cmp.Or(b.UpdatedAt.Compare(a.UpdatedAt), cmp.Compare(a.ID, b.ID))
 	})
-	s.respond(w, r, Page{Template: "beads", Title: "Beads", Data: d, yard: y, head: d.Head, stream: "seq", live: liveStage})
+	s.respond(w, r, Page{Template: "beads", Kind: "list", Title: "Beads", Data: d, yard: y, head: d.Head, stream: "seq", live: liveStage})
 }

@@ -57,17 +57,24 @@ type SessionRow struct {
 	Age string `json:"age"`
 }
 
-// Dot is the status dot's class: held for a session that waits on a
-// prompt, running for one an agent runs, none for a manual group's, which
-// is a person's turn and no process.
+// Line is the stage head's line under the title: how many sessions run, the
+// order they stand in. The claims of manual groups are not among them, and
+// the section under them counts its own.
+func (s Sessions) Line() string {
+	return fmt.Sprintf("%d running, the oldest first", len(s.Sessions))
+}
+
+// Dot is the status dot's kind (the suffix of wv-dot--): fault for a session
+// that waits on a prompt, run for one an agent runs, none for a manual
+// group's, which is a person's turn and no process.
 func (r SessionRow) Dot() string {
 	switch {
 	case r.Blocked:
-		return "held"
+		return "fault"
 	case r.Runner == "manual":
 		return ""
 	}
-	return "running"
+	return "run"
 }
 
 // isManual reports whether a session is a manual group's claim: nothing
@@ -139,5 +146,5 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out.List = dispatch.Listed(listed)
-	s.respond(w, r, Page{Template: "sessions", Title: "Sessions", Data: out, head: head, live: liveStage})
+	s.respond(w, r, Page{Template: "sessions", Kind: "list", Title: "Sessions", Data: out, head: head, live: liveStage})
 }

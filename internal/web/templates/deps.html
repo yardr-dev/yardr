@@ -1,35 +1,49 @@
+{{- /* The deps page, a list page, the third stage kind: what waits on what. One
+       row per blocked bead, the longest waiting first, with the edges that hold
+       it under it, one line each: the bead at the other end, the kind, its title
+       and its stage. The chips choose the edges with an open end or every edge.
+       Every link of the rows leaves the mode (a bead's page stands in Decide), so
+       their block swaps the whole list. The page's leaf in the shell reads it
+       again whenever something happens in the yard: the stream carries each
+       event's seq and nothing else. */}}
 {{define "content"}}
-{{- /* The page's leaf in the shell reads it again whenever something
-       happens in the yard: the stream carries each event's seq and nothing
-       else. */}}
-<div id="deps">
+<article class="wv-page" data-kind="{{$.Kind}}">
+  <header class="wv-head">
+    <h1 class="wv-title">Deps</h1>
+    <p class="wv-meta">{{.Data.Line}}</p>
+  </header>
   {{- if .Data.Total}}
-  <nav class="item filters" aria-label="Edges">
-    <p><span class="label">edges</span>
-      <a href="/deps"{{if not .Data.All}} aria-current="true"{{end}}>open</a>
-      <a href="/deps?all=1"{{if .Data.All}} aria-current="true"{{end}}>all</a>
+  <nav class="wv-chips" aria-label="Edges">
+    <p><span class="wv-chips__label">edges</span>
+      <a class="wv-pill" href="/deps"{{if not .Data.All}} aria-current="true"{{end}}>open</a>
+      <a class="wv-pill" href="/deps?all=1"{{if .Data.All}} aria-current="true"{{end}}>all</a>
     </p>
   </nav>
   {{- end}}
-  {{- range .Data.Groups}}
-  <section class="item">
-    {{template "card" .Bead}}
-    <ul class="edges waits">
-      {{- range .Deps}}
-      {{- if eq .Kind "parent"}}
-      <li><a class="bead" href="/beads/{{.To}}">{{.To}}</a><span class="faint">{{.Kind}}</span><span class="edge-title">{{.ToBead.Title}}</span><span class="label">{{.ToBead.Stage}}{{if eq .ToBead.Status "closed"}} · closed{{end}}</span></li>
-      {{- else}}
-      <li><a class="bead" href="/beads/{{.From}}">{{.From}}</a><span class="faint">{{.Kind}}</span>{{with .At}}<span class="faint">at {{.}}</span>{{end}}{{with .Until}}<span class="faint">until {{.}}</span>{{end}}<span class="edge-title">{{.FromBead.Title}}</span><span class="label">{{.FromBead.Stage}}{{if eq .FromBead.Status "closed"}} · closed{{end}}</span></li>
-      {{- end}}
-      {{- end}}
-    </ul>
-  </section>
+  {{- if .Data.Groups}}
+  <ol hx-select-oob="#rail:outerHTML,#drawer:outerHTML,#list:outerHTML">
+    {{- range .Data.Groups}}
+    <li>
+      {{template "srow" .Bead}}
+      <ul class="wv-waits">
+        {{- range .Deps}}
+        {{- /* A parent edge points from the train to its child, so the child is
+               the other end; every other edge points at the blocked bead from
+               the one that holds it. */}}
+        {{- if eq .Kind "parent"}}
+        <li><a href="/beads/{{.To}}">{{.To}}</a><span class="wv-dim">{{.Kind}}</span><span class="wv-waits__title">{{.ToBead.Title}}</span><span class="wv-dim">{{.ToBead.Stage}}{{if eq .ToBead.Status "closed"}} · closed{{end}}</span></li>
+        {{- else}}
+        <li><a href="/beads/{{.From}}">{{.From}}</a><span class="wv-dim">{{.Kind}}</span>{{with .At}}<span class="wv-dim">at {{.}}</span>{{end}}{{with .Until}}<span class="wv-dim">until {{.}}</span>{{end}}<span class="wv-waits__title">{{.FromBead.Title}}</span><span class="wv-dim">{{.FromBead.Stage}}{{if eq .FromBead.Status "closed"}} · closed{{end}}</span></li>
+        {{- end}}
+        {{- end}}
+      </ul>
+    </li>
+    {{- end}}
+  </ol>
+  {{- else if .Data.Total}}
+  <p class="wv-none">No edges with an open end.</p>
   {{- else}}
-  {{- if .Data.Total}}
-  <p class="item faint">No edges with an open end.</p>
-  {{- else}}
-  <p class="item faint">This yard has no edges.</p>
+  <p class="wv-none">This yard has no edges.</p>
   {{- end}}
-  {{- end}}
-</div>
+</article>
 {{end}}

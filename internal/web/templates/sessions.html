@@ -1,49 +1,55 @@
-{{define "session"}}
-  <article class="item">
-    <header class="item-head">
-      <span class="state">{{with .Dot}}<span class="dot {{.}}"></span>{{end}}{{if .Blocked}}<span class="held">blocked</span>{{else}}{{.State}}{{end}}</span>
-      <span class="bead">{{.Bead}}</span>
-      <span class="item-count">{{.Age}}</span>
-    </header>
-    {{- if .Title}}
-    <p class="entry-title">{{.Title}}</p>
-    {{- end}}
-    <dl class="figures">
-      <div><dt>stage</dt><dd>{{.Stage}}</dd></div>
-      <div><dt>group</dt><dd>{{.Group}}</dd></div>
-      {{- if .Originator}}
-      <div><dt>originator</dt><dd>{{.Originator}}</dd></div>
-      {{- end}}
-      {{- if .Login}}
-      <div><dt>login</dt><dd>{{.Login}}</dd></div>
-      {{- end}}
-      {{- /* A manual group's claim says manual for its runner, as the
-             heading above it already says: it is left out. */}}
-      {{- if ne .Runner "manual"}}
-      <div><dt>runner</dt><dd>{{.Runner}}</dd></div>
-      {{- end}}
-      {{- if .Train}}
-      <div><dt>train</dt><dd>{{.Train}}</dd></div>
-      {{- end}}
-      <div><dt>session</dt><dd>{{.ID}}</dd></div>
-      <div><dt>started</dt><dd><time datetime="{{.StartedAt.UTC.Format "2006-01-02T15:04:05Z"}}">{{.StartedAt.Local.Format "Jan 2 15:04"}}</time></dd></div>
-    </dl>
-  </article>
-{{end}}
+{{- /* One session as a row of the stage: the dot says it runs or waits on a
+       prompt (a manual group's claim has none), the title is its bead's and the
+       age of the session ends the row. The first line under the title says what
+       and where, the second whose it is and when it began. A row opens its
+       bead's page. Each fact of a line is one unit, so that a narrow line breaks
+       between them and never inside one; the units hold no space between them
+       for it to break at, so a separator carries the place: <wbr>, which has no
+       width. */ -}}
+{{define "sep"}}<span class="wv-sep">·</span><wbr>{{end}}
+{{define "session"}}<a class="wv-srow" href="/beads/{{.Bead}}">
+  <span class="wv-dot{{with .Dot}} wv-dot--{{.}}{{end}}"></span>
+  <span>
+    <span class="wv-srow__name">{{with .Title}}{{.}}{{else}}{{$.Bead}}{{end}}</span><br>
+    <span class="wv-srow__meta"><span class="wv-id">{{.Bead}}</span>{{template "sep"}}{{if .Blocked}}<span class="wv-fault">blocked</span>{{else}}{{.State}}{{end}}{{template "sep"}}<span class="wv-nw">stage {{.Stage}}</span>{{template "sep"}}<span class="wv-nw">group {{.Group}}</span>
+      {{- /* A manual group's claim says manual for its runner, as the section it
+             stands in already says: it is left out. */}}
+      {{- if ne .Runner "manual"}}{{template "sep"}}<span class="wv-nw">runner {{.Runner}}</span>{{end}}</span><br>
+    <span class="wv-srow__meta">{{with .Originator}}<span class="wv-nw">originator {{.}}</span>{{template "sep"}}{{end}}{{with .Login}}<span class="wv-nw">login {{.}}</span>{{template "sep"}}{{end}}{{with .Train}}<span class="wv-nw">train {{.}}</span>{{template "sep"}}{{end}}<span class="wv-nw">session <span class="wv-id">{{.ID}}</span></span>{{template "sep"}}<span class="wv-nw">started <time datetime="{{.StartedAt.UTC.Format "2006-01-02T15:04:05Z"}}">{{.StartedAt.Local.Format "Jan 2 15:04"}}</time></span></span>
+  </span>
+  <span class="wv-srow__end"><span>{{.Age}}</span></span>
+</a>{{end}}
+{{- /* The sessions page, a list page, the third stage kind: the sessions that run
+       now, the oldest first, and under them the beads a manual group has
+       claimed, which run nothing. Every row opens a bead's page, which stands in
+       Decide: each list is a block whose links all leave the mode, so it swaps
+       the whole list. Every event of the stream reads the page again, by the
+       leaf in the shell, and puts the rows in place: a session starts, ends or
+       blocks with an event. */}}
 {{define "content"}}
-{{- /* Every event of the stream reads the page again, by the leaf in the
-       shell, and puts the list in place: a session starts, ends or blocks
-       with an event. */}}
-<div id="live">
-  {{- range .Data.Sessions}}{{template "session" .}}
+<article class="wv-page" data-kind="{{$.Kind}}">
+  <header class="wv-head">
+    <h1 class="wv-title">Sessions</h1>
+    <p class="wv-meta">{{.Data.Line}}</p>
+  </header>
+  {{- if .Data.Sessions}}
+  <ol hx-select-oob="#rail:outerHTML,#drawer:outerHTML,#list:outerHTML">
+    {{- range .Data.Sessions}}
+    <li>{{template "session" .}}</li>
+    {{- end}}
+  </ol>
   {{- else}}
-  <p class="item faint">No session is running.</p>
+  <p class="wv-none">No session is running.</p>
   {{- end}}
-  {{- /* A manual group's claim runs nothing: it is listed apart, under the
-         running ones. */}}
   {{- if .Data.Manual}}
-  <h2 class="item label">Claimed by a manual group · {{len .Data.Manual}}</h2>
-  {{- range .Data.Manual}}{{template "session" .}}{{end}}
+  <section class="wv-block">
+    <h2 class="wv-sh"><span>Claimed by a manual group</span><span class="wv-sh__count">{{len .Data.Manual}}</span></h2>
+    <ol hx-select-oob="#rail:outerHTML,#drawer:outerHTML,#list:outerHTML">
+      {{- range .Data.Manual}}
+      <li>{{template "session" .}}</li>
+      {{- end}}
+    </ol>
+  </section>
   {{- end}}
-</div>
+</article>
 {{end}}

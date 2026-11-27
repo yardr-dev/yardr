@@ -319,7 +319,7 @@ func TestHomeHTML(t *testing.T) {
 	if strings.Contains(r.body, `class="page-head"`) {
 		t.Error("the shell's heading stands over the overview's own head")
 	}
-	if !strings.Contains(f.get("/beads").body, `<header class="page-head"><h1>Beads</h1></header>`) {
+	if !strings.Contains(f.get("/groups").body, `<header class="page-head"><h1>Groups</h1></header>`) {
 		t.Error("a page of no stage kind lost the shell's heading")
 	}
 	// No session runs and nothing is late, so neither is named, and no zero

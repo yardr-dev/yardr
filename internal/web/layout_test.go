@@ -450,18 +450,23 @@ func TestTalkLayout(t *testing.T) {
 // targets; a text keeps its lines and pans inside its block; a file's name,
 // a path with no space to break at, breaks where it would run past the
 // window; and a card's sentence that opens a file reads as a link. A
-// preview's buttons wrap as well. What the pixels do is the bead's
+// list page's chips keep one scrolling line each on a phone, each pill as high
+// as a phone's targets, and a preview's buttons wrap, the line that stands in
+// Open's place taking a line of its own. What the pixels do is the bead's
 // screenshot.
 func TestFilePagesOnPhone(t *testing.T) {
 	t.Parallel()
 	for selector, wants := range map[string][]string{
-		".wv-pager":        {"display: flex;", "flex-wrap: wrap;"},
-		".wv-file":         {"white-space: pre;", "overflow-x: auto;"},
-		".wv-title":        {"overflow-wrap: anywhere;"},
-		".opens":           {"text-decoration: underline;"},
-		".preview-actions": {"display: flex;", "flex-wrap: wrap;"},
-		".preview-actions button, .preview-actions a": {"min-height: 44px;", "overflow-wrap: anywhere;"},
-		".text.file": {"white-space: pre;", "overflow-x: auto;"},
+		".wv-pager":                {"display: flex;", "flex-wrap: wrap;"},
+		".wv-file":                 {"white-space: pre;", "overflow-x: auto;"},
+		".wv-title":                {"overflow-wrap: anywhere;"},
+		".opens":                   {"text-decoration: underline;"},
+		".wv-ask__row > .wv-faint": {"flex: 1 0 100%;", "overflow-wrap: anywhere;"},
+		".text.file":               {"white-space: pre;", "overflow-x: auto;"},
+		// A chip is a pill with its number, the current one filled.
+		".wv-chips p":            {"display: flex;", "flex-wrap: wrap;"},
+		".wv-pill":               {"min-height: 30px;", "border-radius: var(--radius-full);"},
+		".wv-pill[aria-current]": {"background: var(--surface-pressed);"},
 	} {
 		rule := cssRule(t, selector)
 		for _, want := range wants {
@@ -475,6 +480,9 @@ func TestFilePagesOnPhone(t *testing.T) {
 		".wv-pager a, .wv-pager span { display: flex; align-items: center; min-height: 48px;",
 		".wv-back { min-height: 48px;",
 		".wv-fold > summary { min-height: 48px; }",
+		".wv-pill { min-height: 48px; flex: none; }",
+		".wv-chips p { flex-wrap: nowrap; overflow-x: auto;",
+		".wv-chips .wv-chips__label { flex: none; width: auto; padding-right: 4px; }",
 	} {
 		if !strings.Contains(phone, want) {
 			t.Errorf("the phone rules lack %s", want)

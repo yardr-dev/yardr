@@ -729,15 +729,23 @@ func TestManualClaimsOnly(t *testing.T) {
 		}
 	}
 	text = squash(f.get("/sessions").body)
-	if part := `<p class="item faint">No session is running.</p><h2 class="item label">Claimed by a manual group · 5</h2><article class="item"><header class="item-head"><span class="state">claimed</span><span class="bead">` + beads[0].ID + `</span>`; !strings.Contains(text, part) {
+	// No session runs, so the sentence stands where its rows would, and the
+	// claims stand under their own head, the first claimed first, in a block
+	// whose links leave the mode.
+	if part := `<p class="wv-none">No session is running.</p><section class="wv-block"><h2 class="wv-sh"><span>Claimed by a manual group</span><span class="wv-sh__count">5</span></h2><ol hx-select-oob="#rail:outerHTML,#drawer:outerHTML,#list:outerHTML"><li><a class="wv-srow" href="/beads/` + beads[0].ID + `">`; !strings.Contains(text, part) {
 		t.Errorf("/sessions lacks %q", part)
 	}
-	// A manual claim shows no runner: it is always manual, as the heading
-	// above it already says.
-	if strings.Contains(text, "<dd>manual</dd>") {
-		t.Error("/sessions repeats the manual heading in every claim's runner row")
+	// A claim has no dot, says claimed, and shows no runner: it is always
+	// manual, as the section it stands in already says.
+	row := srowOf(text, beads[0].ID)
+	if !strings.HasPrefix(row, `<a class="wv-srow" href="/beads/`+beads[0].ID+`"><span class="wv-dot"></span>`) ||
+		!strings.Contains(row, `<span class="wv-id">`+beads[0].ID+`</span><span class="wv-sep">·</span><wbr>claimed<span class="wv-sep">·</span><wbr><span class="wv-nw">stage backlog</span><span class="wv-sep">·</span><wbr><span class="wv-nw">group backlog</span></span><br>`) {
+		t.Errorf("/sessions draws a manual claim as %s", row)
 	}
-	if strings.Contains(text, `<span class="dot running"></span>running`) || strings.Contains(text, `<span class="state">running</span>`) {
+	if strings.Contains(text, "runner manual") {
+		t.Error("/sessions repeats the manual section in every claim's runner")
+	}
+	if strings.Contains(text, "wv-dot--run") || strings.Contains(text, "·</span>running") {
 		t.Error("/sessions shows a manual claim as running")
 	}
 }
@@ -816,9 +824,9 @@ func TestManualClaimsMixed(t *testing.T) {
 			t.Errorf("home has %q", not)
 		}
 	}
-	if !strings.Contains(text, `<h2 class="item label">Claimed by a manual group · 2</h2>`) ||
-		strings.Contains(text, "No session is running.") ||
-		strings.Index(text, `<span class="bead">`+door.ID) > strings.Index(text, "Claimed by a manual group") {
+	claimed := `<section class="wv-block"><h2 class="wv-sh"><span>Claimed by a manual group</span><span class="wv-sh__count">2</span></h2>`
+	if !strings.Contains(text, claimed) || strings.Contains(text, "No session is running.") ||
+		strings.Index(text, `<a class="wv-srow" href="/beads/`+door.ID+`">`) > strings.Index(text, claimed) {
 		t.Error("/sessions does not list the agents' sessions above the two manual claims")
 	}
 }
@@ -1102,11 +1110,15 @@ func TestSessions(t *testing.T) {
 	}
 	text := squash(f.get("/sessions").body)
 	for _, part := range []string{
-		`<span class="state"><span class="dot running"></span>running</span><span class="bead">` + b.ID + `</span>`,
-		`<h2 class="item label">Claimed by a manual group · 1</h2><article class="item"><header class="item-head"><span class="state">claimed</span><span class="bead">` + other.ID + `</span>`,
-		`<p class="entry-title">which &lt;colour&gt;</p>`,
-		`<dt>stage</dt><dd>new</dd>`, `<dt>group</dt><dd>builders</dd>`, `<dt>runner</dt><dd>fake door-new</dd>`,
-		`<dt>session</dt><dd>` + sess.ID + `</dd>`,
+		// The stage draws its own head, and its rows open the beads' pages,
+		// which stand in Decide.
+		`<article class="wv-page" data-kind="list"><header class="wv-head"><h1 class="wv-title">Sessions</h1><p class="wv-meta">1 running, the oldest first</p></header>`,
+		`<ol hx-select-oob="#rail:outerHTML,#drawer:outerHTML,#list:outerHTML"><li><a class="wv-srow" href="/beads/` + b.ID + `"><span class="wv-dot wv-dot--run"></span>`,
+		// Its title, then what and where, then whose it is and when it began.
+		`<span class="wv-srow__name">a door</span><br><span class="wv-srow__meta"><span class="wv-id">` + b.ID + `</span><span class="wv-sep">·</span><wbr>running<span class="wv-sep">·</span><wbr><span class="wv-nw">stage new</span><span class="wv-sep">·</span><wbr><span class="wv-nw">group builders</span><span class="wv-sep">·</span><wbr><span class="wv-nw">runner fake door-new</span></span><br>`,
+		`<span class="wv-nw">session <span class="wv-id">` + sess.ID + `</span></span><span class="wv-sep">·</span><wbr><span class="wv-nw">started <time datetime=`,
+		`<section class="wv-block"><h2 class="wv-sh"><span>Claimed by a manual group</span><span class="wv-sh__count">1</span></h2>`,
+		`<span class="wv-srow__name">which &lt;colour&gt;</span>`,
 		`<a class="wv-row" href="/sessions" aria-current="page">`,
 	} {
 		if !strings.Contains(text, part) {
@@ -1117,15 +1129,24 @@ func TestSessions(t *testing.T) {
 		t.Error("the page shows the ended session, or says none runs")
 	}
 
+	// Each fact of a session's lines is one unit and holds no space for a narrow
+	// line to break at, so every separator carries the place, a <wbr>: without
+	// it a phone's line cannot break at all and runs out of the window.
+	row0 := srowOf(text, b.ID)
+	if seps, breaks := strings.Count(row0, `<span class="wv-sep">·</span>`), strings.Count(row0, `<span class="wv-sep">·</span><wbr>`); seps == 0 || seps != breaks {
+		t.Errorf("%d of %d separators of a session's lines are a place to break: %s", breaks, seps, row0)
+	}
+
 	// A session blocked on a prompt says so.
 	must(t, f.st.LogDispatch(ctx, b.ID, "session_blocked", "yard", map[string]any{"session": sess.ID}))
 	want.Sessions[0].Blocked = true
 	if got := read(); !reflect.DeepEqual(got, want) {
 		t.Errorf("blocked\n got %+v\nwant %+v", got, want)
 	}
-	if text := squash(f.get("/sessions").body); !strings.Contains(text,
-		`<span class="state"><span class="dot held"></span><span class="held">blocked</span></span>`) {
-		t.Error("the page does not show the blocked session as blocked")
+	row := srowOf(squash(f.get("/sessions").body), b.ID)
+	if !strings.HasPrefix(row, `<a class="wv-srow" href="/beads/`+b.ID+`"><span class="wv-dot wv-dot--fault"></span>`) ||
+		!strings.Contains(row, `<span class="wv-sep">·</span><wbr><span class="wv-fault">blocked</span><span class="wv-sep">·</span><wbr><span class="wv-nw">stage new</span>`) {
+		t.Errorf("the page does not show the blocked session as blocked: %s", row)
 	}
 }
 
@@ -1173,12 +1194,12 @@ func TestSessionsLogin(t *testing.T) {
 		t.Errorf("sessions logins = %v, want subsidy hal/jo and personal hal/hal", byBead)
 	}
 	text := squash(f.get("/sessions").body)
-	for _, part := range []string{
-		`<dd>builders</dd></div><div><dt>originator</dt><dd>hal</dd></div><div><dt>login</dt><dd>jo</dd></div>`,
-		`<dd>hal-builders</dd></div><div><dt>originator</dt><dd>hal</dd></div><div><dt>login</dt><dd>hal</dd></div>`,
+	for id, part := range map[string]string{
+		subsidy:  `<span class="wv-srow__meta"><span class="wv-nw">originator hal</span><span class="wv-sep">·</span><wbr><span class="wv-nw">login jo</span><span class="wv-sep">·</span><wbr><span class="wv-nw">session `,
+		personal: `<span class="wv-srow__meta"><span class="wv-nw">originator hal</span><span class="wv-sep">·</span><wbr><span class="wv-nw">login hal</span><span class="wv-sep">·</span><wbr><span class="wv-nw">session `,
 	} {
-		if !strings.Contains(text, part) {
-			t.Errorf("the page lacks %q", part)
+		if row := srowOf(text, id); !strings.Contains(row, part) {
+			t.Errorf("the row of %s lacks %q: %s", id, part, row)
 		}
 	}
 }
@@ -1223,12 +1244,12 @@ func TestSessionsOriginator(t *testing.T) {
 		t.Errorf("sessions originators = %v, want jo's jo and hal's hal", byBead)
 	}
 	text := squash(f.get("/sessions").body)
-	for _, part := range []string{
-		`<dd>builders</dd></div><div><dt>originator</dt><dd>jo</dd></div>`,
-		`<dd>builders</dd></div><div><dt>originator</dt><dd>hal</dd></div>`,
+	for id, part := range map[string]string{
+		jo:  `<span class="wv-srow__meta"><span class="wv-nw">originator jo</span><span class="wv-sep">·</span><wbr>`,
+		hal: `<span class="wv-srow__meta"><span class="wv-nw">originator hal</span><span class="wv-sep">·</span><wbr>`,
 	} {
-		if !strings.Contains(text, part) {
-			t.Errorf("the page lacks %q", part)
+		if row := srowOf(text, id); !strings.Contains(row, part) {
+			t.Errorf("the row of %s lacks %q: %s", id, part, row)
 		}
 	}
 }
@@ -1250,6 +1271,14 @@ func TestAge(t *testing.T) {
 		if got := web.Age(d); got != want {
 			t.Errorf("age(%v) = %q, want %q", d, got, want)
 		}
+	}
+	// A card made of an id alone has no time, and so no age: measured from the
+	// zero time it would read in the hundred thousands of days.
+	if got := (web.Card{ID: "x"}).Age(); got != "" {
+		t.Errorf("the age of a card with no time = %q, want none", got)
+	}
+	if got := (web.Card{ID: "x", UpdatedAt: time.Now().Add(-3 * time.Hour)}).Age(); got != "3h" {
+		t.Errorf("the age of a card changed three hours ago = %q, want 3h", got)
 	}
 }
 

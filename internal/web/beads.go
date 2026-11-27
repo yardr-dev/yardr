@@ -59,8 +59,16 @@ func (c Card) DOM() string { return domID("bead", c.ID) }
 // Clock is when the bead last changed, as the feed writes a time.
 func (c Card) Clock() string { return clock(c.UpdatedAt) }
 
-// Age is how long ago the bead last changed: what ends its row.
-func (c Card) Age() string { return age(time.Since(c.UpdatedAt)) }
+// Age is how long ago the bead last changed: what ends its row. A card made
+// of an id alone, as /deps makes one for a bead the viewer's list does not
+// hold, has no time and so no age: measured from the zero time it would read
+// in the hundred thousands of days.
+func (c Card) Age() string {
+	if c.UpdatedAt.IsZero() {
+		return ""
+	}
+	return age(time.Since(c.UpdatedAt))
+}
 
 // manualClaims are the ids of the sessions among sessions that are a manual
 // group's claim.

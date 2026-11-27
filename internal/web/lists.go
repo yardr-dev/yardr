@@ -111,6 +111,17 @@ func (d Deps) Self() string {
 	return "/deps"
 }
 
+// Line is the stage head's line under the title: how many edges the page
+// lists, the oldest first, which is the order the blocked beads' rows stand
+// in too. With ?all=1 the edges between closed beads are among them, so it
+// does not say the edges have an open end.
+func (d Deps) Line() string {
+	if d.All {
+		return countWords(len(d.Deps), "edge", "edges") + ", closed ends included, the oldest first"
+	}
+	return countWords(len(d.Deps), "edge", "edges") + " with an open end, the oldest first"
+}
+
 // all reports whether the request asks for the whole list (?all=1), as a
 // list command's --all does: the closed beads, the ended sessions.
 func all(r *http.Request) bool {
@@ -314,5 +325,5 @@ func (s *Server) handleDeps(w http.ResponseWriter, r *http.Request) {
 		}
 		d.Groups[i].Deps = append(d.Groups[i].Deps, row)
 	}
-	s.respond(w, r, Page{Template: "deps", Title: "Deps", Data: d, head: d.Head, stream: "seq", live: liveStage})
+	s.respond(w, r, Page{Template: "deps", Kind: "list", Title: "Deps", Data: d, head: d.Head, stream: "seq", live: liveStage})
 }

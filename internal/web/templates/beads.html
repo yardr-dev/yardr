@@ -1,38 +1,50 @@
+{{- /* /beads, a list page, the third stage kind: the beads as rows of the stage,
+       the newest change first, the age of the last one ending each row. The head
+       says how many. The page's leaf in the shell reads it again whenever
+       something happens in the yard: the stream carries each event's seq and
+       nothing else. */}}
 {{define "content"}}
 {{- with .Data}}
 {{- $d := .}}
-{{- /* The page's leaf in the shell reads it again whenever something
-       happens in the yard: the stream carries each event's seq and nothing
-       else. */}}
-<div id="beads">
+<article class="wv-page" data-kind="{{$.Kind}}">
+  <header class="wv-head">
+    <h1 class="wv-title">Beads</h1>
+    <p class="wv-meta">{{.Line}}</p>
+  </header>
   {{- /* Each choice is a chip with the number of beads its own link lists:
          a depot's under the stage kept, a stage's under the depot kept,
          each row's all under the other filter alone. */}}
   {{- if or .Depots .Stages}}
-  <nav class="item chips" aria-label="Filters">
+  <nav class="wv-chips" aria-label="Filters">
     {{- if .Depots}}
-    <p><span class="label">depot</span>
-      <a href="{{.Link "" .Stage}}"{{if not .Depot}} aria-current="true"{{end}}>all · <span class="num">{{.AnyDepot}}</span></a>
+    <p><span class="wv-chips__label">depot</span>
+      <a class="wv-pill" href="{{.Link "" .Stage}}"{{if not .Depot}} aria-current="true"{{end}}>all <span class="wv-num">{{.AnyDepot}}</span></a>
       {{- range .Depots}}
-      <a href="{{$d.Link . $d.Stage}}"{{if eq . $d.Depot}} aria-current="true"{{end}}>{{.}} · <span class="num">{{index $d.DepotCounts .}}</span></a>
+      <a class="wv-pill" href="{{$d.Link . $d.Stage}}"{{if eq . $d.Depot}} aria-current="true"{{end}}>{{.}} <span class="wv-num">{{index $d.DepotCounts .}}</span></a>
       {{- end}}
     </p>
     {{- end}}
     {{- if .Stages}}
-    <p><span class="label">stage</span>
-      <a href="{{.Link .Depot ""}}"{{if not .Stage}} aria-current="true"{{end}}>all · <span class="num">{{.AnyStage}}</span></a>
+    <p><span class="wv-chips__label">stage</span>
+      <a class="wv-pill" href="{{.Link .Depot ""}}"{{if not .Stage}} aria-current="true"{{end}}>all <span class="wv-num">{{.AnyStage}}</span></a>
       {{- range .Stages}}
-      <a href="{{$d.Link $d.Depot .}}"{{if eq . $d.Stage}} aria-current="true"{{end}}>{{.}} · <span class="num">{{index $d.StageCounts .}}</span></a>
+      <a class="wv-pill" href="{{$d.Link $d.Depot .}}"{{if eq . $d.Stage}} aria-current="true"{{end}}>{{.}} <span class="wv-num">{{index $d.StageCounts .}}</span></a>
       {{- end}}
     </p>
     {{- end}}
   </nav>
   {{- end}}
-  {{- range .Beads}}
-  <div class="item">{{template "card" .Card}}</div>
+  {{- /* A row opens the bead's page, which stands in Decide: the rows are a
+         block whose links all leave the mode, so it swaps the whole list. */}}
+  {{- if .Beads}}
+  <ol hx-select-oob="#rail:outerHTML,#drawer:outerHTML,#list:outerHTML">
+    {{- range .Beads}}
+    <li>{{template "srow" .Card}}</li>
+    {{- end}}
+  </ol>
   {{- else}}
-  <p class="item faint">No {{if not .All}}open {{end}}bead{{if or .Depot .Stage}} matches{{end}}.</p>
+  <p class="wv-none">No {{if not .All}}open {{end}}bead{{if or .Depot .Stage}} matches{{end}}.</p>
   {{- end}}
-</div>
+</article>
 {{- end}}
 {{end}}

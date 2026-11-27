@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"yardr.dev/yardr/internal/preview"
 	"yardr.dev/yardr/internal/store"
@@ -66,18 +68,44 @@ func (c PreviewCard) Status() string {
 	return c.State
 }
 
-// Dot is the status dot's class: running green, a pending proposal the
-// accent, a crashed or failed one red, the rest none.
+// Dot is the status dot's kind (the suffix of wv-dot--): running green, a
+// pending proposal the accent, a crashed or failed one red, the rest none.
 func (c PreviewCard) Dot() string {
 	switch c.State {
 	case store.PreviewRunning:
-		return "running"
+		return "run"
 	case store.PreviewPending:
-		return "working"
+		return "wait"
 	case store.PreviewCrashed, store.PreviewFailed:
-		return "held"
+		return "fault"
 	}
 	return ""
+}
+
+// Line is the stage head's line under the title: how many previews the yard
+// has, in the order the rows stand in.
+func (p Previews) Line() string {
+	return countWords(len(p.Previews), "preview", "previews") + ", by name"
+}
+
+// FoldID is the id of the card's fold. A page that reads itself again at every
+// event of the yard keeps the folds a person opened open by it (yard.js), so
+// it names the preview: another preview's fold is another card's.
+func (c PreviewCard) FoldID() string { return elementID("fold", "preview", c.App) }
+
+// FactsLine is what the card's fold keeps in one line: what the preview runs
+// and where, or for a watch the bead it follows and the directory it serves.
+// The start command is the operator's to read, so it stands in the line only
+// on a card that holds it.
+func (c PreviewCard) FactsLine() string {
+	if c.Kind == store.PreviewKindWatch {
+		return fmt.Sprintf("watch of %s in %s · %s", c.Bead, c.Stage, c.Dir)
+	}
+	var parts []string
+	if c.Command != "" {
+		parts = append(parts, c.Command)
+	}
+	return strings.Join(append(parts, c.Dir, "port "+strconv.Itoa(c.Port)), " · ")
 }
 
 // ShortCommit and ShortHead are the commit the preview runs and the
@@ -108,7 +136,7 @@ func (s *Server) handlePreviews(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	s.respond(w, r, Page{Template: "previews", Title: "Previews", Data: d, head: head, stream: "seq", live: liveStage})
+	s.respond(w, r, Page{Template: "previews", Kind: "list", Title: "Previews", Data: d, head: head, stream: "seq", live: liveStage})
 }
 
 func (s *Server) previewsPage(ctx context.Context, head uint64) (Previews, error) {
@@ -207,5 +235,5 @@ func (s *Server) previewsAgain(w http.ResponseWriter, r *http.Request, why strin
 		return
 	}
 	d.Error = why
-	s.respond(w, r, Page{Template: "previews", Title: "Previews", Data: d, head: head, stream: "seq", live: liveStage})
+	s.respond(w, r, Page{Template: "previews", Kind: "list", Title: "Previews", Data: d, head: head, stream: "seq", live: liveStage})
 }

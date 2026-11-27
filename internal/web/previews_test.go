@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -124,18 +125,28 @@ func gitDepot(t *testing.T) (dir, head string) {
 	return dir, strings.TrimSpace(string(out))
 }
 
-// cardOf is the article of the page that draws app's card, so that a link
-// or a line is held to the card it belongs to and not to the page.
+// cardOf is the item of the page's list that draws app's card, its row with
+// the fold under it, so that a link or a line is held to the card it belongs
+// to and not to the page.
 func cardOf(t *testing.T, page, app string) string {
 	t.Helper()
-	for _, a := range strings.Split(page, "<article")[1:] {
-		if strings.Contains(a, `<span class="bead">`+app+`</span>`) {
-			card, _, _ := strings.Cut(a, "</article>")
-			return card
-		}
+	at := strings.Index(page, `<span class="wv-srow__name">`+app+`</span>`)
+	if at < 0 {
+		t.Fatalf("the page has no card of %s:\n%s", app, page)
 	}
-	t.Fatalf("the page has no card of %s:\n%s", app, page)
-	return ""
+	card, _, _ := strings.Cut(page[strings.LastIndex(page[:at], "<li>"):], "</li>")
+	return card
+}
+
+// foldTag is the tag that opens app's fold: open on a proposal, whose command is
+// what an approval authorises, and shut on every other card, where a page that
+// reads itself again keeps it as a person left it, by its id (yard.js).
+func foldTag(app string, open bool) string {
+	tag := `<details class="wv-fold" id="fold-preview-` + app + `"`
+	if open {
+		tag += " open"
+	}
+	return tag + ">"
 }
 
 // A pending proposal appears as one card, in JSON and HTML, showing the
@@ -169,6 +180,15 @@ func TestPreviewsPage(t *testing.T) {
 	if got.As != "ada" || len(got.Previews) != 2 {
 		t.Fatalf("previews = %+v", got)
 	}
+	// The stage's own head counts them; a yard with none says so where the rows
+	// would stand.
+	if body := squash(acting.get("/previews").body); !strings.Contains(body, `<article class="wv-page" data-kind="list"><header class="wv-head"><h1 class="wv-title">Previews</h1><p class="wv-meta">2 previews, by name</p></header>`) ||
+		strings.Contains(body, `class="page-head"`) {
+		t.Errorf("the page lacks its own head: %s", body)
+	}
+	if body := squash(previewFixture(t).get("/previews").body); !strings.Contains(body, `<p class="wv-meta">0 previews, by name</p></header><p class="wv-none">No preview is in the yard.</p>`) {
+		t.Errorf("an empty yard's page: %s", body)
+	}
 	card := got.Previews[0]
 	if card.App != "demo" || card.Command != command ||
 		card.Dir != dir || card.Port != port || card.Commit != head || !card.Dirty ||
@@ -196,6 +216,41 @@ func TestPreviewsPage(t *testing.T) {
 		if strings.Contains(page, not) {
 			t.Errorf("the pending card shows %q", not)
 		}
+	}
+	// The buttons stand on the row, outside the fold and above it, and a
+	// proposal's fold stands open, since its command is what Approve authorises.
+	pending := cardOf(t, page, "demo")
+	fold := strings.Index(pending, foldTag("demo", true))
+	if fold < 0 {
+		t.Errorf("the proposal's fold does not stand open: %s", pending)
+	}
+	if approve, refuse := strings.Index(pending, `value="approve">Approve`), strings.Index(pending, `value="refuse">Refuse`); approve < 0 || refuse < 0 || approve > fold || refuse > fold {
+		t.Errorf("Approve and Refuse are not on the row, above the fold: %s", pending)
+	}
+	if !strings.Contains(pending[fold:], "<dt>command</dt><dd><code>"+template.HTMLEscapeString(card.Command)+"</code></dd>") {
+		t.Errorf("the command is not in the fold in full: %s", pending[fold:])
+	}
+	// A proposal's dot waits for a person; the fold keeps in one line what the
+	// preview runs and where, the command among it for the operator alone.
+	if !strings.Contains(pending, `<span class="wv-dot wv-dot--wait"></span>`) {
+		t.Errorf("a proposal's dot is not the one that waits for a person: %s", pending)
+	}
+	if want := `<span class="wv-fold__value">` + template.HTMLEscapeString(card.Command+" · "+dir+" · port "+fmt.Sprint(port)) + `</span>`; !strings.Contains(pending, want) {
+		t.Errorf("the fold's line is not %s: %s", want, pending)
+	}
+	// A reader who is no operator, though the view acts as them, gets the card
+	// without its command: the fold stands open all the same.
+	if _, err := f.st.AddUser(ctx, "sam", "ada"); err != nil {
+		t.Fatal(err)
+	}
+	member := f.as(t, "sam")
+	memberPage := member.get("/previews").body
+	if strings.Contains(memberPage, template.HTMLEscapeString(card.Command)) || strings.Contains(memberPage, "<dt>command</dt>") {
+		t.Errorf("a reader who is no operator is shown the start command: %s", memberPage)
+	}
+	if c := cardOf(t, memberPage, "demo"); !strings.Contains(c, foldTag("demo", true)) || !strings.Contains(c, "<dt>directory</dt><dd>"+dir+"</dd>") ||
+		!strings.Contains(c, `<span class="wv-fold__value">`+template.HTMLEscapeString(dir+" · port "+fmt.Sprint(port))+`</span>`) {
+		t.Errorf("a reader who is no operator gets no card, or one with no fold open, or a line that names the command: %s", c)
 	}
 	// A view that reads only draws no button and takes no write.
 	plain := f.get("/previews").body
@@ -252,7 +307,7 @@ func TestPreviewsPage(t *testing.T) {
 	if tail := template.HTMLEscapeString(running.Previews[0].Log[0]); !strings.Contains(page, tail) {
 		t.Errorf("the page does not show the log tail %q", tail)
 	}
-	for _, want := range []string{`<span class="faint">no address from the edge yet</span>`, `value="stop">Stop`, `value="restart">Restart`} {
+	for _, want := range []string{`<span class="wv-faint">no address from the edge yet</span>`, `value="stop">Stop`, `value="restart">Restart`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the running card does not show %q", want)
 		}
@@ -261,6 +316,22 @@ func TestPreviewsPage(t *testing.T) {
 		if strings.Contains(page, not) {
 			t.Errorf("the running card with no host shows %q", not)
 		}
+	}
+	// A running card's fold is shut, its buttons are above it and its log tail
+	// is in it; the operator's alone.
+	card0 := cardOf(t, page, "demo")
+	if !strings.Contains(card0, `<span class="wv-dot wv-dot--run"></span>`) {
+		t.Errorf("a running card's dot is not green: %s", card0)
+	}
+	fold0 := strings.Index(card0, foldTag("demo", false))
+	if fold0 < 0 || strings.Index(card0, `value="stop">Stop`) > fold0 || strings.Index(card0, `value="restart">Restart`) > fold0 {
+		t.Errorf("the running card's buttons are not above its shut fold: %s", card0)
+	}
+	if tail := template.HTMLEscapeString(running.Previews[0].Log[0]); !strings.Contains(card0[fold0:], tail) {
+		t.Errorf("the log tail is not in the fold: %s", card0)
+	}
+	if c := cardOf(t, member.get("/previews").body, "demo"); strings.Contains(c, "<h3>log</h3>") || strings.Contains(c, template.HTMLEscapeString(running.Previews[0].Log[0])) {
+		t.Errorf("a reader who is no operator is shown the log: %s", c)
 	}
 	if refused := running.Previews[1]; refused.App != "other" || refused.State != store.PreviewRefused || len(refused.Log) != 0 {
 		t.Fatalf("refused card = %+v", refused)
@@ -354,7 +425,8 @@ func TestPreviewsPageDrawsARunningWatch(t *testing.T) {
 	page := acting.get("/previews").body
 	for _, want := range []string{
 		"watch of", b.ID + " in new", filepath.Join(tree, "mockups"),
-		`<span class="faint">no address from the edge yet</span>`, `value="stop">Stop`, "idle 4h · age 7d", "started by",
+		`<span class="wv-fold__value">watch of ` + b.ID + ` in new · ` + filepath.Join(tree, "mockups") + `</span>`,
+		`<span class="wv-faint">no address from the edge yet</span>`, `value="stop">Stop`, "idle 4h · age 7d", "started by",
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the page does not show %q", want)
@@ -380,7 +452,7 @@ func TestPreviewsPageDrawsARunningWatch(t *testing.T) {
 		t.Fatalf("watch card host = %q, want %q", got.Previews[0].Host, host)
 	}
 	page = acting.get("/previews").body
-	for _, want := range []string{"<dt>address</dt>", `href="https://` + host + `/"`, `<a href="https://` + host + `/">Open</a>`} {
+	for _, want := range []string{"<dt>address</dt>", `href="https://` + host + `/" hx-boost="false">` + host + `</a>`, `<a class="wv-btn" href="https://` + host + `/" hx-boost="false">Open</a>`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the watch's card does not show %q", want)
 		}
@@ -401,7 +473,7 @@ func TestPreviewsPageDrawsARunningWatch(t *testing.T) {
 	if !strings.Contains(page, "running ("+refusal+")") || strings.Contains(page, "<dt>address</dt>") {
 		t.Errorf("a running watch the edge refused: want its refusal for the status and no address:\n%s", page)
 	}
-	if want := `<span class="faint">no address from the edge yet (` + refusal + `)</span>`; !strings.Contains(page, want) || strings.Contains(page, ">Open<") {
+	if want := `<span class="wv-faint">no address from the edge yet (` + refusal + `)</span>`; !strings.Contains(page, want) || strings.Contains(page, ">Open<") {
 		t.Errorf("a running watch the edge refused: want %q in Open's place and no Open:\n%s", want, page)
 	}
 	if r := acting.postForm("/previews", url.Values{"app": {p.App}, "action": {"restart"}}, "Origin", acting.ts.URL); r.status != http.StatusOK ||
@@ -455,17 +527,17 @@ func TestPreviewsPageShowsTheHostTheEdgeGave(t *testing.T) {
 		t.Fatalf("previews = %+v, want the first to carry the host the edge gave and the others none", got.Previews)
 	}
 	page := acting.get("/previews").body
-	if n := strings.Count(page, "<dt>address</dt>"); n != 1 || !strings.Contains(page, `href="https://`+host+`/"`) {
+	if n := strings.Count(page, "<dt>address</dt>"); n != 1 || !strings.Contains(page, `href="https://`+host+`/" hx-boost="false"`) {
 		t.Errorf("the page shows %d addresses, want the one link to %s:\n%s", n, host, page)
 	}
 	const why = "no address from the edge yet"
-	if c := cardOf(t, page, "hosted"); !strings.Contains(c, `<a href="https://`+host+`/">Open</a>`) || strings.Contains(c, why) {
+	if c := cardOf(t, page, "hosted"); !strings.Contains(c, `<a class="wv-btn" href="https://`+host+`/" hx-boost="false">Open</a>`) || strings.Contains(c, why) {
 		t.Errorf("the card with a host: want Open to https://%s/ and no reason line:\n%s", host, c)
 	}
 	if c := cardOf(t, page, "plain"); strings.Contains(c, ">Open<") || strings.Contains(c, why) || !strings.Contains(c, `value="approve">Approve`) {
 		t.Errorf("the pending card: want Approve, with no Open and no reason line:\n%s", c)
 	}
-	if c := cardOf(t, page, "unaddressed"); !strings.Contains(c, `<span class="faint">`+why+`</span>`) || strings.Contains(c, ">Open<") || strings.Contains(c, "<dt>address</dt>") {
+	if c := cardOf(t, page, "unaddressed"); !strings.Contains(c, `<span class="wv-faint">`+why+`</span>`) || strings.Contains(c, ">Open<") || strings.Contains(c, "<dt>address</dt>") {
 		t.Errorf("the card with no host: want the reason line, with no Open and no address:\n%s", c)
 	}
 	// What the edge refused with is kept in the card's state detail, and the
@@ -474,13 +546,13 @@ func TestPreviewsPageShowsTheHostTheEdgeGave(t *testing.T) {
 	if _, err := f.own.UpdatePreview(ctx, "unaddressed", store.PreviewUpdate{StateDetail: &refusal}); err != nil {
 		t.Fatal(err)
 	}
-	if c := cardOf(t, acting.get("/previews").body, "unaddressed"); !strings.Contains(c, `<span class="faint">`+why+` (`+refusal+`)</span>`) || strings.Contains(c, ">Open<") {
+	if c := cardOf(t, acting.get("/previews").body, "unaddressed"); !strings.Contains(c, `<span class="wv-faint">`+why+` (`+refusal+`)</span>`) || strings.Contains(c, ">Open<") {
 		t.Errorf("the card the edge refused: want the reason line with the refusal after it, and no Open:\n%s", c)
 	}
 	// A view that reads only has no buttons, Open among them: the card's
 	// address is what it opens from.
 	read := f.get("/previews").body
-	if c := cardOf(t, read, "hosted"); !strings.Contains(c, `<dd><a href="https://`+host+`/">`+host+`</a></dd>`) || strings.Contains(c, ">Open<") {
+	if c := cardOf(t, read, "hosted"); !strings.Contains(c, `<dd><a href="https://`+host+`/" hx-boost="false">`+host+`</a></dd>`) || strings.Contains(c, ">Open<") {
 		t.Errorf("the card on a view that reads only: want the address link and no Open:\n%s", c)
 	}
 }
@@ -506,8 +578,8 @@ func TestPreviewsCrewApprovalRefused(t *testing.T) {
 	if r.status != http.StatusOK {
 		t.Fatalf("crew approve: status %d, want the redrawn page: %s", r.status, r.body)
 	}
-	if !strings.Contains(r.body, "may approve a preview") {
-		t.Errorf("the redrawn page does not carry the store's refusal: %s", r.body)
+	if !regexp.MustCompile(`<p class="wv-callout">[^<]*may approve a preview[^<]*</p>`).MatchString(r.body) {
+		t.Errorf("the redrawn page does not carry the store's refusal under its head: %s", r.body)
 	}
 	if got, err := f.st.GetPreview(ctx, "demo"); err != nil || got.State != store.PreviewPending {
 		t.Fatalf("after crew approve = %+v, %v", got, err)
@@ -553,7 +625,7 @@ func TestPreviewsStaleAndRestart(t *testing.T) {
 	if len(got.Previews) != 1 || !got.Previews[0].Stale || got.Previews[0].Head != second || got.Previews[0].Commit != first {
 		t.Fatalf("stale card = %+v", got.Previews)
 	}
-	if page := acting.get("/previews").body; !strings.Contains(page, "stale") {
+	if page := acting.get("/previews").body; !strings.Contains(page, `<span class="wv-fault">stale</span>`) {
 		t.Error("the page does not mark the stale preview")
 	}
 	r := acting.postForm("/previews", url.Values{"app": {"demo"}, "action": {"restart"}}, "Origin", acting.ts.URL)

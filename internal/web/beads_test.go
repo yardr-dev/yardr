@@ -59,6 +59,16 @@ func titles(cs []web.Card) []string {
 	return out
 }
 
+// srowOf is the row of the stage that draws the bead id, from its link to the
+// end of it, "" when the page has none.
+func srowOf(body, id string) string {
+	at := strings.Index(body, `<a class="wv-srow" href="/beads/`+id+`">`)
+	if at < 0 {
+		return ""
+	}
+	return body[at : at+strings.Index(body[at:], "</a>")]
+}
+
 // cards are the beads of /beads as the page shows them.
 func cards(rs []web.BeadRow) []web.Card {
 	out := []web.Card{}
@@ -535,8 +545,8 @@ type chip struct {
 }
 
 var (
-	filterRowRE = regexp.MustCompile(`<p><span class="label">(depot|stage)</span>(.*?)</p>`)
-	chipRE      = regexp.MustCompile(`<a href="([^"]+)"( aria-current="true")?>([^<]*?) · <span class="num">(\d+)</span></a>`)
+	filterRowRE = regexp.MustCompile(`<p><span class="wv-chips__label">(depot|stage)</span>(.*?)</p>`)
+	chipRE      = regexp.MustCompile(`<a class="wv-pill" href="([^"]+)"( aria-current="true")?>([^<]*?) <span class="wv-num">(\d+)</span></a>`)
 )
 
 // filterChips reads the filters of a /beads page as a browser lays them out:
@@ -557,9 +567,17 @@ func filterChips(t *testing.T, body string) map[string][]chip {
 	return rows
 }
 
-// The page: the cards, the filters as chips that keep each other, each with
-// the number of beads its link lists, and the request it repeats when the
-// stream says something happened.
+// srowNameRE and srowEndRE are the title that opens a row of the stage and the
+// age that closes it.
+var (
+	srowNameRE = regexp.MustCompile(`<span class="wv-srow__name">([^<]*)</span>`)
+	srowEndRE  = regexp.MustCompile(`<span class="wv-srow__end"><span>([^<]*)</span></span></a>`)
+)
+
+// The page: a stage of the list kind with the beads as rows, the newest change
+// first, each ending in the age of its last change; the filters as chips that
+// keep each other, each with the number of beads its link lists; and the
+// request it repeats when the stream says something happened.
 func TestBeadsHTML(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
@@ -574,25 +592,82 @@ func TestBeadsHTML(t *testing.T) {
 		t.Fatalf("status %d", r.status)
 	}
 	three := f.byTitle()["three"]
+	page := squash(r.body)
 	for _, want := range []string{
 		shellOpen(head, "seq"),
-		`<i class="wv-live" hidden hx-get="/beads?depot=line&amp;stage=new" hx-trigger="sse:message" hx-push-url="false" hx-swap="innerHTML ignoreTitle:true" hx-select-oob="#rail:outerHTML,#list-head:innerHTML,#list-rows:innerHTML"></i>`,
-		`<a class="bead" href="/beads/` + three.ID + `">`,
-		`line · new · task`,
+		leafOf("/beads?depot=line&stage=new", "innerHTML ignoreTitle:true"),
+		// The stage draws its own head, in place of the shell's heading.
+		`<article class="wv-page" data-kind="list"><header class="wv-head"><h1 class="wv-title">Beads</h1><p class="wv-meta">1 open, the newest change first</p></header>`,
+		`<nav class="wv-chips" aria-label="Filters">`,
+		// The row: the bead's ids and places on its line, and Decide's page
+		// is where it leads, so the block that holds the rows swaps the whole list.
+		`<ol hx-select-oob="#rail:outerHTML,#drawer:outerHTML,#list:outerHTML"><li><a class="wv-srow" href="/beads/` + three.ID + `">`,
+		`<span class="wv-id">` + three.ID + `</span><span class="wv-sep">·</span><span class="wv-nw">line</span><span class="wv-sep">·</span>new<span class="wv-sep">·</span>task`,
 		`<a class="wv-row" href="/beads" aria-current="page">`,
 	} {
-		if !strings.Contains(r.body, want) {
+		if !strings.Contains(page, want) {
 			t.Errorf("the page lacks %s", want)
 		}
 	}
-	// The right column may name it: "two" is held.
-	list, _, _ := strings.Cut(r.body[strings.Index(r.body, `<div id="beads"`):], "</main>")
-	if strings.Contains(list, ">two<") {
+	if strings.Contains(r.body, `class="page-head"`) {
+		t.Error("the shell's heading stands over the list page's own head")
+	}
+	// A filter keeps the beads of its own: "two" is held, in backlog.
+	if strings.Contains(stageOf(t, r.body), ">two<") {
 		t.Error("the filtered page shows a bead of another stage")
+	}
+	// The chips are links outside the block of rows, which would otherwise
+	// swap the whole list for a click that stays in the mode.
+	if rows := strings.Index(page, `<ol hx-select-oob`); rows < 0 || strings.LastIndex(page, `class="wv-pill"`) > rows {
+		t.Error("a chip stands in the block of rows that swaps the whole list")
 	}
 	// Only /flows moves cards one by one: here they listen to nothing.
 	if strings.Contains(r.body, `sse-swap="bead/`) {
-		t.Error("a card of the list listens to the stream")
+		t.Error("a row of the list listens to the stream")
+	}
+	// A filter that keeps nothing says so where the rows would stand, and a yard
+	// with no depot and no bead has no chip to choose from, or a sentence for
+	// the closed beads it would list.
+	for target, want := range map[string]string{
+		"/beads?depot=nowhere":         `<p class="wv-none">No open bead matches.</p>`,
+		"/beads?all=1&depot=nowhere":   `<p class="wv-none">No bead matches.</p>`,
+		"/beads?depot=loose&stage=new": `<p class="wv-none">No open bead matches.</p>`,
+	} {
+		body := squash(f.get(target).body)
+		if !strings.Contains(body, want) || strings.Contains(body, "<ol") {
+			t.Errorf("%s lacks %s, or draws rows", target, want)
+		}
+	}
+	bare := squash(newFixture(t).get("/beads").body)
+	if !strings.Contains(bare, `<p class="wv-meta">0 open, the newest change first</p></header><p class="wv-none">No open bead.</p>`) || strings.Contains(bare, "wv-chips") {
+		t.Errorf("an empty yard's page: %s", stageOf(t, bare))
+	}
+
+	// The rows are the newest change first: by updated_at, as the JSON says it,
+	// and the page draws them in that order, each ending in how long ago.
+	var all web.Beads
+	f.getJSON("/beads", &all)
+	for i := 1; i < len(all.Beads); i++ {
+		if all.Beads[i].UpdatedAt.After(all.Beads[i-1].UpdatedAt) {
+			t.Errorf("%s changed after %s, which stands before it", all.Beads[i].Title, all.Beads[i-1].Title)
+		}
+	}
+	whole := squash(stageOf(t, f.get("/beads").body))
+	var shown []string
+	for _, m := range srowNameRE.FindAllStringSubmatch(whole, -1) {
+		shown = append(shown, m[1])
+	}
+	if want := []string{"seven", "two", "six", "five", "three", "one"}; !reflect.DeepEqual(shown, want) || !reflect.DeepEqual(titles(cards(all.Beads)), want) {
+		t.Errorf("the page draws %v and its JSON %v, want the newest change first: %v", shown, titles(cards(all.Beads)), want)
+	}
+	if ages := srowEndRE.FindAllStringSubmatch(whole, -1); len(ages) != len(shown) {
+		t.Errorf("%d of %d rows end in an age", len(ages), len(shown))
+	} else {
+		for _, m := range ages {
+			if !regexp.MustCompile(`^\d+[smhd]( \d+[mh])?$`).MatchString(m[1]) {
+				t.Errorf("a row ends in %q, want the age of its last change", m[1])
+			}
+		}
 	}
 
 	// The chips of the known list, by the filters of the page: the links are
@@ -643,11 +718,6 @@ func TestBeadsHTML(t *testing.T) {
 		if len(listed.Beads) != count {
 			t.Errorf("%s lists %d beads, a chip counts %d", href, len(listed.Beads), count)
 		}
-	}
-	// The chips are this page's alone: a config page's way back is a
-	// .filters row too, and stays a plain link.
-	if !strings.Contains(r.body, `<nav class="item chips" aria-label="Filters">`) || strings.Contains(f.get("/depots").body, `class="item chips"`) {
-		t.Error("the chips' class is not the Beads page's alone")
 	}
 }
 
@@ -1341,16 +1411,16 @@ func TestManualClaimIsNotWorking(t *testing.T) {
 		}
 		return body[at : at+strings.Index(body[at:], "</article>")]
 	}
-	for _, page := range []string{"/flows", "/beads"} {
-		body := f.get(page).body
-		if c := cardOf(body, idea.ID); c == "" || strings.Contains(c, "working") || !strings.Contains(c, `<span class="dot"></span>`) {
-			t.Errorf("%s: the manual claim's card: %q", page, c)
-		}
-		if c := cardOf(body, door.ID); !strings.Contains(c, `<span class="dot working"></span>`) || !strings.Contains(c, "· working") {
-			t.Errorf("%s: the agent's bead's card: %q", page, c)
-		}
+	// /flows still draws its beads as cards.
+	flowsPage := f.get("/flows").body
+	if c := cardOf(flowsPage, idea.ID); c == "" || strings.Contains(c, "working") || !strings.Contains(c, `<span class="dot"></span>`) {
+		t.Errorf("/flows: the manual claim's card: %q", c)
 	}
-	// The train's page has them as rows of its Linked beads fold.
+	if c := cardOf(flowsPage, door.ID); !strings.Contains(c, `<span class="dot working"></span>`) || !strings.Contains(c, "· working") {
+		t.Errorf("/flows: the agent's bead's card: %q", c)
+	}
+	// /beads has them as rows of the stage, and the train's page as the rows of
+	// its Linked beads fold.
 	rowOf := func(body, id string) string {
 		at := strings.Index(body, `<a class="wv-srow" href="/beads/`+id+`">`)
 		if at < 0 {
@@ -1358,12 +1428,16 @@ func TestManualClaimIsNotWorking(t *testing.T) {
 		}
 		return body[at : at+strings.Index(body[at:], "</a>")]
 	}
-	links := foldOf(t, f.get("/beads/"+train.ID).body, train.ID, "links")
-	if r := rowOf(links, idea.ID); r == "" || strings.Contains(r, "working") || strings.Contains(r, "wv-dot--run") {
-		t.Errorf("the train's page: the manual claim's row: %q", r)
-	}
-	if r := rowOf(links, door.ID); !strings.Contains(r, `<span class="wv-dot wv-dot--run"></span>`) || !strings.Contains(r, "working") {
-		t.Errorf("the train's page: the agent's bead's row: %q", r)
+	for page, body := range map[string]string{
+		"/beads":           stageOf(t, f.get("/beads").body),
+		"the train's page": foldOf(t, f.get("/beads/"+train.ID).body, train.ID, "links"),
+	} {
+		if r := rowOf(body, idea.ID); r == "" || strings.Contains(r, "working") || strings.Contains(r, "wv-dot--run") {
+			t.Errorf("%s: the manual claim's row: %q", page, r)
+		}
+		if r := rowOf(body, door.ID); !strings.Contains(r, `<span class="wv-dot wv-dot--run"></span>`) || !strings.Contains(r, "working") {
+			t.Errorf("%s: the agent's bead's row: %q", page, r)
+		}
 	}
 	// A manual group's claim is a person's turn: the meta line says no
 	// working, and nothing on the stage is green but what the claim is not.

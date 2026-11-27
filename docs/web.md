@@ -754,7 +754,7 @@ origin; the test allows those and only those ([One bead](#one-bead)).
 | `/line` | the overview again, live, as its page reads itself at every event; Decide's list adds the beads running late under what runs ([The line](#the-line)). `/line?home=1`, which was the line's home mode, answers as `/line` | `Line` |
 | `/flows` | per depot, the flows that govern it: each stage a section with its group and the open beads in it as cards, which move as the beads do, and a stage with none folded to its head line ([Flows](#flows)) | `Flows` |
 | `/flows?panel=1` | answers as `/flows`: the yard panel is the Lines list beside the stage now ([The window](#the-window)) | `Flows` |
-| `/beads` | the open beads, the newest change first ([Beads](#beads)) | `Beads` |
+| `/beads` | the open beads as rows of the stage, the newest change first, each ending in the age of its last change, under the depot and stage chips: the third stage kind ([List pages](#list-pages), [Beads](#beads)) | `Beads` |
 | `/beads?depot=<depot>&stage=<stage>` | the same, of one depot, in one stage, or both | `Beads` |
 | `/beads?all=1` | the closed beads too, every one (`yardr bead list --all`) | `Beads` |
 | `/beads/<id>` | one bead, the second stage kind: what `yardr prime --bead <id>` knows, for a person, in the order a person acts on it: the head with its route, what blocks it, the asks put to the viewer, the form that sends it on, its words, its notes and, folded, the rest ([One bead](#one-bead)) | `BeadPage` |
@@ -763,10 +763,10 @@ origin; the test allows those and only those ([One bead](#one-bead)).
 | `/blobs/<hash>` | a note's blob to anyone, and on a view that acts a mail's file to its sender or recipient: the bytes with their type; anything else is a 404 ([One bead](#one-bead)). An image and a page open inline, a file downloads (`Content-Disposition: attachment`) under the first name the lookup finds. On the sandbox origin a note's page runs under the scripted policy, a file downloads the same way | |
 | `/blobs/<hash>/<name>` | the same blob served under that name, when the name passes the rule; a name that fails it is a 404. One blob can carry different names on different letters, so the view's pages link with the name ([One bead](#one-bead)) | |
 | `/blobs/note/<seq>/<n>` | a note's file at its stable address: the note `<seq>`'s current bytes for its file `<n>`, counted from 1, so the address shows the page after a replace; a seq no note has or an `<n>` the note has no file at is a 404. A page opens inert as on the hash route, and on the sandbox origin under the scripted policy ([One bead](#one-bead)) | |
-| `/sessions` | the running sessions, the oldest first, with bead, stage, group, originator, login, runner, state and age (`yardr session list`), and under them the claims of manual groups, live | `Sessions` |
+| `/sessions` | the running sessions as rows of the stage, the oldest first, with bead, stage, group, originator, login, runner, state and age (`yardr session list`), each opening its bead, and under them the claims of manual groups, live ([List pages](#list-pages)) | `Sessions` |
 | `/sessions?all=1` | the same page; its JSON lists the ended sessions too, every one (`yardr session list -a --all`) | `Sessions` |
 | `/crew` | each crew member: whether it runs, since when, and its unread inbox count when there is one, live. Journals and handoffs are not shown | `Crew` |
-| `/previews` | the yard's previews: one card per preview with the start command in full, the directory, the port, the depot commit and dirty mark beside the depot's HEAD now, the proposer and the lifetime, the running preview's log tail and a stale mark, live; on a view that acts, with Approve, Refuse, Open, Stop and Restart. A card shows the host the [edge](edge.md#previews-through-the-edge) gave the preview as its address once it has one, and Open goes there; a card with no host draws no Open and says why in its place. A running [watch](watch.md) is a card of its own, with the bead, the directory and Open and Stop | `Previews` |
+| `/previews` | the yard's previews: one row per preview with its state and a stale mark and, folded under it, the start command in full, the directory, the port, the depot commit and dirty mark beside the depot's HEAD now, the proposer and the lifetime and the running preview's log tail, live; on a view that acts, with Approve, Refuse, Open, Stop and Restart on the row. A card shows the host the [edge](edge.md#previews-through-the-edge) gave the preview as its address once it has one, and Open goes there; a card with no host draws no Open and says why in its place. A running [watch](watch.md) is a card of its own, with the bead, the directory and Open and Stop ([List pages](#list-pages)) | `Previews` |
 | `/config` | the hub of the configuration pages: links to the lists, with Telemetry for the operator, and, drawn for the operator alone, the yardmaster's delegation switch as it stands (`delegation`: `on` or `off`) with the button for the other state. Turning it off takes the operator check alone; turning it on takes the fresh sign-in a strong card takes, and on a view with no gateway to prove one it stays a terminal's ([users.md](users.md#the-yardmaster-for-the-operator)) | `Config` |
 | `/config/delegation/fresh/<state>` | the same return for the yardmaster's delegation switch on `/config`. It spends the one-use state that turning delegation on minted for its operator, turns the switch on and answers 303 to `/config`. The return writes nothing and draws Config again with why when its state was used already, expired, never raised or raised for something else, when the sign-in is not fresh, or when the yard is not hosted. Only the operator who raised the state can spend it ([users.md](users.md#the-yardmaster-for-the-operator)) | |
 | `/delegations/<id>` | a delegated run's record: what the yardmaster ran for an operator, on which of their mails, what each setting held before and how the run is taken back (`yardr delegation show`); in the JSON a pack apply's objects stand by name under `record.objects` and whole, with their diffs and before-states, under `record.plan`; an operator's alone, any operator's, and a 404 for anyone else | `DelegationPage` |
@@ -776,7 +776,7 @@ origin; the test allows those and only those ([One bead](#one-bead)).
 | `/groups` | the yard's groups: each with its runner, limit, members and config (`yardr group list`), live | `Groups` |
 | `/routes` | the yard's routes in match order: each with its stage, filters and group, or its groups in order with their quota conditions (`yardr route list`), live | `Routes` |
 | `/peers` | the yards this one is linked with: each with its URL, what the link carries and what waits for it (`yardr peer list`), live | `Peers` |
-| `/deps` | what waits on what: the edges with an open end, grouped by the blocked bead, each end with its title and stage, live | `Deps` |
+| `/deps` | what waits on what: one row per blocked bead with the edges with an open end that hold it under it, each end with its title and stage, live ([List pages](#list-pages)) | `Deps` |
 | `/deps?all=1` | the same page; its edges are every edge of the yard, the ones between closed beads too | `Deps` |
 | `/limits` | what the subscriptions the yard burns still carry: each provider in use with its windows, how far each is used and when it resets, and who burns it (`yardr limits`), live | `Limits` |
 | `/telemetry` | the yard's opt-in telemetry switch: off, the consent words with the button that turns it on; on, the install id and the next batch as `yardr telemetry show` renders them; the operator's alone ([Telemetry](#telemetry)) | `Telemetry` |
@@ -1686,13 +1686,76 @@ On the page the breadcrumb reads the depot › the flow with the tag. An
 open row links to its bead, a terminal row is plain. Below 700 px the
 rows narrow and the phone bar stands as today.
 
+## List pages
+
+`/beads`, `/sessions`, `/previews` and `/deps` are the third of the window's six stage
+kinds (`data-kind="list"`, [The stage kinds](#the-stage)): a stage head, the chips where
+there are any, and one row of the stage to each thing, at the stage's width
+(`templates/beads.html`, `sessions.html`, `previews.html` and `deps.html`). Each draws its
+own head, so the shell's heading is not above it (`Page.Kind`): the title, and one line under
+it that counts what the page lists and says in what order (`14 open, the newest change
+first`). Each is live by reading its own address again, keeps the empty sentence it had as
+one quiet line where its rows would stand (`No open bead.`, `No session is running.`, `No
+preview is in the yard.`, `This yard has no edges.`) and answers the JSON it did.
+
+A row is the list's row at the stage's width (`.wv-srow`): a dot where the thing has a
+state, its title, its facts in quiet words under it, and the age at its end. A bead's row
+(`/beads` and `/deps` draw it with the `srow` template, the one the bead's page draws its
+blockers with) and a session's, which is the same row with more facts (`/sessions`, the
+`session` template), open the bead's page, and that stands in Decide. The block that holds
+such rows leaves the mode, so it carries `hx-select-oob="#rail:outerHTML,#drawer:outerHTML,#list:outerHTML"`
+([Swaps](#swaps)) and a click on a row brings Decide's list whole, at its top. The chips stay
+in Lines, outside that block, and swap the stage alone, keeping the list and its scroll. A
+preview's row opens nothing, since it holds buttons, and stands in no such block.
+
+- **`/beads`** has the depot and stage chips with their counts ([Beads](#beads)) and a row
+  to each bead: its title, then its id, depot, stage and type, `working` or `held` (the dot
+  is green or red), `closed` for a closed bead (`?all=1`) and `late` for one running past its
+  usual time, in text colour and with no sign, the whole line as its title
+  ([Estimates](#estimates-the-eta-and-the-late-mark)). The age of its last change, its
+  `updated_at`, ends the row.
+- **`/sessions`** has a row to each session an agent or a command runs, the oldest first: the
+  dot is green, or red with `blocked` in red for a session that waits on a prompt; the title
+  is the bead's; the first line under it names the bead, the state, the stage, the group and
+  the runner, the second the originator, the login, the train, the session's id and when it
+  began; the session's age ends the row. The beads a manual group has claimed stand under
+  them, under the head `Claimed by a manual group` with their count ([Manual
+  claims](#manual-claims)): the same row with `claimed` for its state and no dot and no runner.
+- **`/previews`** has a row to each preview: its dot (green running, rust a proposal that
+  waits for a person, red crashed or failed), its app, its state with the detail the edge or
+  the supervisor gave it, and `stale` in red where the depot has moved past the commit it
+  runs. Where the view acts its buttons stand on the row, above the fold and always drawn:
+  Approve and Refuse on a proposal; on every other card but a refused one, which has none,
+  Open (or, where the edge gave no host, `no address from the edge yet` with its detail),
+  Stop and, unless it is a watch, Restart. The address and Open leave the view, so they say
+  `hx-boost="false"`. One fold, Facts, stands under the row: the start command in full, the
+  directory, the port, the depot, the commit and its dirty mark, the depot's HEAD now, the
+  address, who proposed it and who approved it, the lifetime, and the running preview's log
+  tail. A [watch](watch.md)'s holds the bead and stage it follows, the directory, the
+  address, who started it and the lifetime, and no command, port or commit. A proposal's fold
+  stands open, since the command is what an approval authorises; every other is shut, and one
+  a person opened stays open when the page reads itself again, by its id (`fold-preview-<app>`,
+  `yard.js`). The command and the log are the operator's to read: a reader who is none gets
+  the card with neither. The reason a write was refused stands under the head, in red.
+- **`/deps`** has the chips `edges: open · all` where the yard has an edge at all, choosing
+  the edges with an open end or every edge (`?all=1`), and a row to each blocked bead, the
+  longest waiting first. The edges that hold it stand under its row, one line each: the bead
+  at the other end, the kind, `at` and `until` where the edge names a stage, its title and its
+  stage, `closed` after it for a bead that is. A train that waits for its children stands as
+  the blocked bead, its children the other ends.
+
+The parts are the kit's (`.wv-chips` with `.wv-pill` and its `.wv-num`, `.wv-srow`,
+`.wv-waits` for the edges under a row, and the stage's folds, facts and buttons), in the design
+system's names for the roles.
+
 ## Beads
 
-`/beads` lists the open beads, the newest change first. `?depot=` keeps one
-depot's, `?stage=` one stage's; the page offers both as chips, links each
-keeping the other, in a row that wraps, with the number of beads the link
-lists beside its name (`yardr · 12`). The current one is filled, the rest
-are quiet, and each is at least 36 px high. A depot's number is under the
+`/beads` lists the open beads, the newest change first ([List pages](#list-pages)).
+`?depot=` keeps one depot's, `?stage=` one stage's; the page offers both as chips, links
+each keeping the other, in a row that wraps, with the number of beads the link
+lists beside its name (`yardr 12`). The current one is filled, the rest
+are quiet, and each is at least 30 px high (48 on a phone, where a row scrolls sideways
+instead of wrapping). A depot's number is under the
 stage kept, a stage's under the depot kept, and a row's `all` counts under
 the other filter alone, so a bead of no depot is in the one and in none of
 the others. A depot or stage nobody has gives an empty list, not an error.
@@ -2253,7 +2316,9 @@ Every open bead with enough history behind it carries an estimate: its
 ETA as a usual range, and a late mark when its stage has run past its
 slow time. The bead's page shows the ETA sentence and the mark under
 the header; cards carry the mark (`⚠ late`, with the whole line as its
-title); `/line` lists late beads under the waits. `yardr bead show` and `yardr prime --bead` print
+title) and a bead's row, as `/beads` draws it, the word `late` in text colour
+with no sign before it and the same line as its title; `/line` lists late beads
+under the waits. `yardr bead show` and `yardr prime --bead` print
 the same two lines, and `bead show --json` carries the same two
 objects. The socket's `Bead` call carries them too, so footplate reads
 what the view shows.
@@ -2665,7 +2730,7 @@ The list is built from what the shell has read for the page already, the overvie
 
 ### The stage
 
-`<main id="stage">` holds the phone's top bar, the page's leaf where it is live, the page's heading and the page's own content (a page of a stage kind, `Page.Kind`, draws its own head in place of the shell's heading, as [the overview](#the-overview) and [a bead's page](#one-bead) do): one column of 760 px at most, centred, with a 24 px gutter, and it starts 44 px down. The list and the stage scroll apart, each inside itself; the document does not. On load the list scrolls the open row to its middle, as far as its ends allow, in a browser that has `scroll-initial-target`, and opens at its top in one that has not. Wide text that must not wrap (a stage file, `.text.file`) scrolls sideways inside its block.
+`<main id="stage">` holds the phone's top bar, the page's leaf where it is live, the page's heading and the page's own content (a page of a stage kind, `Page.Kind`, draws its own head in place of the shell's heading, as [the overview](#the-overview), [a bead's page](#one-bead) and [the list pages](#list-pages) do): one column of 760 px at most, centred, with a 24 px gutter, and it starts 44 px down. The list and the stage scroll apart, each inside itself; the document does not. On load the list scrolls the open row to its middle, as far as its ends allow, in a browser that has `scroll-initial-target`, and opens at its top in one that has not. Wide text that must not wrap (a stage file, `.text.file`) scrolls sideways inside its block.
 
 ### Swaps
 
@@ -2679,7 +2744,7 @@ Nothing needs script to be read or used: every tile, row and link is a plain lin
 ```
 
 - A link inside the shell swaps `#stage` with the new page's and, out of band, the rail (its badges), the drawer's marker and the list's head and rows. The list element stays, so its scroll stays; the open row moves, the address is pushed and the title follows, and the stage scrolls to its top (`scroll:top`), as a page loaded plainly starts there. A link that leaves the view (a note's blob, a page's run address, a preview's address) says `hx-boost="false"`.
-- A block whose links all leave the mode carries `hx-select-oob="#rail:outerHTML,#drawer:outerHTML,#list:outerHTML"`, which swaps the whole list, so the new mode's list starts at its top: the rail, and Decide's depot rows.
+- A block whose links all leave the mode carries `hx-select-oob="#rail:outerHTML,#drawer:outerHTML,#list:outerHTML"`, which swaps the whole list, so the new mode's list starts at its top: the rail, Decide's depot rows, and the rows of a list page that open a bead's page (the block of rows, not the chips above them, whose links stay in Lines).
 - The server sends the same whole page to an htmx request as to a plain one, a history restore's included, and `hx-select` picks the stage: there are no partial templates.
 - The stream's `format` is the page's own (`Page.stream`): `home` on `/`, `card` on `/flows`, `seq` on most of the rest; an error page opens none. What swaps the fragments the stream sends into itself (home's feed, `/flows`' sections and cards) says `hx-target="this"`: the shell's target is the stage, which it would inherit otherwise, and a card told to delete itself would delete the stage.
 - **One read per event.** A live page holds one childless element, its leaf, which reads the page's own address again at every event of the stream and puts the stage, the rail and the list's head and rows in place, with no marker, so a read keeps the list's scroll and an open drawer. It is childless because htmx's attributes inherit: on the page's root they would reach every link in it and stop them pushing an address.
@@ -2768,20 +2833,23 @@ A bead's page adds the stage head (`.wv-head`, `.wv-back`, `.wv-title`,
 `.wv-eta` and `.wv-callout`), the notes (`.wv-notes`, `.wv-note`), the body's
 `.wv-prose`, the folds (`.wv-fold` with `__label`, `__value` and `__body`), `.wv-facts`,
 `.wv-table`, the bead's rows (`.wv-srow`, the `srow` template) and the pack file
-pager (`.wv-pager`).
+pager (`.wv-pager`). The list pages add the chips (`.wv-chips` with its `.wv-chips__label`,
+and `.wv-pill` with its `.wv-num` counts) and the edges under a blocked bead's row
+(`.wv-waits`, with `.wv-waits__title`); a preview's buttons are the ask card's row
+(`.wv-ask__row`) of `.wv-btn`, and its facts and log are a fold.
 
 Classes the other pages build from: `.item` (one entry of a page, with a
 hairline under it), `.item-head`, `.label`, `.figures` (name and number
-pairs), `.entry-title`, `.card` (one bead in a list, the `card`
+pairs), `.card` (one bead in a list, the `card`
 template, with `.card-head`, `.card-title`, and `.arrived` for one the
 stream brought), `.cards` (a list of them), `.column` and `.stage` (a flow
 and one stage of it, with `.quiet` for one folded to its head line), `.peers` (the crew to talk to), `.talk-head` (the conversation's head), `.letter` (one mail
 of the talk page, with `.head`, `.day`, `.differs` and `.own` for how it reads, and
 `.day-break`, `.at`, `.who` and `.body` inside), `.error` (why a mail was not sent),
-`.filters` (a row of links, as a config page's way back), `.chips` (the Beads page's depot and stage rows, each a label over a wrapping run of pill links with their counts), `.facts` (name and value rows), `.routes` (one row per route, as `/routes` shows them on a wide window), `.text`
+`.filters` (a row of links, as a config page's way back), `.facts` (name and value rows), `.routes` (one row per route, as `/routes` shows them on a wide window), `.text`
 (what someone wrote, lines kept), `.note`, `.bead` (a bead's
 id), `.state` (a status dot and its word),
-`.num`, `.faint`, `.held`, `.landed`, `.dot` and `.off-line` (the beads in
+`.faint`, `.held`, `.landed`, `.dot` and `.off-line` (the beads in
 no stage of a depot's flows).
 
 ## Adding a page

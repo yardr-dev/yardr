@@ -497,6 +497,36 @@ a.wv-btn { display: inline-block; }
 .wv-srow__meta { font: 400 13px/18px var(--sans); color: var(--dim); }
 .wv-srow__end { display: flex; flex-direction: column; align-items: flex-end; font: 400 12px/20px var(--mono); color: var(--faint); }
 
+/* --- the list pages, the third stage kind ------------------------------- */
+
+/* The stage of /beads, /sessions, /previews and /deps (docs/web.md, The stage
+   kinds): a stage head, the chips where there are any, and one row of the stage
+   to each thing. Chips are the page's filters: a label over a wrapping run of
+   pills, each a link with the number of things its own link lists where it has
+   one; the current pill is filled and the rest are quiet. */
+.wv-chips { display: flex; flex-direction: column; gap: 8px; margin: 18px 0 8px; }
+.wv-chips p { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.wv-chips .wv-chips__label { width: 48px; font: 400 12px/16px var(--sans); color: var(--dim); }
+.wv-pill { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 12px; border: 1px solid var(--hairline-strong); border-radius: var(--radius-full); font: 500 13px/18px var(--sans); color: var(--dim); }
+.wv-pill:hover { border-color: var(--border-hover); color: var(--ink); }
+.wv-pill[aria-current] { background: var(--surface-pressed); border-color: var(--surface-pressed); color: var(--ink); }
+.wv-pill .wv-num { font: 400 12px/16px var(--mono); color: var(--faint); }
+/* What waits on what: under each blocked bead's row, the edges that hold it, one
+   line each, the bead, the kind, its title and its stage. They stand in from the
+   row's dot, as its words do (its padding, the dot and the gap after it), and the
+   row's rule moves to the foot of the group. The title gives way first, ending
+   in an ellipsis, so the stage keeps its place. */
+.wv-srow:has(+ .wv-waits) { border-bottom: 0; }
+li:has(> .wv-waits) { border-bottom: 1px solid var(--hairline); }
+.wv-waits { margin-left: 28px; padding-bottom: 10px; }
+.wv-waits li { display: flex; align-items: baseline; gap: 10px; padding: 2px 4px 2px 0; font: 400 13px/18px var(--sans); color: var(--dim); }
+.wv-waits li > * { flex: none; }
+.wv-waits a { font: 400 12px/16px var(--mono); color: var(--link); }
+.wv-waits li > .wv-waits__title { flex: 1 1 0; min-width: 6ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+/* A preview with no host has no Open: the line that says why stands in its
+   place, on the first line of the row of buttons. */
+.wv-ask__row > .wv-faint { flex: 1 0 100%; overflow-wrap: anywhere; }
+
 /* A dot that stands in a line of words, as a session's state has it. */
 .wv-note .wv-dot { display: inline-block; margin: 0 6px 1px 0; }
 
@@ -513,6 +543,12 @@ a.wv-btn { display: inline-block; }
   .wv-fold > summary { min-height: 48px; }
   .wv-fold__label { min-width: 84px; }
   .wv-srow { min-height: 48px; }
+  /* A phone's chips keep one scrolling line each, bled to the window's edge. */
+  .wv-pill { min-height: 48px; flex: none; }
+  .wv-chips p { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 calc(-1 * var(--wv-gutter)); padding: 0 var(--wv-gutter); }
+  .wv-chips .wv-chips__label { flex: none; width: auto; padding-right: 4px; }
+  .wv-waits li { flex-wrap: wrap; gap: 2px 10px; }
+  .wv-waits li > .wv-waits__title { flex-basis: 100%; order: 1; white-space: normal; }
   .wv-pager { gap: 8px; }
   .wv-pager a, .wv-pager span { display: flex; align-items: center; min-height: 48px; padding: 0 8px; }
 }
@@ -528,7 +564,6 @@ a.wv-btn { display: inline-block; }
 .faint { color: var(--faint); }
 .held { color: var(--held); }
 .late { color: var(--late); }
-.num { font-variant-numeric: tabular-nums; }
 
 /* One entry of the stage's feed. */
 .item { padding: var(--gap); border-bottom: 1px solid var(--hairline); }
@@ -538,7 +573,6 @@ a.wv-btn { display: inline-block; }
 .item > p { font-family: var(--sans); }
 
 .bead { color: var(--accent); }
-.entry-title { color: var(--dim); overflow-wrap: anywhere; }
 /* A sentence of a summary card that opens the text it names: underlined,
    since the card's sentences read as plain text otherwise. It stays under
    the link states above (a:hover, a:focus-visible). */
@@ -614,21 +648,11 @@ a.wv-btn { display: inline-block; }
 .filters .label { display: inline-block; min-width: 56px; }
 .filters a { margin-right: 10px; color: var(--dim); overflow-wrap: anywhere; }
 .filters a[aria-current] { color: var(--accent); }
-/* The Beads page's choices: each row a label over a wrapping run of chips.
-   A chip is a link at least 36 px high holding the choice and the number of
-   beads it lists; the current one is filled with the pill's rust, which
-   carries white text, and the rest stay quiet. */
-.chips p { display: flex; flex-wrap: wrap; gap: 6px; }
-.chips p + p { margin-top: 12px; }
-.chips .label { flex: 1 0 100%; }
-.chips a { min-width: 0; max-width: 100%; min-height: 36px; padding: 7px 14px; color: var(--dim); border: 1px solid var(--hairline-strong); border-radius: 999px; overflow-wrap: anywhere; }
-.chips a:hover { border-color: var(--accent-hover); }
-.chips a[aria-current] { background: var(--pill); border-color: var(--pill); color: #fff; }
 
 /* A bead's own page. */
 .facts div { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 10px; padding: 2px 0; }
 .facts dt { color: var(--faint); }
-.facts dd, .edges li { overflow-wrap: anywhere; }
+.facts dd { overflow-wrap: anywhere; }
 /* A group's runner settings stand under their own small heading, the bare
    key beside each value. */
 .item > .facts + h3 { margin-top: 12px; }
@@ -652,14 +676,6 @@ a.wv-btn { display: inline-block; }
   .routes-table { display: none; }
   .routes-cards { display: block; }
 }
-/* What waits on what: under each blocked bead's card, the edges that hold
-   it, one line each — the bead, the kind, its title cut short, its stage.
-   The title gives way first, ending in an ellipsis, so the stage keeps its
-   own at 500 px. */
-.waits { margin-top: 8px; }
-.waits li { display: flex; align-items: baseline; gap: 6px; }
-.waits .edge-title { flex: 1 1 0; min-width: 6ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); font-family: var(--sans); }
-.waits .bead, .waits .faint, .waits .label { flex: 0 0 auto; }
 /* What someone wrote, as they wrote it. */
 .text { white-space: pre-wrap; overflow-wrap: anywhere; }
 /* Running text keeps a measure of about 90 characters: on a wide window
@@ -758,14 +774,6 @@ a.wv-btn { display: inline-block; }
 #pairing input[type="text"] { padding: 8px; background: var(--panel); color: var(--ink); border: 1px solid var(--hairline-strong); font: 16px/1.5 var(--mono); }
 #pairing button { padding: 8px 16px; background: var(--panel); color: var(--dim); border: 1px solid var(--hairline-strong); font-size: var(--small); letter-spacing: var(--label-spacing); text-transform: uppercase; }
 #pairing button:hover { color: var(--accent-hover); border-color: var(--accent-hover); }
-/* A preview's card: its buttons post to the page, and Open is the link
-   dressed as one. */
-.preview-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-.preview-actions button, .preview-actions a { padding: 12px 16px; min-height: 44px; background: var(--panel); color: var(--dim); border: 1px solid var(--hairline-strong); overflow-wrap: anywhere; }
-.preview-actions button:hover, .preview-actions a:hover { color: var(--accent-hover); border-color: var(--accent-hover); }
-/* A card with no host has no Open: the line that says why stands in its
-   place, on the row's first line. */
-.preview-actions .faint { flex: 1 0 100%; overflow-wrap: anywhere; }
 code { font: inherit; color: var(--dim); overflow-wrap: anywhere; }
 
 .figures { margin-top: 8px; }
