@@ -195,6 +195,29 @@ func groupUses(as []limits.Answerer, uses []limitUse) ([]providerGroup, []string
 	return groups, unmapped
 }
 
+// limitsCount is how many entries /limits draws: one per provider the yard
+// burns (groupUses) and one per source that answers for itself. It reads the
+// sources and what the yard burns and asks none of them, so a page that says
+// only the number, Settings' list, runs no command: handleLimits is what asks.
+func (s *Server) limitsCount(ctx context.Context) (int, error) {
+	as, err := limits.Answerers(ctx, s.st, s.home)
+	if err != nil {
+		return 0, err
+	}
+	uses, err := limitUsesInUse(ctx, s.st)
+	if err != nil {
+		return 0, err
+	}
+	groups, _ := groupUses(as, uses)
+	n := len(groups)
+	for _, a := range as {
+		if a.Limits.Self() {
+			n++
+		}
+	}
+	return n, nil
+}
+
 // limitsAsk answers from the last ask while it stands, else runs ask: one
 // run per key at a time, shared by concurrent reads. fresh carries what is
 // new every read onto the answer. A run that fails is an entry with no

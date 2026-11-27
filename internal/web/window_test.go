@@ -108,12 +108,15 @@ func windowYard(t *testing.T) (f *fixture, asked *store.Bead) {
 	ctx := context.Background()
 	api, own := storetest.NewOwned(t)
 	own.SetTelemetrySwitch(telemetry.Switch{})
-	srv, err := web.NewServer(api, filepath.Join(t.TempDir(), ".depot"), nil)
+	// The fixture names the home the server runs in, as talkFixture's does: a
+	// source's stand-in starts there.
+	home := filepath.Join(t.TempDir(), ".depot")
+	srv, err := web.NewServer(api, home, nil)
 	must(t, err)
 	token := srv.ActAs("mckean")
 	ts := httptest.NewServer(srv)
 	t.Cleanup(func() { shut(ts) })
-	f = &fixture{t: t, client: testClient(t), st: api, own: own, ts: ts, home: filepath.Join(t.TempDir(), ".depot")}
+	f = &fixture{t: t, client: testClient(t), st: api, own: own, ts: ts, home: home}
 	f.signIn(srv, token)
 	talkYard(t, f)
 	_, err = f.st.AddUser(ctx, "mckean", "jo")

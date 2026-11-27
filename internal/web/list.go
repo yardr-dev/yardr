@@ -17,7 +17,8 @@ import (
 // fetched by script. It is built from what the shell has read for the page
 // already, the overview, the line and the acting user's inbox, so a page
 // costs no read for it, but Crew's, which reads the crew and the users where
-// the page is not the crew's own (docs/web.md, The window).
+// the page is not the crew's own, and Settings', which reads what its rows
+// count (docs/web.md, The window).
 
 // place is where a page stands in the window: its mode, and which row of the
 // mode's list it opens.
@@ -421,12 +422,13 @@ func linesList(pl place, ov *Home, l *Line) listView {
 	return out
 }
 
-// settingsList is Settings' list: the pages by name, each with its blurb,
-// the hub's own (settingsLinks) between Config and Pair device. Peers and
-// Telemetry stand for the operator alone; Pair device for a view behind an
-// auth gateway alone. Depots and Deps are Lines' rows. /pairing, a page in no
-// row of the map, opens none.
-func (s *Server) settingsList(ctx context.Context, pl place) listView {
+// settingsList is Settings' list: the pages by name, each with its blurb and,
+// where it has one, its count at the end (settingsEnd), the hub's own
+// (settingsLinks) between Config and Pair device. Peers and Telemetry stand
+// for the operator alone; Pair device for a view behind an auth gateway
+// alone. Depots and Deps are Lines' rows. /pairing, a page in no row of the
+// map, opens none.
+func (s *Server) settingsList(ctx context.Context, pl place) (listView, error) {
 	pages := append([]ConfigLink{{Title: "Config", Path: "/config", Blurb: "the pages below, and the yardmaster's switch"}},
 		settingsLinks(s.isOperator(ctx))...)
 	if s.jwt != nil {
@@ -434,12 +436,53 @@ func (s *Server) settingsList(ctx context.Context, pl place) listView {
 	}
 	sec := listSection{Bare: true}
 	for _, p := range pages {
+		end, err := s.settingsEnd(ctx, p.Path)
+		if err != nil {
+			return listView{}, err
+		}
 		current := pl.path == p.Path || p.Path == "/config" && strings.HasPrefix(pl.path, "/config/")
-		sec.Rows = append(sec.Rows, listRow{Href: p.Path, Name: p.Title, Lines: []listLine{{{Text: p.Blurb}}},
+		sec.Rows = append(sec.Rows, listRow{Href: p.Path, Name: p.Title, Lines: []listLine{{{Text: p.Blurb}}}, End: end,
 			Current: current && pl.path != "/pairing"})
 	}
-	return listView{Title: "Settings", Sections: []listSection{sec}}
+	return listView{Title: "Settings", Sections: []listSection{sec}}, nil
 }
+
+// settingsEnd is the count at the end of the row that opens path: how many
+// groups, routes and peers the yard has, the entries /limits draws, and
+// Telemetry's switch as it reads. It is "" for Config and Pair device, which
+// carry none, and for a count of none. The list is built on every Settings
+// page and every live re-read of one, so each read here is the store's or a
+// file's and none runs a command. The Peers and Telemetry rows stand for the
+// operator alone, so a read made for them is the operator's.
+func (s *Server) settingsEnd(ctx context.Context, path string) (string, error) {
+	switch path {
+	case groupsLink.Path:
+		return rowsEnd(s.st.Groups(ctx))
+	case routesLink.Path:
+		return rowsEnd(s.st.Routes(ctx))
+	case peersLink.Path:
+		return rowsEnd(s.st.Peers(ctx))
+	case limitsLink.Path:
+		n, err := s.limitsCount(ctx)
+		return nonZero(n), err
+	case telemetryLink.Path:
+		// The switch as the Telemetry page reads it, without the preview that
+		// page builds.
+		settings, err := s.st.Settings(ctx)
+		if err != nil {
+			return "", err
+		}
+		if settings[store.TelemetrySetting] == "true" {
+			return "on", nil
+		}
+		return "off", nil
+	}
+	return "", nil
+}
+
+// rowsEnd is the end of a row that counts what a store read listed: the
+// number, "" at none, and the read's error.
+func rowsEnd[T any](rows []T, err error) (string, error) { return nonZero(len(rows)), err }
 
 // crewList is Crew's list: the crew, each with its agent and its state, and
 // the people to talk with. unread are the parties the acting user has unread

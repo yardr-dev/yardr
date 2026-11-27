@@ -40,6 +40,9 @@ func limitsSource(t *testing.T, f *fixture, body string) string {
 // and no line in the asked file, which a test of how often the source is
 // asked read as an ask too few (yardr-kmtc). A stand-in's executable is a
 // launcher that no test writes again.
+//
+// Adding a source is the operator's, so it is added as the yard's operator
+// where it has one (depotActor).
 func limitsSourceAs(t *testing.T, f *fixture, name, kinds, body string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -47,7 +50,8 @@ func limitsSourceAs(t *testing.T, f *fixture, name, kinds, body string) string {
 	script := filepath.Join(dir, "provider")
 	scripttest.Write(t, script, "#!/bin/sh\necho \"$1\" >>"+asked+"\n"+body+"\n")
 	text := "name: " + name + "\nabout: A stand-in for a provider of limits.\nlimits:\n  command: [" + script + ", \"{provider}\", --json]\n  kinds: " + kinds + "\n"
-	if _, err := f.st.PutSource(context.Background(), name+".yaml", text, "me"); err != nil {
+	ctx := context.Background()
+	if _, err := f.st.PutSource(ctx, name+".yaml", text, f.depotActor(ctx)); err != nil {
 		t.Fatal(err)
 	}
 	// The command runs in the yard's home, which the fixture names but does
@@ -58,10 +62,12 @@ func limitsSourceAs(t *testing.T, f *fixture, name, kinds, body string) string {
 	return asked
 }
 
-// putGroup runs a herdr group named name with cfg on the yard.
+// putGroup runs a herdr group named name with cfg on the yard, as its
+// operator where it has one: a group's kind is the operator's to set.
 func putGroup(t *testing.T, f *fixture, name string, cfg map[string]any) {
 	t.Helper()
-	must(t, f.st.PutGroup(context.Background(), store.Group{Name: name, Runner: "herdr", Config: cfg}, "me"))
+	ctx := context.Background()
+	must(t, f.st.PutGroup(ctx, store.Group{Name: name, Runner: "herdr", Config: cfg}, f.depotActor(ctx)))
 }
 
 // limitsAnswer is a report with a 5h window used up that resets in 42

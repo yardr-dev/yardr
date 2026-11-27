@@ -626,7 +626,8 @@ func (s *Server) bare(r *http.Request, p Page) view {
 // overview and the line for Decide's waits and Lines' depots and for the
 // rail's badge, the acting user's inbox for Crew's badge and for which of
 // the crew and the people have unread mail, and, on a page that stands in
-// Crew, the crew and the users.
+// Crew, the crew and the users, and on one that stands in Settings, what its
+// rows count.
 func (s *Server) window(ctx context.Context, r *http.Request, v *view) error {
 	p := &v.Page
 	var err error
@@ -689,7 +690,9 @@ func (s *Server) window(ctx context.Context, r *http.Request, v *view) error {
 	case "lines":
 		v.List = linesList(pl, ov, l)
 	case "settings":
-		v.List = s.settingsList(ctx, pl)
+		if v.List, err = s.settingsList(ctx, pl); err != nil {
+			return err
+		}
 	case "crew":
 		if v.List, err = s.crewListFor(ctx, pl, p.crew, inbox); err != nil {
 			return err

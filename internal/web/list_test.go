@@ -2,12 +2,17 @@ package web_test
 
 import (
 	"context"
+	"crypto/ed25519"
+	"errors"
+	"fmt"
 	"html"
+	"net/http/httptest"
 	"regexp"
 	"strings"
 	"testing"
 
 	"yardr.dev/yardr/internal/store"
+	"yardr.dev/yardr/internal/web"
 )
 
 // testRow is a row of the list as the page says it.
@@ -352,12 +357,22 @@ func TestCrewList(t *testing.T) {
 	}
 }
 
-// Settings' list is the pages by name, each with its blurb: the operator's
-// have Peers and Telemetry, the others' have neither; Depots and Deps are
-// Lines'. /pairing, which stands in no row of the map, opens none.
+// unreadablePeers is a yard whose peers cannot be read.
+type unreadablePeers struct{ store.API }
+
+func (unreadablePeers) Peers(context.Context) ([]store.Peer, error) {
+	return nil, errors.New("the peers cannot be read")
+}
+
+// Settings' list is the pages by name, each with its blurb and, where it has
+// one, its count at the end: the operator's have Peers and Telemetry, the
+// others' have neither; Depots and Deps are Lines'. /pairing, which stands in
+// no row of the map, opens none. The counts are the store's, and no page of
+// Settings asks a source for them.
 func TestSettingsList(t *testing.T) {
 	t.Parallel()
 	f, _ := windowYard(t)
+	ctx := context.Background()
 	names := func(body string) string {
 		var out []string
 		for _, r := range listSections(t, body)[0].rows {
@@ -365,14 +380,27 @@ func TestSettingsList(t *testing.T) {
 		}
 		return strings.Join(out, ",")
 	}
+	// ends is each row's name and its end, as the list says them.
+	ends := func(body string) string {
+		var out []string
+		for _, r := range listSections(t, body)[0].rows {
+			out = append(out, r.name+"="+r.end)
+		}
+		return strings.Join(out, ",")
+	}
 	if got := names(f.get("/config").body); got != "Config,Groups,Routes,Peers,Limits,Telemetry" {
 		t.Errorf("the operator's Settings are %s", got)
+	}
+	// A count of none is left out, Limits draws the built-in machine alone,
+	// and the switch reads off.
+	if got := ends(f.get("/config").body); got != "Config=,Groups=1,Routes=,Peers=,Limits=1,Telemetry=off" {
+		t.Errorf("the counts of a yard with its one group are %s", got)
 	}
 	if rows := listSections(t, f.get("/groups").body)[0].rows; rows[1].current != true || rows[1].lines[0] != "who works a stage" {
 		t.Errorf("Groups does not stand open with its blurb: %+v", rows[1])
 	}
 	member, _ := talkFixture(t, "jo")
-	_, err := member.st.AddUser(context.Background(), "jo", "jo")
+	_, err := member.st.AddUser(ctx, "jo", "jo")
 	must(t, err)
 	if got := names(member.get("/config").body); got != "Config,Groups,Routes,Limits" {
 		t.Errorf("a member's Settings are %s, want no Peers and no Telemetry", got)
@@ -381,8 +409,12 @@ func TestSettingsList(t *testing.T) {
 	// no row of the map, stands under Settings and opens none.
 	y := newApproveYard(t, true)
 	jo := y.token("jo@example.net")
-	if got := names(y.getNoFollow("/config", jo).body); got != "Config,Groups,Routes,Peers,Limits,Telemetry,Pair device" {
+	gateway := y.getNoFollow("/config", jo).body
+	if got := names(gateway); got != "Config,Groups,Routes,Peers,Limits,Telemetry,Pair device" {
 		t.Errorf("the gateway's Settings are %s", got)
+	}
+	if got := ends(gateway); !strings.HasSuffix(got, ",Pair device=") {
+		t.Errorf("the gateway's counts are %s, want Pair device with none", got)
 	}
 	pairing := y.getNoFollow("/pairing", jo)
 	if got := marked(railOf(t, pairing.body), "aria-current", "true"); pairing.status != 200 || len(got) != 1 || got[0] != "/config" {
@@ -392,5 +424,82 @@ func TestSettingsList(t *testing.T) {
 		if r.current {
 			t.Errorf("/pairing marks the row %+v", r)
 		}
+	}
+
+	// stock gives a yard what the list counts, and a source whose stand-in
+	// would run a command if the list asked it: it returns the file the
+	// stand-in appends to when it runs. Limits draws an entry for each
+	// provider the yard burns, one a source answers for or not, and for each
+	// source that answers for itself: claude (the default), moonshot (the
+	// group), openai (the crew member's own setting, which no source names)
+	// and the built-in machine.
+	stock := func(f *fixture) (asked string) {
+		t.Helper()
+		// Settings, crew, routes and peers are the operator's to change.
+		op := f.depotActor(ctx)
+		asked = limitsSource(t, f, limitsAnswer())
+		must(t, f.st.SetSetting(ctx, store.DefaultKindSetting, "claude", op))
+		putGroup(t, f, "writers", map[string]any{"kind": "kimi"})
+		_, err := f.st.PutCrew(ctx, store.CrewMember{Name: "night", Runner: "herdr", Config: map[string]any{"kind": "pi", "provider": "openai"}}, op)
+		must(t, err)
+		for _, stage := range []string{"new", "review", "pick"} {
+			_, err := f.st.AddRoute(ctx, store.Route{Stage: stage, Group: "writers"}, op)
+			must(t, err)
+		}
+		_, key, err := ed25519.GenerateKey(nil)
+		must(t, err)
+		_, err = f.st.AddPeer(ctx, store.Peer{Name: "north", Key: store.Public(key), URL: "http://127.0.0.1:1"}, op)
+		must(t, err)
+		must(t, f.st.SetSetting(ctx, store.TelemetrySetting, "true", op))
+		return asked
+	}
+	// The operator's yard holds builders already, so it has two groups; the
+	// member's has the one.
+	askedOperator, askedMember := stock(f), stock(member)
+	operator := ends(f.get("/config").body)
+	for _, page := range []string{"/groups", "/routes", "/peers"} {
+		if got := ends(f.get(page).body); got != operator {
+			t.Errorf("%s: the list's counts are %s, want those of /config, %s", page, got, operator)
+		}
+	}
+	memberEnds := ends(member.get("/config").body)
+	for who, asked := range map[string]string{"the operator's": askedOperator, "the member's": askedMember} {
+		if got := askedFor(t, asked); got != "" {
+			t.Errorf("Settings ran %s source for %q: its list asks no source", who, got)
+		}
+	}
+	// Limits' count is what /limits draws, and /limits does run the source:
+	// the empty files above are no stand-ins that cannot start.
+	var drawn, memberDrawn web.Limits
+	f.getJSON("/limits", &drawn)
+	member.getJSON("/limits", &memberDrawn)
+	n, memberN := len(drawn.Limits)+len(drawn.Sources), len(memberDrawn.Limits)+len(memberDrawn.Sources)
+	if n != 4 || memberN != 4 {
+		t.Fatalf("/limits draws %d entries, a member's %d: want claude, moonshot, openai and the machine, 4 each", n, memberN)
+	}
+	if want := fmt.Sprintf("Config=,Groups=2,Routes=3,Peers=1,Limits=%d,Telemetry=on", n); operator != want {
+		t.Errorf("the operator's counts are %s, want %s", operator, want)
+	}
+	if want := fmt.Sprintf("Config=,Groups=1,Routes=3,Limits=%d", memberN); memberEnds != want {
+		t.Errorf("a member's counts are %s, want %s: no Peers and no Telemetry", memberEnds, want)
+	}
+	for _, asked := range []string{askedOperator, askedMember} {
+		if askedFor(t, asked) == "" {
+			t.Error("/limits ran no source: the list's empty file shows nothing")
+		}
+	}
+
+	// A count the list cannot read fails the page, as Crew's list does, and
+	// leaves no row without its count. /config reads no peers itself: the
+	// list's Peers row does.
+	srv, err := web.NewServer(unreadablePeers{f.st}, f.home, nil)
+	must(t, err)
+	token := srv.ActAs("mckean")
+	ts := httptest.NewServer(srv)
+	t.Cleanup(func() { shut(ts) })
+	down := &fixture{t: t, client: testClient(t), st: f.st, ts: ts, home: f.home}
+	down.signIn(srv, token)
+	if r := down.get("/config"); r.status != 500 {
+		t.Errorf("/config of an operator whose peers cannot be read: status %d, want 500", r.status)
 	}
 }
