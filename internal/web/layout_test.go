@@ -365,10 +365,12 @@ func TestAskRowOnPhone(t *testing.T) {
 }
 
 // The conversation reads as a messaging app: the stage fills the window, the
-// head stays above the letters and the composer below, and the letters scroll
-// between them, bottom-up, so the newest is in view on open with the form
-// under it. A delegated run's record, which has no composer, is not a pane: it
-// scrolls as any page does. What the pixels do is the bead's screenshot.
+// head stays above the letters in a narrow window and the composer below, and
+// the letters scroll between them, bottom-up, so the newest is in view on open
+// with the form under it. A wide window leaves the head to a screen reader,
+// since Crew's list beside the stage names the party. A delegated run's
+// record, which has no composer, is not a pane: it scrolls as any page does.
+// What the pixels do is the bead's screenshot.
 func TestTalkLayout(t *testing.T) {
 	t.Parallel()
 	stage := cssRule(t, ".wv-stage:has(.wv-compose)")
@@ -421,6 +423,23 @@ func TestTalkLayout(t *testing.T) {
 		if !strings.Contains(phone, want) {
 			t.Errorf("the phone rules lack %s", want)
 		}
+	}
+	// From 900 px the head is clipped as a letter's sender is, to a screen
+	// reader alone, and never display: none, which would take the h1 that names
+	// the page out of the outline. Only a wide window clips it: on a phone the
+	// list is a drawer, closed, and the head is what names the party.
+	wide := mediaCSS(t, string(readAsset(t, "yard.css")), "min-width: 900px")
+	head := regexp.MustCompile(`\.wv-talk > \.wv-head \{([^}]*)\}`).FindStringSubmatch(wide)
+	if head == nil {
+		t.Fatal("the wide window's rules have no rule for the conversation's head")
+	}
+	for _, want := range []string{"position: absolute;", "width: 1px;", "height: 1px;", "overflow: hidden;", "clip-path: inset(50%);", "white-space: nowrap;"} {
+		if !strings.Contains(head[1], want) {
+			t.Errorf("the wide window's head lacks %s: %s", want, head[1])
+		}
+	}
+	if strings.Contains(head[1], "display: none") {
+		t.Errorf("the wide window's head is out of the page's outline: %s", head[1])
 	}
 }
 

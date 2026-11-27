@@ -245,8 +245,8 @@ ul, ol { list-style: none; }
 .page-head h1 { font: var(--wv-title); letter-spacing: -0.005em; }
 
 /* The stage of a conversation fills the window instead (the talk kind, below):
-   the head above the letters, the composer under them, and the letters
-   scrolling between. */
+   the head above the letters in a narrow window, the composer under them, and
+   the letters scrolling between. */
 .wv-stage:has(.wv-compose) { display: flex; flex-direction: column; padding-bottom: 0; overflow: hidden; }
 
 /* Under 900 px (a phone, or a window as narrow) the stage is the page and
@@ -652,15 +652,25 @@ li:has(> .wv-waits) { border-bottom: 1px solid var(--hairline); }
    kinds): a conversation's head, the letters by day, the composer under them.
    The kit's parts in yard.css's names for its tokens. Where the page has a
    composer the stage fills the window and does not scroll (above): the head
-   stands above, the form below, and the letters scroll between them, bottom-up,
-   so the newest letter is in view on open with the form under it, and the link
-   to older mail, at the pane's top, is out of view until it is scrolled to.
-   Each block inside keeps its own order. A record stands in a letter's place on
-   a page with no composer, which scrolls as any page does. */
+   stands above in a narrow window, the form below, and the letters scroll
+   between them, bottom-up, so the newest letter is in view on open with the
+   form under it, and the link to older mail, at the pane's top, is out of view
+   until it is scrolled to. Each block inside keeps its own order. A record
+   stands in a letter's place on a page with no composer, which scrolls as any
+   page does. */
 .wv-talk:has(.wv-compose) { display: flex; flex-direction: column; flex: 1; min-height: 0; padding-bottom: var(--wv-gutter); }
 .wv-letters { margin-top: 8px; }
 .wv-talk:has(.wv-compose) .wv-letters { display: flex; flex-direction: column-reverse; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--hairline-strong) transparent; }
 .wv-talk:has(.wv-compose) .wv-letters > * { flex: none; }
+/* From 900 px Crew's list stands beside the stage: its open row names the party
+   and, for a crew member, says its state, so the conversation starts with the
+   letters and the head is for a screen reader alone. It is clipped as a
+   letter's sender is (.wv-vh, below), never display: none, which would take the
+   h1 that names the page out of the outline. Under 900 px the list is a drawer,
+   closed until it is opened, so the head stays and names the party there. */
+@media (min-width: 900px) {
+  .wv-talk > .wv-head { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
 /* The day stands centred between two hairlines above the first letter of a day
    and of a page. */
 .wv-day { display: flex; align-items: center; gap: 12px; margin: 18px 0 6px; font: 500 12px/16px var(--sans); color: var(--dim); }

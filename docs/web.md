@@ -2442,8 +2442,12 @@ crew member, its state in the words footplate lists crew members with, the
 agent it runs (its runner, kind and model) and, for a running one, how long it
 has been up, with the time it started in the uptime's title (`running since
 Oct 8 09:14`). A person shows none of these, and neither does a member that
-has left the crew. A conversation has no back link: the list's open row is the
-way back to a thread.
+has left the crew. In a window 900 px and wider the head is for a screen reader
+alone: Crew's list beside the stage names the party and, for a crew member,
+says its state, so the letters start the page and the `h1` with the party's
+name stays in the page's markup. A narrow window, where the list is a drawer,
+shows the head. A conversation has no back link: the list's open row is the way
+back to a thread.
 
 The mail stands in the stage's column, 760 pixels at most. Each letter has its
 time in a gutter at the left, then its words with their lines kept, the files
@@ -2479,9 +2483,10 @@ browser that holds no cookie, it says that and where the token URL comes from
 `yardr crew add` makes the first member. Each notice stands under a head of its
 own, the page's name.
 
-The page reads as a messaging app: the stage does not scroll, the head stays
-above the letters and the composer below while the letters scroll between
-them, the newest in view on open with the form under it. The form posts to
+The page reads as a messaging app: the stage does not scroll, the head, where
+it is drawn, stays above the letters and the composer below while the letters
+scroll between them, the newest in view on open with the form under it. The
+form posts to
 `/talk?with=<member>`
 ([Acting as a user](#acting-as-a-user)): mail sent, the page lands back on
 the conversation with the new letter at the bottom; mail refused stays in
