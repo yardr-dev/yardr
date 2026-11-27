@@ -395,8 +395,126 @@ a.wv-btn { display: inline-block; }
   .wv-ask__age { flex-basis: 100%; margin: 0; padding-left: 18px; }
   .wv-ask__row .wv-field { flex-basis: 100%; }
   .wv-ask__row .wv-btn { flex: 1; padding: 0 8px; }
+  .wv-ask__row button.wv-btn { height: auto; min-height: 48px; line-height: 1.25; padding: 8px; }
+  .wv-ask__row a.wv-btn { white-space: nowrap; }
   .wv-entry { gap: 10px; }
   .wv-entry__body p { white-space: normal; }
+}
+
+/* --- one bead, the second stage kind ------------------------------------ */
+
+/* The stage of /beads/<id> and of a pack file's page, its record form
+   (docs/web.md, The stage kinds): the kit's parts in yard.css's names for its
+   tokens. The stage head is a quiet back link naming the page one level up, the
+   title, one line of ids and places, the route and the estimate. */
+.wv-back { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 12px; font: 400 13px/18px var(--sans); color: var(--dim); }
+.wv-back:hover { color: var(--ink); }
+.wv-back .wv-chev { transform: rotate(180deg); }
+.wv-head { margin-bottom: 22px; }
+.wv-title { font: var(--wv-title); letter-spacing: -0.005em; overflow-wrap: anywhere; }
+/* A pack file's name is the title in mono, as large as a title, not the small
+   mono the body sets code in. */
+.wv-title code { font: inherit; font-family: var(--mono); }
+.wv-meta { margin: 6px 0 12px; font: 400 13px/18px var(--sans); color: var(--dim); }
+.wv-meta .wv-id { color: var(--ink); }
+.wv-sep { margin: 0 6px; color: var(--faint); }
+.wv-dim { color: var(--dim); }
+.wv-run { color: var(--running); }
+.wv-nw { white-space: nowrap; }
+.wv-mono { font: 400 12.5px/18px var(--mono); }
+.wv-late { color: var(--ink); }
+/* The route: a stop to each stage of the flow, the stages before the bead's
+   own filled, its own in rust and semibold. */
+.wv-route { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font: 400 13px/18px var(--sans); }
+.wv-stop { display: flex; align-items: center; gap: 6px; color: var(--dim); }
+.wv-stop__dot { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--dim); }
+.wv-stop--past .wv-stop__dot { background: var(--dim); }
+.wv-stop--now { color: var(--ink); font-weight: 600; }
+.wv-stop--now .wv-stop__dot { background: var(--accent); border-color: var(--accent); }
+.wv-route__link { width: 18px; height: 1px; background: var(--hairline-strong); }
+/* The estimate, a line each; the late line in the text's colour, in words, and
+   a warning or an error in red. */
+.wv-eta { margin-top: 10px; font: 400 13px/18px var(--sans); color: var(--dim); }
+.wv-eta--late { color: var(--ink); }
+.wv-callout { margin-top: 10px; font: 400 13px/18px var(--sans); color: var(--held); overflow-wrap: anywhere; }
+
+/* A note: one entry of a thread, its author and time over its words, the
+   lines kept, its files below. */
+.wv-notes { display: flex; flex-direction: column; }
+.wv-note { padding: 10px 4px; border-bottom: 1px solid var(--hairline); }
+.wv-note__head { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 2px; font: 400 12px/16px var(--mono); color: var(--dim); }
+.wv-note__head .wv-person { font: 600 13px/16px var(--sans); color: var(--ink); }
+.wv-note__head time { flex: none; color: var(--faint); }
+.wv-note p { max-width: 80ch; font: 400 14px/20px var(--sans); white-space: pre-wrap; overflow-wrap: anywhere; }
+.wv-note img { display: block; max-width: 100%; height: auto; margin-top: 8px; }
+.wv-note__file { display: block; margin-top: 4px; font: 400 13px/18px var(--sans); color: var(--link); }
+.wv-none { padding: 12px 4px; color: var(--faint); }
+/* The body's first paragraph, with its lines kept. */
+.wv-prose { max-width: 68ch; font: 400 15px/24px var(--sans); }
+.wv-prose p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.wv-prose p + p { margin-top: 10px; }
+
+/* A fold: a label and, in one line, what is folded; it opens to the thing
+   itself. A page that reads itself again keeps an open one open (yard.js). */
+.wv-fold > summary { display: flex; align-items: center; gap: 10px; padding: 10px 4px; border-bottom: 1px solid var(--hairline); list-style: none; color: var(--dim); cursor: pointer; }
+.wv-fold > summary::-webkit-details-marker { display: none; }
+.wv-fold > summary:hover { color: var(--ink); }
+.wv-fold .wv-chev { flex: none; transition: transform var(--dur-fast) var(--ease-out); }
+.wv-fold[open] > summary .wv-chev { transform: rotate(90deg); }
+.wv-fold__label { flex: none; min-width: 100px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+.wv-fold__value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.wv-fold__body { padding: 12px 4px 16px; border-bottom: 1px solid var(--hairline); }
+.wv-fold__body > * + * { margin-top: 12px; }
+.wv-fold__body h3 { font: 500 13px/18px var(--sans); color: var(--dim); }
+.wv-fold__body .wv-note:first-child { padding-top: 0; }
+.wv-fold__body .wv-note:last-child { border-bottom: 0; }
+.wv-fold__body code { font: 400 12.5px/18px var(--mono); color: var(--ink); }
+.wv-edges li { padding: 3px 0; font: 400 12.5px/18px var(--mono); overflow-wrap: anywhere; }
+.wv-edges a { color: var(--link); }
+
+/* Facts: name and value rows. */
+.wv-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 24px; }
+.wv-facts dt, .wv-facts dd { padding: 6px 0; border-bottom: 1px solid var(--hairline); font: 400 13px/18px var(--sans); }
+.wv-facts dt { color: var(--dim); }
+.wv-facts dd { overflow-wrap: anywhere; }
+.wv-facts a { color: var(--link); }
+
+/* A table is a list read across: one hairline a row, its head in quiet words,
+   scrolling sideways inside its own block where it must. */
+.wv-scrollx { overflow-x: auto; }
+.wv-table { width: 100%; border-collapse: collapse; font: 400 13px/18px var(--sans); }
+.wv-table th { padding: 8px 16px 8px 4px; border-bottom: 1px solid var(--hairline-strong); font: 500 12px/16px var(--sans); color: var(--dim); text-align: left; white-space: nowrap; }
+.wv-table td { padding: 10px 16px 10px 4px; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+.wv-table tbody tr:hover { background: var(--surface-hover); }
+.wv-table td.wv-name { font-weight: 500; white-space: nowrap; }
+.wv-table code { font: 400 12.5px/18px var(--mono); color: var(--ink); }
+
+/* A bead as a row of the stage, the list's row at the stage's width. */
+.wv-srow { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 14px; padding: 11px 4px; border-bottom: 1px solid var(--hairline); }
+.wv-srow:hover { background: var(--surface-hover); color: inherit; }
+.wv-srow .wv-dot { width: 10px; height: 10px; margin-top: 5px; }
+.wv-srow__name { font: 500 15px/20px var(--sans); overflow-wrap: anywhere; }
+.wv-srow__meta { font: 400 13px/18px var(--sans); color: var(--dim); }
+.wv-srow__end { display: flex; flex-direction: column; align-items: flex-end; font: 400 12px/20px var(--mono); color: var(--faint); }
+
+/* A dot that stands in a line of words, as a session's state has it. */
+.wv-note .wv-dot { display: inline-block; margin: 0 6px 1px 0; }
+
+/* The pager of a pack file's pages: Previous, Back to the card, Next, the ends
+   drawn off. */
+.wv-pager { display: flex; flex-wrap: wrap; gap: 20px; padding: 10px 4px; font: 400 13px/18px var(--sans); }
+.wv-pager a { color: var(--link); }
+.wv-pager [aria-disabled] { color: var(--faint); }
+
+@media (max-width: 899px) {
+  .wv-back { min-height: 48px; margin-bottom: 0; }
+  .wv-route { gap: 4px; }
+  .wv-route__link { width: 10px; }
+  .wv-fold > summary { min-height: 48px; }
+  .wv-fold__label { min-width: 84px; }
+  .wv-srow { min-height: 48px; }
+  .wv-pager { gap: 8px; }
+  .wv-pager a, .wv-pager span { display: flex; align-items: center; min-height: 48px; padding: 0 8px; }
 }
 
 /* --- what goes in the columns ------------------------------------------- */
@@ -419,11 +537,8 @@ a.wv-btn { display: inline-block; }
 .item-count { margin-left: auto; color: var(--dim); }
 .item > p { font-family: var(--sans); }
 
-/* The feed: one entry per event, the newest on top. */
-.entry-head { display: flex; justify-content: space-between; gap: 10px; }
 .bead { color: var(--accent); }
 .entry-title { color: var(--dim); overflow-wrap: anywhere; }
-.entry-note { margin-top: 6px; padding-left: 10px; border-left: 1px solid var(--hairline-strong); color: var(--faint); font-size: var(--small); white-space: pre-wrap; overflow-wrap: anywhere; }
 /* A sentence of a summary card that opens the text it names: underlined,
    since the card's sentences read as plain text otherwise. It stays under
    the link states above (a:hover, a:focus-visible). */
@@ -549,7 +664,7 @@ a.wv-btn { display: inline-block; }
 .text { white-space: pre-wrap; overflow-wrap: anywhere; }
 /* Running text keeps a measure of about 90 characters: on a wide window
    the centre is far wider than a line wants to be. */
-.text, .entry-note { max-width: 90ch; }
+.text { max-width: 90ch; }
 /* A stage file is wrapped by hand, at a width the column may not have: wrapped
    again its lines end ragged and its lists lose their indent. So it keeps
    its lines, smaller, and what still does not fit scrolls inside the block. */
@@ -643,31 +758,14 @@ a.wv-btn { display: inline-block; }
 #pairing input[type="text"] { padding: 8px; background: var(--panel); color: var(--ink); border: 1px solid var(--hairline-strong); font: 16px/1.5 var(--mono); }
 #pairing button { padding: 8px 16px; background: var(--panel); color: var(--dim); border: 1px solid var(--hairline-strong); font-size: var(--small); letter-spacing: var(--label-spacing); text-transform: uppercase; }
 #pairing button:hover { color: var(--accent-hover); border-color: var(--accent-hover); }
-/* A move, on the bead's page: the note with the buttons that send it on. */
-.move-form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-.move-form input[type="text"] { flex: 1 1 100%; min-width: 0; padding: 8px; background: var(--panel); color: var(--ink); border: 1px solid var(--hairline-strong); font: 16px/1.5 var(--mono); }
-.move-form button { padding: 12px 16px; min-height: 44px; background: var(--panel); color: var(--dim); border: 1px solid var(--hairline-strong); overflow-wrap: anywhere; }
-.move-form button:hover { color: var(--accent-hover); border-color: var(--accent-hover); }
-/* A folded move list: the select wears the buttons' dress, and the Move
-   to ... button beside it posts the pick as a button press would. */
-.move-form select { padding: 12px 16px; min-height: 44px; max-width: 100%; background: var(--panel); color: var(--dim); border: 1px solid var(--hairline-strong); }
-/* A preview's card: its buttons post to the page, in the move form's
-   dress, and Open is the link dressed as one. The pager of a summary card's
-   file pages wears the same dress: Previous, Back to the card and Next in a
-   row that wraps on a phone. At the first or last file the control that has
-   nowhere to go is drawn off. */
-.preview-actions, .file-pager { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-.preview-actions button, .preview-actions a, .file-pager a, .file-pager span { padding: 12px 16px; min-height: 44px; background: var(--panel); color: var(--dim); border: 1px solid var(--hairline-strong); overflow-wrap: anywhere; }
-.preview-actions button:hover, .preview-actions a:hover, .file-pager a:hover { color: var(--accent-hover); border-color: var(--accent-hover); }
+/* A preview's card: its buttons post to the page, and Open is the link
+   dressed as one. */
+.preview-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.preview-actions button, .preview-actions a { padding: 12px 16px; min-height: 44px; background: var(--panel); color: var(--dim); border: 1px solid var(--hairline-strong); overflow-wrap: anywhere; }
+.preview-actions button:hover, .preview-actions a:hover { color: var(--accent-hover); border-color: var(--accent-hover); }
 /* A card with no host has no Open: the line that says why stands in its
    place, on the row's first line. */
 .preview-actions .faint { flex: 1 0 100%; overflow-wrap: anywhere; }
-.file-pager { max-width: 90ch; }
-.file-pager a, .file-pager span { flex: 1 1 0; min-width: max-content; text-align: center; }
-.file-pager span { color: var(--faint); border-color: var(--hairline); }
-/* An ask line, on a summary card's file page. */
-.ask-line { color: var(--faint); font-size: var(--small); }
-.outcomes li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; padding: 3px 0; }
 code { font: inherit; color: var(--dim); overflow-wrap: anywhere; }
 
 .figures { margin-top: 8px; }

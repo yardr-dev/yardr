@@ -7,3 +7,15 @@
   <p class="card-title">{{.Title}}</p>
 </article>
 {{end}}
+{{- /* One bead as a row of the stage: the dot says it is held or worked, the
+       line under its title says where it stands, and the age of its last change
+       closes the row. A late bead says so in a word, and its title is the whole
+       line. The bead's page draws its blockers and its linked beads as these. */ -}}
+{{define "srow"}}<a class="wv-srow" href="/beads/{{.ID}}">
+  <span class="wv-dot{{if .Held}} wv-dot--fault{{else if .Working}} wv-dot--run{{end}}"></span>
+  <span>
+    <span class="wv-srow__name">{{.Title}}</span><br>
+    <span class="wv-srow__meta"><span class="wv-id">{{.ID}}</span>{{with .Depot}}<span class="wv-sep">·</span><span class="wv-nw">{{.}}</span>{{end}}<span class="wv-sep">·</span>{{.Stage}}<span class="wv-sep">·</span>{{.Type}}{{if .Held}}<span class="wv-sep">·</span><span class="wv-fault">held</span>{{else if .Working}}<span class="wv-sep">·</span>working{{end}}{{if eq .Status "closed"}}<span class="wv-sep">·</span>closed{{end}}{{with .Late}}<span class="wv-sep">·</span><span class="wv-late" title="{{.Line}}">late</span>{{end}}</span>
+  </span>
+  <span class="wv-srow__end"><span>{{.Age}}</span></span>
+</a>{{end}}

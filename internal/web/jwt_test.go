@@ -927,13 +927,13 @@ func TestJWTTwoUsersActAsThemselves(t *testing.T) {
 	// Jo's door page answers her ask and sends the door on; kay's does
 	// neither.
 	r = f.get("/beads/"+door.ID, header, jo)
-	for _, want := range []string{`<h3 class="label">asks for jo</h3>`, "Move the links now?", `<h3 class="label">send on as jo</h3>`} {
+	for _, want := range []string{`<p class="wv-ask__head">`, "Move the links now?", `<h2 class="wv-sh"><span>Send on as jo</span></h2>`} {
 		if !strings.Contains(r.body, want) {
 			t.Errorf("jo's door page lacks %q:\n%s", want, r.body)
 		}
 	}
 	r = f.get("/beads/"+door.ID, header, kay)
-	for _, want := range []string{"asks for", "move-form", "send on as"} {
+	for _, want := range []string{`class="wv-ask"`, `<form class="wv-block"`, "Send on as"} {
 		if strings.Contains(r.body, want) {
 			t.Errorf("kay's door page answers or moves with %q:\n%s", want, r.body)
 		}

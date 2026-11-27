@@ -470,7 +470,7 @@ func TestBeadPageNoteFiles(t *testing.T) {
 	}
 
 	body := f.get("/beads/" + b.ID).body
-	if want := `<a href="/blobs/` + ref.Hash + `/report.pdf" hx-boost="false">file report.pdf</a>`; !strings.Contains(body, want) {
+	if want := `<a class="wv-note__file" href="/blobs/` + ref.Hash + `/report.pdf" hx-boost="false">file report.pdf</a>`; !strings.Contains(body, want) {
 		t.Errorf("the page lacks %s", want)
 	}
 	if strings.Contains(body, "<img") {
@@ -530,7 +530,7 @@ func TestBeadPageNotePages(t *testing.T) {
 	}
 }
 
-// The board above the notes lays the bead's note pages out in note order,
+// The pages above the notes lay the bead's note pages out in note order,
 // each with its note beside it: one entry per page, the link first and the
 // note's words under it. Images stand on no board, and the JSON names the
 // files as the notes have them, with no board of its own.
@@ -562,7 +562,7 @@ func TestBeadBoardLaysPagesInNoteOrder(t *testing.T) {
 	}
 
 	body := f.get("/beads/" + b.ID).body
-	boardAt := strings.Index(body, `id="board"`)
+	boardAt := strings.Index(body, `id="pages"`)
 	notesAt := strings.Index(body, `id="notes"`)
 	if boardAt < 0 {
 		t.Fatalf("the page shows no board: %s", body)
@@ -608,18 +608,18 @@ func TestBeadBoardAbsentWithoutPages(t *testing.T) {
 	ctx := context.Background()
 	b, err := f.st.CreateBead(ctx, store.NewBead{Title: "no board"}, "me")
 	must(t, err)
-	if body := f.get("/beads/" + b.ID).body; strings.Contains(body, `id="board"`) {
+	if body := f.get("/beads/" + b.ID).body; strings.Contains(body, `id="pages"`) {
 		t.Fatal("a bead with no note shows a board")
 	}
 	must(t, f.st.AddNote(ctx, b.ID, "plain words", "me"))
-	if body := f.get("/beads/" + b.ID).body; strings.Contains(body, `id="board"`) {
+	if body := f.get("/beads/" + b.ID).body; strings.Contains(body, `id="pages"`) {
 		t.Fatal("a bead with a plain note shows a board")
 	}
 	shot, err := f.st.PutBlob(ctx, shotPNG)
 	must(t, err)
 	_, err = f.st.AddNotedAs(ctx, b.ID, "a photo of the door", "me", "", store.BlobFile{Hash: shot.Hash})
 	must(t, err)
-	if body := f.get("/beads/" + b.ID).body; strings.Contains(body, `id="board"`) {
+	if body := f.get("/beads/" + b.ID).body; strings.Contains(body, `id="pages"`) {
 		t.Fatal("a bead with an image only shows a board")
 	}
 }
@@ -644,7 +644,7 @@ func TestBeadBoardHoldsNoMailPage(t *testing.T) {
 	must(t, err)
 
 	body := f.get("/beads/" + b.ID).body
-	boardAt := strings.Index(body, `id="board"`)
+	boardAt := strings.Index(body, `id="pages"`)
 	if boardAt < 0 {
 		t.Fatalf("the page shows no board: %s", body)
 	}
@@ -675,7 +675,7 @@ func TestBeadBoardMissingPage(t *testing.T) {
 	must(t, os.Remove(store.BlobPath(f.home, ref.Hash)))
 
 	body := f.get("/beads/" + b.ID).body
-	boardAt := strings.Index(body, `id="board"`)
+	boardAt := strings.Index(body, `id="pages"`)
 	notesAt := strings.Index(body, `id="notes"`)
 	if boardAt < 0 || notesAt < boardAt {
 		t.Fatalf("the page shows no board above the notes: %s", body)

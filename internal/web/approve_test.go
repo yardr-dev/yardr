@@ -776,6 +776,12 @@ func TestWebSecretGiveReturnRefusals(t *testing.T) {
 	} {
 		if r := y.getNoFollow(c.path, c.token); r.status != 200 || !strings.Contains(r.body, c.want) || strings.Contains(r.body, value) {
 			t.Errorf("%s: GET the return: %d, want %q and no value:\n%s", c.name, r.status, c.want, r.body)
+		} else {
+			// The return lands on the bead's page, which stands in Decide with
+			// the bead's row open and reads itself again at the bead's own
+			// address: the return's is spent.
+			// Another user is asked nothing, so no row of their list is the bead's.
+			standsInDecide(t, c.name, r.body, b.ID, c.name != "another user")
 		}
 	}
 	// A member's secret card has no hosted-web giving control, and a
@@ -1804,6 +1810,11 @@ func TestWebMemberOwnUserkeyCard(t *testing.T) {
 	r = y.post("/beads/"+pairBead.ID, freshSam, y.approveForm(pairBead.ID, pairSeq))
 	if r.status != http.StatusOK || !strings.Contains(r.body, "code <code>") {
 		t.Fatalf("POST the pairing inside the window: %d: %s", r.status, r.body)
+	}
+	// The approval's answer stands in Decide, the bead's mode, with its list
+	// around it; it is kept nowhere and reads nothing again.
+	if got := marked(railOf(t, r.body), "aria-current", "true"); !slices.Equal(got, []string{"/"}) || listTitle(t, r.body) != "Decide" || strings.Contains(r.body, "wv-live") {
+		t.Errorf("the pairing's answer stands in %v's mode with the list %s, or reads itself again", got, listTitle(t, r.body))
 	}
 	if got := y.askedState(pairBead.ID, pairSeq, "sam"); got != "answered" {
 		t.Fatalf("the pairing ask is %s, want it answered", got)

@@ -28,6 +28,11 @@
 // after each swap a head that repeats the hour above it is dropped
 // (dropRepeatedHours, below).
 //
+// A bead's page reads itself again at every event of the yard, and what it puts
+// in the stage has every fold shut. A fold a person opened (Facts, the stage's
+// file, the history) is opened again after the swap, by its id, which names
+// the bead: another bead's page keeps none of them.
+//
 // A link htmx boosts that the server answers with an error page (a bead that
 // is gone, a page the view refuses) would do nothing, for htmx swaps no 4xx
 // or 5xx answer. The same address loaded plainly shows the error page as a
@@ -141,6 +146,20 @@ function dropRepeatedHours() {
 }
 dropRepeatedHours();
 document.addEventListener("htmx:afterSwap", dropRepeatedHours);
+
+var openFolds = [];
+document.addEventListener("htmx:beforeSwap", function () {
+  openFolds = Array.prototype.map.call(document.querySelectorAll("details.wv-fold[open][id]"), function (fold) {
+    return fold.id;
+  });
+});
+document.addEventListener("htmx:afterSwap", function () {
+  openFolds.forEach(function (id) {
+    var fold = document.getElementById(id);
+    if (fold) fold.open = true;
+  });
+  openFolds = [];
+});
 
 // A boosted click the server refused is loaded as a link without script is:
 // the address shows its own error page, inside the same window.

@@ -770,19 +770,23 @@ func TestBeadHTML(t *testing.T) {
 	}
 	for _, want := range []string{
 		shellOpen(head, "seq"),
-		`<i class="wv-live" hidden hx-get="/beads/` + b.ID + `" hx-trigger="sse:message" hx-push-url="false" hx-swap="innerHTML ignoreTitle:true" hx-select-oob="#rail:outerHTML,#list-head:innerHTML,#list-rows:innerHTML"></i>`,
-		`<title>` + b.ID + ` · depot</title>`,
-		`<h2>a door</h2>`,
-		`task · stage new · open · P1`,
-		`<dt>flow</dt><dd>code <span class="faint">(store)</span></dd>`,
+		leafOf("/beads/"+b.ID, "innerHTML ignoreTitle:true"),
+		`<title>a door · depot</title>`,
+		`<article class="wv-page" data-kind="bead">`,
+		`<a class="wv-back" href="/">`,
+		`<h1 class="wv-title">a door</h1>`,
+		`<p class="wv-meta"><span class="wv-id">` + b.ID + `</span><span class="wv-sep">·</span>task<span class="wv-sep">·</span>P1<span class="wv-sep">·</span>line<span class="wv-sep">·</span>flow code<span class="wv-sep">·</span><span class="wv-run">working</span></p>`,
+		`<dt>flow</dt><dd>code <span class="wv-dim">(store)</span></dd>`,
 		`<dt>base</dt><dd>yard/` + train.ID + `</dd>`,
-		`<dt>train</dt><dd><a class="bead" href="/beads/` + train.ID + `">` + train.ID + `</a> the shed</dd>`,
+		`<dt>train</dt><dd><a href="/beads/` + train.ID + `">` + train.ID + `</a> the shed</dd>`,
 		`<dt>labels</dt><dd>wood</dd>`,
-		`<a class="bead" href="/beads/` + blocker.ID + `">`,
-		"<pre class=\"text\">Hang it.\n\n- on two hinges</pre>",
-		"<pre class=\"text file\">A builder implements the bead here.\n</pre>",
+		`<h2 class="wv-sh"><span>Blocked by</span><span class="wv-sh__count">1</span></h2>`,
+		`<a class="wv-srow" href="/beads/` + blocker.ID + `">`,
+		`<div class="wv-prose"><p>Hang it.</p></div>`,
+		"<pre class=\"wv-text\">Hang it.\n\n- on two hinges</pre>",
+		"<pre class=\"wv-text wv-file\">A builder implements the bead here.\n</pre>",
 		`<code>yardr bead done ` + b.ID + ` --outcome question</code>`,
-		`<pre class="text">the hinge is missing</pre>`,
+		`<p>the hinge is missing</p>`,
 		`builders · stage new`,
 	} {
 		if !strings.Contains(r.body, want) {
@@ -844,7 +848,7 @@ func TestBeadPageSaysWhereARoundGoes(t *testing.T) {
 	// The first review has no rounds counted: no row, the first round named.
 	report("done")
 	got, html := page()
-	if len(got.RoundsLines) != 0 || strings.Contains(html, "<dt>rounds</dt>") {
+	if len(got.RoundsLines) != 0 || strings.Contains(html, `<p class="wv-eta">rounds: `) {
 		t.Errorf("a bead on its first review shows rounds: %v", got.RoundsLines)
 	}
 	if o := changes(got); o.To != "new" || o.Note != "round 1 of 3" {
@@ -864,8 +868,8 @@ func TestBeadPageSaysWhereARoundGoes(t *testing.T) {
 		t.Errorf("changes after two rounds = %+v, want new, round 3 of 3", o)
 	}
 	for _, want := range []string{
-		`<dt>rounds</dt><dd>new 2 of 3 (the next changes from review goes to new)</dd>`,
-		`changes <span class="faint">to new (round 3 of 3)</span>`,
+		`<p class="wv-eta">rounds: new 2 of 3 (the next changes from review goes to new)</p>`,
+		`<td class="wv-name">changes</td><td>new</td><td><code>yardr bead done ` + b.ID + ` --outcome changes</code> <span class="wv-dim">round 3 of 3</span></td>`,
 	} {
 		if !strings.Contains(squashLines(html), want) {
 			t.Errorf("the page lacks %s", want)
@@ -883,8 +887,8 @@ func TestBeadPageSaysWhereARoundGoes(t *testing.T) {
 		t.Errorf("changes at the limit = %+v, want decide, the rounds used", o)
 	}
 	for _, want := range []string{
-		`<dt>rounds</dt><dd>new 3 of 3 (the next changes from review goes to decide)</dd>`,
-		`changes <span class="faint">to decide (the 3 rounds back to new are used)</span>`,
+		`<p class="wv-eta">rounds: new 3 of 3 (the next changes from review goes to decide)</p>`,
+		`<td class="wv-name">changes</td><td>decide</td><td><code>yardr bead done ` + b.ID + ` --outcome changes</code> <span class="wv-dim">the 3 rounds back to new are used</span></td>`,
 	} {
 		if !strings.Contains(squashLines(html), want) {
 			t.Errorf("the page lacks %s", want)
@@ -919,12 +923,17 @@ func TestBeadDiscoveredFrom(t *testing.T) {
 	if len(got.LedTo) != 1 || got.LedTo[0].ID != found.ID || got.LedTo[0].Status != "closed" || len(got.DiscoveredFrom) != 0 {
 		t.Errorf("the origin: led to %+v, discovered from %+v", got.LedTo, got.DiscoveredFrom)
 	}
-	if want, body := `<dt>discovered from</dt><dd><a class="bead" href="/beads/`+origin.ID+`">`+origin.ID+`</a> the origin</dd>`, f.get("/beads/"+found.ID).body; !strings.Contains(body, want) {
+	if want, body := `<dt>discovered from</dt><dd><a href="/beads/`+origin.ID+`">`+origin.ID+`</a> the origin</dd>`, f.get("/beads/"+found.ID).body; !strings.Contains(body, want) {
 		t.Errorf("the found bead's page lacks %s", want)
 	}
 	body := f.get("/beads/" + origin.ID).body
-	if at := strings.Index(body, `<h3 class="label">led to</h3>`); at < 0 || !strings.Contains(body[at:], `href="/beads/`+found.ID+`"`) {
+	// What a bead led to stands in its Linked beads fold, as a row of the stage.
+	if at := strings.Index(body, `<h3>led to</h3>`); at < 0 || !strings.Contains(body[at:], `<a class="wv-srow" href="/beads/`+found.ID+`">`) ||
+		!strings.Contains(body, `<span class="wv-fold__label">Linked beads</span><span class="wv-fold__value">led to 1 · 1 edge</span>`) {
 		t.Errorf("the origin's page does not list %s under led to", found.ID)
+	}
+	if strings.Contains(f.get("/beads/"+found.ID).body, `<span class="wv-fold__label">Linked beads</span>`) && len(got.Deps) == 0 {
+		t.Errorf("a bead with no link has a Linked beads fold")
 	}
 }
 
@@ -1049,7 +1058,7 @@ func TestBeadPageMarksTrustedNoteAuthor(t *testing.T) {
 	if strings.Contains(body, "builder (") {
 		t.Errorf("a note of this yard is marked on the page")
 	}
-	boardAt, notesAt := strings.Index(body, `id="board"`), strings.Index(body, `id="notes"`)
+	boardAt, notesAt := strings.Index(body, `id="pages"`), strings.Index(body, `id="notes"`)
 	if boardAt < 0 || notesAt < boardAt {
 		t.Fatalf("the page has no board above the notes:\n%s", body)
 	}
@@ -1128,7 +1137,7 @@ func TestBeadPageMarksHistoryActor(t *testing.T) {
 	f := &fixture{t: t, client: testClient(t), st: st, ts: ts, home: home}
 
 	body := f.get("/beads/" + b.ID).body
-	histAt := strings.Index(body, `id="history"`)
+	histAt := strings.Index(body, `id="fold-history-`+b.ID+`"`)
 	if histAt < 0 {
 		t.Fatalf("the page has no history:\n%s", body)
 	}
@@ -1182,7 +1191,7 @@ func TestBeadPageMarksForeignNoteWhenTrustsUnreadable(t *testing.T) {
 	f := &fixture{t: t, client: testClient(t), st: st, ts: ts, home: home}
 
 	body := f.get("/beads/" + b.ID).body
-	notesAt, histAt := strings.Index(body, `id="notes"`), strings.Index(body, `id="history"`)
+	notesAt, histAt := strings.Index(body, `id="notes"`), strings.Index(body, `id="fold-history-`+b.ID+`"`)
 	if notesAt < 0 || histAt < notesAt {
 		t.Fatalf("the page has no notes above the history")
 	}
@@ -1332,7 +1341,7 @@ func TestManualClaimIsNotWorking(t *testing.T) {
 		}
 		return body[at : at+strings.Index(body[at:], "</article>")]
 	}
-	for _, page := range []string{"/flows", "/beads", "/beads/" + train.ID} {
+	for _, page := range []string{"/flows", "/beads"} {
 		body := f.get(page).body
 		if c := cardOf(body, idea.ID); c == "" || strings.Contains(c, "working") || !strings.Contains(c, `<span class="dot"></span>`) {
 			t.Errorf("%s: the manual claim's card: %q", page, c)
@@ -1341,27 +1350,42 @@ func TestManualClaimIsNotWorking(t *testing.T) {
 			t.Errorf("%s: the agent's bead's card: %q", page, c)
 		}
 	}
+	// The train's page has them as rows of its Linked beads fold.
+	rowOf := func(body, id string) string {
+		at := strings.Index(body, `<a class="wv-srow" href="/beads/`+id+`">`)
+		if at < 0 {
+			return ""
+		}
+		return body[at : at+strings.Index(body[at:], "</a>")]
+	}
+	links := foldOf(t, f.get("/beads/"+train.ID).body, train.ID, "links")
+	if r := rowOf(links, idea.ID); r == "" || strings.Contains(r, "working") || strings.Contains(r, "wv-dot--run") {
+		t.Errorf("the train's page: the manual claim's row: %q", r)
+	}
+	if r := rowOf(links, door.ID); !strings.Contains(r, `<span class="wv-dot wv-dot--run"></span>`) || !strings.Contains(r, "working") {
+		t.Errorf("the train's page: the agent's bead's row: %q", r)
+	}
+	// A manual group's claim is a person's turn: the meta line says no
+	// working, and nothing on the stage is green but what the claim is not.
 	body := squash(f.get("/beads/" + idea.ID).body)
 	for _, want := range []string{
-		`<span class="dot"></span>task · stage backlog · open`,
-		`backlog · stage backlog · manual</span>`,
-		`<p><span class="dot"></span>claimed <span class="faint">`,
+		`<span class="wv-sep">·</span>task<span class="wv-sep">·</span>P0<span class="wv-sep">·</span>line<span class="wv-sep">·</span>no flow</p>`,
+		`<span>backlog · stage backlog · manual</span>`,
+		`<p><span class="wv-dot"></span>claimed <span class="wv-faint wv-mono">`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the manual claim's page lacks %s", want)
 		}
 	}
-	// The bead's page keeps no aside to carry a working dot of its own.
-	if strings.Contains(body, "<aside") {
-		t.Errorf("the manual claim's page keeps the aside home and the line alone keep: %s", body)
+	if stage := stageOf(t, body); strings.Contains(stage, "wv-run") || strings.Contains(stage, "wv-dot--run") || strings.Contains(stage, ">working<") {
+		t.Errorf("the manual claim's page says it is worked: %s", stage)
 	}
-	if bead, _, _ := strings.Cut(body[strings.Index(body, `<div id="bead"`):], `<aside`); strings.Contains(bead, "dot working") {
-		t.Errorf("the manual claim's page has a working dot: %s", bead)
-	}
+	// An agent's session works the bead: the meta line says so in green, and
+	// the session stands running, with the dot that says it.
 	body = squash(f.get("/beads/" + door.ID).body)
 	for _, want := range []string{
-		`<span class="dot working"></span>task · stage new · open`,
-		`<p><span class="dot working"></span>running <span class="faint">`,
+		`<span class="wv-sep">·</span><span class="wv-run">working</span></p>`,
+		`<p><span class="wv-dot wv-dot--run"></span>running <span class="wv-faint wv-mono">`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the agent's bead's page lacks %s", want)

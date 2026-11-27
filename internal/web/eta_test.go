@@ -63,11 +63,19 @@ func TestBeadPageEstimate(t *testing.T) {
 	if r.status != 200 {
 		t.Fatalf("status %d: %s", r.status, r.body)
 	}
-	if !strings.Contains(r.body, etaRunning.ETA.Line) {
+	// The estimate is a line under the route, the late line in words and in
+	// the text's colour, with no sign before it.
+	if want := `<p class="wv-eta">` + etaRunning.ETA.Line + `</p>`; !strings.Contains(r.body, want) {
 		t.Errorf("the bead's page lacks the ETA sentence:\n%s", r.body)
 	}
-	if !strings.Contains(r.body, "⚠ "+etaRunning.Late.Line) {
+	if want := `<p class="wv-eta wv-eta--late">` + etaRunning.Late.Line + `</p>`; !strings.Contains(r.body, want) {
 		t.Errorf("the bead's page lacks the late mark:\n%s", r.body)
+	}
+	if strings.Contains(r.body, "⚠") {
+		t.Errorf("the bead's page keeps the sign of a late mark:\n%s", r.body)
+	}
+	if route, eta := strings.Index(r.body, `class="wv-route"`), strings.Index(r.body, `class="wv-eta"`); route < 0 || eta < route {
+		t.Errorf("the estimate stands before the route, at %d against %d", eta, route)
 	}
 	var got web.BeadPage
 	g.getJSON("/beads/"+three.ID, &got)
@@ -255,6 +263,17 @@ func TestLineLateRows(t *testing.T) {
 		}
 		if sub := squash(stageOf(t, body)); !strings.Contains(sub, `<a href="/line">1 late</a>`) {
 			t.Errorf("%s's subline lacks the late count, linked to /line: %s", path, sub)
+		}
+	}
+	// So does the bead's page: the list is the mode's, whichever page it
+	// stands beside. None but /line has the section.
+	secs = listSections(t, g.get("/beads/"+b.ID).body)
+	if running := section2(t, secs, "Running"); len(running.rows) != 1 || len(running.rows[0].lines) != 2 || running.rows[0].lines[1] != etaRunning.Late.Line {
+		t.Errorf("the bead's page has the Running row %+v, want the late line", running.rows)
+	}
+	for _, sec := range secs {
+		if sec.title == "Late" {
+			t.Errorf("the bead's list has a Late section")
 		}
 	}
 	for _, sec := range listSections(t, g.get("/").body) {

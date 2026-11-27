@@ -138,10 +138,10 @@ func TestBeadHistoryHTML(t *testing.T) {
 	must(t, err)
 	r := f.get("/beads/" + b.ID)
 	for _, want := range []string{
-		`<section class="item" id="history">`,
-		`<p class="entry-note">` + written(`title "a door" → "the <door>" · priority 2 → 1 · body`) + `</p>`,
-		`<pre class="text file">` + written(firstDiff) + `</pre>`,
-		`<pre class="text file">` + written(secondDiff) + `</pre>`,
+		`<details class="wv-fold" id="fold-history-` + b.ID + `">`,
+		`<p class="wv-dim">` + written(`title "a door" → "the <door>" · priority 2 → 1 · body`) + `</p>`,
+		`<pre class="wv-text wv-file">` + written(firstDiff) + `</pre>`,
+		`<pre class="wv-text wv-file">` + written(secondDiff) + `</pre>`,
 		`<p>moved from new to review</p>`,
 	} {
 		if !strings.Contains(r.body, want) {

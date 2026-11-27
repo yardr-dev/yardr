@@ -49,7 +49,9 @@ func TestWindowFillsTheWindow(t *testing.T) {
 	}
 	for _, want := range []string{
 		// Running text keeps a measure of about 90 characters.
-		".text, .entry-note { max-width: 90ch; }",
+		".text { max-width: 90ch; }",
+		// A note's lines keep the same measure, which the stage kind sets for its words.
+		".wv-note p { max-width: 80ch; font: 400 14px/20px var(--sans); white-space: pre-wrap; overflow-wrap: anywhere; }",
 		// A feed line keeps its one line.
 		".wv-entry__body p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
 	} {
@@ -338,6 +340,8 @@ func TestAskRowOnPhone(t *testing.T) {
 		".wv-field, .wv-btn { height: 48px; line-height: 46px; }",
 		".wv-ask__row .wv-field { flex-basis: 100%; }",
 		".wv-ask__row .wv-btn { flex: 1; padding: 0 8px; }",
+		".wv-ask__row button.wv-btn { height: auto; min-height: 48px; line-height: 1.25; padding: 8px; }",
+		".wv-ask__row a.wv-btn { white-space: nowrap; }",
 		".wv-ask__age { flex-basis: 100%; margin: 0; padding-left: 18px; }",
 		".wv-opt { padding: 10px 12px; }",
 	} {
@@ -442,27 +446,38 @@ func TestTalkLayout(t *testing.T) {
 }
 
 // The files behind a summary card read on a phone: the pager is a row of
-// controls that wraps instead of widening the page, each as high as the
-// move form's buttons; a text keeps its lines and pans inside its block; a
-// file's name, a path with no space to break at, breaks where it would run
-// past the window; and a card's sentence that opens a file reads as a link.
-// What the pixels do is the bead's screenshot.
+// controls that wraps instead of widening the page, each as high as a phone's
+// targets; a text keeps its lines and pans inside its block; a file's name,
+// a path with no space to break at, breaks where it would run past the
+// window; and a card's sentence that opens a file reads as a link. A
+// preview's buttons wrap as well. What the pixels do is the bead's
+// screenshot.
 func TestFilePagesOnPhone(t *testing.T) {
 	t.Parallel()
 	for selector, wants := range map[string][]string{
-		".preview-actions, .file-pager": {"display: flex;", "flex-wrap: wrap;"},
-		".preview-actions button, .preview-actions a, .file-pager a, .file-pager span": {"min-height: 44px;", "overflow-wrap: anywhere;"},
-		".file-pager a, .file-pager span":                                              {"flex: 1 1 0;", "min-width: max-content;", "text-align: center;"},
-		".file-pager":                                                                  {"max-width: 90ch;"},
-		".text.file":                                                                   {"white-space: pre;", "overflow-x: auto;"},
-		".item-head h2":                                                                {"overflow-wrap: anywhere;"},
-		".opens":                                                                       {"text-decoration: underline;"},
+		".wv-pager":        {"display: flex;", "flex-wrap: wrap;"},
+		".wv-file":         {"white-space: pre;", "overflow-x: auto;"},
+		".wv-title":        {"overflow-wrap: anywhere;"},
+		".opens":           {"text-decoration: underline;"},
+		".preview-actions": {"display: flex;", "flex-wrap: wrap;"},
+		".preview-actions button, .preview-actions a": {"min-height: 44px;", "overflow-wrap: anywhere;"},
+		".text.file": {"white-space: pre;", "overflow-x: auto;"},
 	} {
 		rule := cssRule(t, selector)
 		for _, want := range wants {
 			if !strings.Contains(rule, want) {
 				t.Errorf("%s lacks %s: %s", selector, want, rule)
 			}
+		}
+	}
+	phone := mediaCSS(t, string(readAsset(t, "yard.css")), "max-width: 899px")
+	for _, want := range []string{
+		".wv-pager a, .wv-pager span { display: flex; align-items: center; min-height: 48px;",
+		".wv-back { min-height: 48px;",
+		".wv-fold > summary { min-height: 48px; }",
+	} {
+		if !strings.Contains(phone, want) {
+			t.Errorf("the phone rules lack %s", want)
 		}
 	}
 }

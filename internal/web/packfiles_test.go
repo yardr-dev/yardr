@@ -228,10 +228,11 @@ func TestPackFilePages(t *testing.T) {
 			t.Errorf("file %d (%s): markup in the text is not written as text", n, w.name)
 		}
 		for _, want := range []string{
-			"<h2>" + html.EscapeString(or(w.heading, w.name)) + "</h2>",
+			`<h1 class="wv-title"><code>` + html.EscapeString(or(w.heading, w.name)) + `</code></h1>`,
 			fmt.Sprintf("file %d of %d", n, len(wants)),
 			", digest sha256:" + strings.Repeat("d", 64) + "</dd>",
-			`<a class="bead" href="/beads/` + b.ID + `">`,
+			`<article class="wv-page" data-kind="bead">`,
+			`<a class="wv-back" href="/beads/` + b.ID + `">`,
 			`<a href="/beads/` + b.ID + `">Back to the card</a>`,
 		} {
 			if !strings.Contains(body, want) {
@@ -243,7 +244,7 @@ func TestPackFilePages(t *testing.T) {
 			if !strings.Contains(body, "<dd>sha256 "+old+"</dd>") || !strings.Contains(body, "<dd>sha256 "+w.newSHA+"</dd>") {
 				t.Errorf("file %d (%s) is not headed by its hashes: old %s, new %s", n, w.name, old, w.newSHA)
 			}
-			if !strings.Contains(body, "file to "+w.action) {
+			if !strings.Contains(body, " · "+w.action+" · ") {
 				t.Errorf("file %d (%s) does not say it is to %s", n, w.name, w.action)
 			}
 		}
@@ -363,9 +364,9 @@ func TestPackFilePages(t *testing.T) {
 	// break. The history below draws each note's words as letters too
 	// (yardr-fj37); the region still ends where the sessions begin.
 	beadHTML := y.surfaceBody("/beads/"+b.ID, jo)
-	notesAt, sessionsAt := strings.Index(beadHTML, `id="notes"`), strings.Index(beadHTML, `id="sessions"`)
+	notesAt, sessionsAt := strings.Index(beadHTML, `id="notes"`), strings.Index(beadHTML, `id="folds"`)
 	if notesAt < 0 || sessionsAt < 0 || sessionsAt < notesAt {
-		t.Fatalf("the bead's page has no notes log with sessions after it")
+		t.Fatalf("the bead's page has no notes log with the folds after it")
 	}
 	notes := beadHTML[notesAt:sessionsAt]
 	for _, want := range []string{"file " + wants[7].heading, "note names roles/07.md[31m\nx.md"} {
@@ -386,11 +387,11 @@ func TestPackFilePages(t *testing.T) {
 	// (yardr-fj37): the trojan name stands lettered in the history
 	// region, and no mark of direction or control character stands
 	// there. Asserted apart from the notes region above.
-	histAt := strings.Index(beadHTML, `id="history"`)
+	histAt := strings.Index(beadHTML, `id="fold-history-`+b.ID+`"`)
 	if histAt < 0 {
 		t.Fatalf("the bead's page has no history")
 	}
-	history := beadHTML[histAt : histAt+strings.Index(beadHTML[histAt:], `</section>`)]
+	history := beadHTML[histAt : histAt+strings.Index(beadHTML[histAt:], `</details>`)]
 	if want := "note names roles/07.md[31m\nx.md"; !strings.Contains(history, want) {
 		t.Errorf("the history does not read the trojan name lettered: no %q", want)
 	}
@@ -425,7 +426,7 @@ func TestPackFilePages(t *testing.T) {
 
 	// The body section reads the bead's words as letters too: the same
 	// name, lettered, with its line break, and no mark of direction.
-	bodyAt := strings.Index(beadHTML, `<h3 class="label">body</h3>`)
+	bodyAt := strings.Index(beadHTML, `id="body"`)
 	if bodyAt < 0 {
 		t.Fatalf("the bead's page has no body section")
 	}

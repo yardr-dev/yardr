@@ -101,6 +101,8 @@
   {{- with .Badge}}<span class="wv-badge" aria-hidden="true">{{.}}</span>{{end}}
 </a>
 {{end}}
+{{- /* The chevron: a fold's, and the back link's turned round. */}}
+{{define "chev"}}<svg class="wv-glyph wv-chev" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>{{end}}
 {{- /* A section of the list: a fold with its title and count, or bare rows
        (a mode's places). A depot's title links to its page. */}}
 {{define "section"}}

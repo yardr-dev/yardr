@@ -1,211 +1,283 @@
+{{- /* A bead's page, the second stage kind: what `yardr prime --bead <id>` knows,
+       for a person, in the order a person acts on it. The head says where the
+       bead stands (its ids, its route, its estimate); what stops it comes
+       before the asks put to the person, and the asks before the form that
+       sends it on; then its words, the notes and, folded, the rest. The page's
+       leaf in the shell reads it again at every event of the yard: the stream
+       carries their seqs and nothing else. The bead's body, its notes and its
+       stage file are text someone wrote: they are only ever written as text,
+       with their lines kept, and nothing of them is read as markup. */}}
 {{define "content"}}
 {{- with .Data}}
-{{- /* The page's leaf in the shell reads it again at every event of the
-       yard: the stream carries their seqs and nothing else. The bead's
-       body, its notes and its stage file are text someone wrote: they are
-       only ever written as text. */}}
-<div id="bead">
-  {{- with .Bead}}
-  <article class="item">
-    <header class="item-head">
-      <h2>{{.Title}}</h2>
-    </header>
-    <p class="label"><span class="dot{{if .Hold}} held{{else if $.Data.Working}} working{{end}}"></span>{{.Type}} · stage {{.Stage}} · {{.Status}}{{with .CloseReason}}: {{.}}{{end}} · P{{.Priority}}{{if .Hold}} · <span class="held">held</span>{{end}}</p>
-  </article>
-  {{- end}}
-  {{- with .ETA}}
-  <p class="item eta">{{.Line}}</p>
-  {{- end}}
-  {{- with .Late}}
-  <p class="item late">⚠ {{.Line}}</p>
-  {{- end}}
-  {{- range .Warnings}}
-  <p class="item held">{{.}}</p>
-  {{- end}}
-  {{- if .Error}}
-  <p class="item error">{{.Error}}</p>
-  {{- end}}
-  <section class="item">
-    <dl class="facts">
-      {{- with .Bead.Depot}}<div><dt>depot</dt><dd>{{.}}</dd></div>{{end}}
-      <div><dt>flow</dt><dd>{{with .Flow}}{{.Name}} <span class="faint">({{.Source}})</span>{{else}}<span class="faint">none: it may move to a stage with a matching route</span>{{end}}</dd></div>
-      {{- range .RoundsLines}}<div><dt>rounds</dt><dd>{{.}}</dd></div>{{end}}
-      {{- with .Base}}<div><dt>base</dt><dd>{{.}}</dd></div>{{end}}
-      {{- with .Train}}<div><dt>train</dt><dd><a class="bead" href="/beads/{{.ID}}">{{.ID}}</a> {{.Title}}</dd></div>{{end}}
-      {{- range .DiscoveredFrom}}<div><dt>discovered from</dt><dd><a class="bead" href="/beads/{{.ID}}">{{.ID}}</a> {{.Title}}</dd></div>{{end}}
-      {{- with .Bead.Group}}<div><dt>group</dt><dd>{{.}}</dd></div>{{end}}
-      {{- with .Bead.Session}}<div><dt>session</dt><dd>{{.}}</dd></div>{{end}}
-      {{- with .Bead.Labels}}<div><dt>labels</dt><dd>{{range $i, $l := .}}{{if $i}}, {{end}}{{$l}}{{end}}</dd></div>{{end}}
-      <div><dt>created</dt><dd>{{clock .Bead.CreatedAt}}{{with .Bead.CreatedBy}} by {{.}}{{end}}</dd></div>
-      <div><dt>changed</dt><dd>{{clock .Bead.UpdatedAt}}</dd></div>
-      {{- with .Bead.ClosedAt}}<div><dt>closed</dt><dd>{{clock .}}</dd></div>{{end}}
-    </dl>
-  </section>
+{{- $p := .}}
+<article class="wv-page" data-kind="{{$.Kind}}">
+  <header class="wv-head">
+    <a class="wv-back" href="/">{{template "chev"}}Decide</a>
+    <h1 class="wv-title">{{.Bead.Title}}</h1>
+    <p class="wv-meta"><span class="wv-id">{{.Bead.ID}}</span><span class="wv-sep">·</span>{{.Bead.Type}}<span class="wv-sep">·</span>P{{.Bead.Priority}}{{with .Bead.Depot}}<span class="wv-sep">·</span>{{.}}{{end}}<span class="wv-sep">·</span>{{with .Flow}}flow {{.Name}}{{else}}no flow{{end}}{{range .States}}<span class="wv-sep">·</span>{{if .Class}}<span class="wv-{{.Class}}">{{.Text}}</span>{{else}}{{.Text}}{{end}}{{end}}</p>
+    {{- /* The route: one stop to a stage of the bead's flow, in the flow's
+           order, the bead's own in rust. */}}
+    <ol class="wv-route" aria-label="Route">
+      {{- range $i, $s := .Stops}}{{if $i}}<li class="wv-route__link" aria-hidden="true"></li>{{end}}<li class="wv-stop{{if $s.Past}} wv-stop--past{{end}}{{if $s.Now}} wv-stop--now{{end}}"{{if $s.Now}} aria-current="step"{{end}}><span class="wv-stop__dot"></span>{{$s.Name}}</li>{{end}}
+    </ol>
+    {{- with .ETA}}
+    <p class="wv-eta">{{.Line}}</p>
+    {{- end}}
+    {{- with .Late}}
+    <p class="wv-eta wv-eta--late">{{.Line}}</p>
+    {{- end}}
+    {{- range .RoundsLines}}
+    <p class="wv-eta">rounds: {{.}}</p>
+    {{- end}}
+    {{- range .Warnings}}
+    <p class="wv-callout">{{.}}</p>
+    {{- end}}
+    {{- if .Error}}
+    <p class="wv-callout">{{.Error}}</p>
+    {{- end}}
+  </header>
+  {{- /* What stops it: the open beads that must close before it is worked. It
+         is why the bead waits, so it stands above the asks. */}}
   {{- if .Blockers}}
-  <section class="item">
-    <h3 class="label">blocked by</h3>
-    <div class="cards">{{range .Blockers}}{{template "card" .}}{{end}}</div>
+  <section class="wv-block" id="blocked">
+    <h2 class="wv-sh"><span>Blocked by</span><span class="wv-sh__count">{{len .Blockers}}</span></h2>
+    <ol>
+      {{- range .Blockers}}
+      <li>{{template "srow" .}}</li>
+      {{- end}}
+    </ol>
   </section>
   {{- end}}
-  {{- if .Children}}
-  <section class="item">
-    <h3 class="label">children</h3>
-    <div class="cards">{{range .Children}}{{template "card" .}}{{end}}</div>
-  </section>
+  {{- /* The asks put to the person, whole and in order. A card says who asks,
+         and the page is the person's, so they have no heading. */}}
+  {{- range .Asks}}
+  {{template "ask" ($p.Card .)}}
   {{- end}}
-  {{- if .LedTo}}
-  <section class="item">
-    <h3 class="label">led to</h3>
-    <div class="cards">{{range .LedTo}}{{template "card" .}}{{end}}</div>
-  </section>
-  {{- end}}
-  {{- if .Bead.Body}}
-  <section class="item">
-    <h3 class="label">body</h3>
-    <pre class="text">{{.Bead.Body}}</pre>
-  </section>
-  {{- end}}
-  {{- with .StageFile}}
-  <section class="item">
-    <h3 class="label">stage {{$.Data.Bead.Stage}} · {{.Path}}</h3>
-    <pre class="text file">{{.Body}}</pre>
-  </section>
-  {{- end}}
-  {{- if .Asks}}
-  {{$p := .}}
-  <section class="item">
-    <h3 class="label">asks for {{$p.As}}</h3>
-    {{- range .Asks}}
-    {{template "ask" ($p.Card .)}}
-    {{- end}}
-  </section>
-  {{- end}}
-  {{- if eq .Bead.Status "open"}}
   {{- if .Moves}}
-  <section class="item">
-    <h3 class="label">send on as {{.As}}</h3>
-    {{- /* The form posts and puts the page's answer in the stage, keeping
-           the address; without scripts it posts and loads the bead it
-           lands on. */}}
-    {{- /* Enter in the note field presses the form's first submit button in
-           tree order. That would be the first move, and a person typing a
-           note chose none of them. So where each move has a button of its
-           own, the form opens with a disabled one, out of sight and out of
-           the tab order, and Enter sends nothing. Where the moves are
-           folded, the one Move to ... button is the first, and what Enter
-           presses is what the person sees. */}}
-    <form class="move-form" method="post" action="{{.Self}}" hx-post="{{.Self}}" hx-push-url="false"><input type="hidden" name="rev" value="{{.Bead.Revision}}">{{template "csrf"}}{{if not .FoldMoves}}{{template "enter" ""}}{{end}}<input type="text" name="note" placeholder="Note with the move" aria-label="Note">{{if .FoldMoves}}<select name="to" aria-label="Stage">{{range .Moves}}<option value="{{.To}}">{{.Label}}</option>{{end}}</select><button type="submit">Move to ...</button>{{else}}{{range .Moves}}{{if .Outcome}}<button type="submit" name="outcome" value="{{.Outcome}}">{{.Label}}</button>{{else}}<button type="submit" name="to" value="{{.To}}">{{.Label}}</button>{{end}}{{end}}{{end}}</form>
-  </section>
-  {{- else if .Outcomes}}
-  <section class="item">
-    <h3 class="label">outcomes</h3>
-    <ul class="outcomes">
-      {{- range .Outcomes}}
-      <li><span>{{.Name}} <span class="faint">to {{.To}}{{with .Note}} ({{.}}){{end}}</span></span><code>{{.Command}}</code></li>
+  {{- /* The form posts and puts the page's answer in the stage, keeping the
+         address; without scripts it posts and loads the bead it lands on. */}}
+  {{- /* Enter in the note field presses the form's first submit button in tree
+         order. That would be the first move, and a person typing a note chose
+         none of them. So where each move has a button of its own, the form
+         opens with a disabled one, out of sight and out of the tab order, and
+         Enter sends nothing. Where the moves are folded, the one Move to ...
+         button is the first, and what Enter presses is what the person sees.
+         The note field is kept by a read of the page again (hx-preserve), and
+         not the form around it: the form's revision is the bead's as of the
+         read, and a form kept past the next event would post a stale one. */}}
+  <form class="wv-block" method="post" action="{{.Self}}" hx-post="{{.Self}}" hx-push-url="false"><input type="hidden" name="rev" value="{{.Bead.Revision}}">{{template "csrf"}}{{if not .FoldMoves}}{{template "enter" ""}}{{end}}
+    <h2 class="wv-sh"><span>Send on as {{.As}}</span></h2>
+    <div class="wv-ask__row">
+      <input class="wv-field" type="text" id="{{.NoteID}}" hx-preserve="true" name="note" placeholder="Note with the move" aria-label="Note">
+      {{- if .FoldMoves}}
+      <select class="wv-field" name="to" aria-label="Stage">{{range .Moves}}<option value="{{.To}}">{{.Label}}</option>{{end}}</select>
+      <button class="wv-btn" type="submit">Move to ...</button>
+      {{- else}}
+      {{- range .Moves}}
+      {{- if .Outcome}}
+      <button class="wv-btn" type="submit" name="outcome" value="{{.Outcome}}">{{.Label}}</button>
+      {{- else}}
+      <button class="wv-btn" type="submit" name="to" value="{{.To}}">{{.Label}}</button>
       {{- end}}
-    </ul>
-  </section>
-  {{- else if .Next}}
-  <section class="item">
-    <h3 class="label">next stages</h3>
-    <p>{{range $i, $s := .Next}}{{if $i}}, {{end}}{{$s}}{{end}}{{if .Terminal}} <span class="faint">({{range $i, $s := .Terminal}}{{if $i}}, {{end}}{{$s}}{{end}} closes the bead)</span>{{end}}</p>
-  </section>
-  {{- end}}
-  {{- end}}
-  {{- if .Deps}}
-  <section class="item">
-    <h3 class="label">edges</h3>
-    <ul class="edges">
-      {{- range .Deps}}
-      <li><a class="bead" href="/beads/{{.From}}">{{.From}}</a> <span class="faint">{{.Kind}}</span> <a class="bead" href="/beads/{{.To}}">{{.To}}</a></li>
       {{- end}}
-    </ul>
+      {{- end}}
+    </div>
+  </form>
+  {{- end}}
+  {{- /* The body: its first paragraph, and the rest behind a fold where there
+         is more. It is text with its lines kept, so nothing is outlined. */}}
+  {{- if .Bead.Body}}
+  {{- $o := .Opening}}
+  <section class="wv-block" id="body">
+    <h2 class="wv-sh"><span>The bead</span><span class="wv-sh__count">{{$o.Count}}</span></h2>
+    <div class="wv-prose"><p>{{$o.First}}</p></div>
+    {{- if $o.More}}
+    <details class="wv-fold" id="{{.FoldID "body"}}">
+      <summary>{{template "chev"}}<span class="wv-fold__label">Read it whole</span><span class="wv-fold__value">{{$o.Count}}</span></summary>
+      <div class="wv-fold__body"><pre class="wv-text">{{.Bead.Body}}</pre></div>
+    </details>
+    {{- end}}
   </section>
   {{- end}}
+  {{- /* The pages the notes carry, in note order, each with its note beside
+         it. */}}
   {{- if .Board}}
-  <section class="item" id="board">
-    <h3 class="label">board</h3>
-    {{- range .Board}}
-    <article class="note">
-      <header class="entry-head"><span class="label">{{markAuthor .Note.Author $.Data.Marks}}{{if .Note.Via}} (via {{.Note.Via}}){{end}}</span><time class="label" datetime="{{.Note.At.UTC.Format "2006-01-02T15:04:05Z"}}">{{clock .Note.At}}</time></header>
-      {{- if index $.Data.Missing .File.Hash}}
-      <p class="faint">page {{slice .File.Hash 0 8}}: the yard no longer has it</p>
-      {{- else}}
-      <p><a href="{{blobNoteURL .Note.Seq .N}}" hx-boost="false">page {{slice .File.Hash 0 8}}</a></p>
+  <section class="wv-block" id="pages">
+    <h2 class="wv-sh"><span>Pages</span><span class="wv-sh__count">{{len .Board}}</span></h2>
+    <ol class="wv-notes">
+      {{- range .Board}}
+      <li class="wv-note">
+        {{- if index $p.Missing .File.Hash}}
+        <p class="wv-faint">page {{slice .File.Hash 0 8}}: the yard no longer has it</p>
+        {{- else}}
+        <p><a class="wv-note__file" href="{{blobNoteURL .Note.Seq .N}}" hx-boost="false">page {{slice .File.Hash 0 8}}</a></p>
+        {{- end}}
+        <header class="wv-note__head"><span{{if $p.Person .Note.Author}} class="wv-person"{{end}}>{{markAuthor .Note.Author $p.Marks}}{{if .Note.Via}} (via {{.Note.Via}}){{end}}</span><time datetime="{{.Note.At.UTC.Format "2006-01-02T15:04:05Z"}}">{{clock .Note.At}}</time></header>
+        <p>{{.Note.Text}}</p>
+      </li>
       {{- end}}
-      <pre class="text">{{.Note.Text}}</pre>
-    </article>
-    {{- end}}
+    </ol>
   </section>
   {{- end}}
-  <section class="item" id="notes">
-    <h3 class="label">notes</h3>
-    {{- range .Notes}}
-    {{- /* An ask is JSON in its text, and so is an answer to it: the ask is
-           drawn as words with its answers in it, and an answer an ask has
-           taken in stands there and not here. A note that holds no ask, or
-           one that does not parse, is drawn as it stands. */}}
-    {{- if not ($.Data.AskNotes.Folded .Seq)}}
-    <article class="note">
-      <header class="entry-head"><span class="label">{{markAuthor .Author $.Data.Marks}}{{if .Via}} (via {{.Via}}){{end}}{{if and .Kind (ne .Kind "note")}} · {{.Kind}}{{end}}</span><time class="label" datetime="{{.At.UTC.Format "2006-01-02T15:04:05Z"}}">{{clock .At}}</time></header>
-      <pre class="text">{{with $.Data.AskNotes.Words .Seq}}{{.}}{{else}}{{.Text}}{{end}}</pre>
-      {{- $words := .Text}}
-      {{- $seq := .Seq}}
-      {{- range $i, $f := .Files}}
-      {{- $kind := $f.Kind}}
-      {{- if index $.Data.Missing $f.Hash}}
-      <p class="faint">{{$kind}} {{slice $f.Hash 0 8}}: the yard no longer has it</p>
-      {{- else if eq $kind "page"}}
-      <a href="{{blobNoteURL $seq (inc $i)}}" hx-boost="false">page {{slice $f.Hash 0 8}}</a> <a href="{{$.Data.RunBase}}{{blobNoteURL $seq (inc $i)}}" hx-boost="false">run</a>
-      {{- else if eq $kind "image"}}
-      <img src="{{blobURL $f.Hash $f.Name}}" alt="{{$words}}">
-      {{- else if $f.Name}}
-      <a href="{{blobURL $f.Hash $f.Name}}" hx-boost="false">file {{$f.Name}}</a>
+  <section class="wv-block" id="notes">
+    <h2 class="wv-sh"><span>Notes</span>{{with .NoteCount}}<span class="wv-sh__count">{{.}}, the oldest first</span>{{end}}</h2>
+    <ol class="wv-notes">
+      {{- range .Notes}}
+      {{- /* An ask is JSON in its text, and so is an answer to it: the ask is
+             drawn as words with its answers in it, and an answer an ask has
+             taken in stands there and not here. A note that holds no ask, or
+             one that does not parse, is drawn as it stands. */}}
+      {{- if not ($p.AskNotes.Folded .Seq)}}
+      <li class="wv-note">
+        <header class="wv-note__head"><span{{if $p.Person .Author}} class="wv-person"{{end}}>{{markAuthor .Author $p.Marks}}{{if .Via}} (via {{.Via}}){{end}}{{if and .Kind (ne .Kind "note")}} · {{.Kind}}{{end}}</span><time datetime="{{.At.UTC.Format "2006-01-02T15:04:05Z"}}">{{clock .At}}</time></header>
+        <p>{{with $p.AskNotes.Words .Seq}}{{.}}{{else}}{{.Text}}{{end}}</p>
+        {{- $words := .Text}}
+        {{- $seq := .Seq}}
+        {{- range $i, $f := .Files}}
+        {{- $kind := $f.Kind}}
+        {{- if index $p.Missing $f.Hash}}
+        <p class="wv-faint">{{$kind}} {{slice $f.Hash 0 8}}: the yard no longer has it</p>
+        {{- else if eq $kind "page"}}
+        <p class="wv-note__file"><a href="{{blobNoteURL $seq (inc $i)}}" hx-boost="false">page {{slice $f.Hash 0 8}}</a> <a href="{{$p.RunBase}}{{blobNoteURL $seq (inc $i)}}" hx-boost="false">run</a></p>
+        {{- else if eq $kind "image"}}
+        <img src="{{blobURL $f.Hash $f.Name}}" alt="{{$words}}">
+        {{- else if $f.Name}}
+        <a class="wv-note__file" href="{{blobURL $f.Hash $f.Name}}" hx-boost="false">file {{$f.Name}}</a>
+        {{- else}}
+        <a class="wv-note__file" href="{{blobURL $f.Hash $f.Name}}" hx-boost="false">file {{slice $f.Hash 0 8}}</a>
+        {{- end}}
+        {{- end}}
+      </li>
+      {{- end}}
       {{- else}}
-      <a href="{{blobURL $f.Hash $f.Name}}" hx-boost="false">file {{slice $f.Hash 0 8}}</a>
+      <li class="wv-none">No note yet.</li>
       {{- end}}
-      {{- end}}
-    </article>
-    {{- end}}
-    {{- else}}
-    <p class="faint">No note yet.</p>
-    {{- end}}
+    </ol>
   </section>
-  <section class="item" id="sessions">
-    <h3 class="label">sessions</h3>
-    {{- range .Sessions}}
-    {{- /* A manual group's claim runs nothing: the store keeps it as a
-           running session, the page says claimed, as /sessions does. */}}
-    {{- $live := or (eq .State "starting") (eq .State "running")}}
-    {{- $claim := and .Manual $live}}
-    <article class="note">
-      <header class="entry-head"><span class="label">{{.Group}} · stage {{.Stage}}{{with .Runner}} · {{.}}{{end}}</span><time class="label" datetime="{{.StartedAt.UTC.Format "2006-01-02T15:04:05Z"}}">{{clock .StartedAt}}</time></header>
-      <p><span class="dot{{if $claim}}{{else if $live}} working{{else if or (eq .State "died") (eq .State "failed") (eq .State "held") (eq .State "aborted")}} held{{end}}"></span>{{if $claim}}claimed{{else}}{{.State}}{{end}}{{with .EndedAt}} <span class="faint">at {{clock .}}</span>{{end}} <span class="faint">{{.ID}}</span></p>
-      {{- with .Error}}
-      <pre class="text held">{{.}}</pre>
-      {{- end}}
-    </article>
-    {{- else}}
-    <p class="faint">No session has worked it.</p>
+  {{- /* The rest, folded and in this order: what the bead is, what it is tied
+         to, the stage it is in, the sessions that worked it and its history. A
+         fold keeps one line of what it holds; the page keeps an open one open
+         when it reads itself again (yard.js), by its id. */}}
+  <section class="wv-block" id="folds">
+    <details class="wv-fold" id="{{.FoldID "facts"}}">
+      <summary>{{template "chev"}}<span class="wv-fold__label">Facts</span><span class="wv-fold__value">{{.FactsLine}}</span></summary>
+      <div class="wv-fold__body">
+        <dl class="wv-facts">
+          {{- with .Bead.Depot}}<dt>depot</dt><dd>{{.}}</dd>{{end}}
+          <dt>flow</dt><dd>{{with .Flow}}{{.Name}} <span class="wv-dim">({{.Source}})</span>{{else}}<span class="wv-dim">none: it may move to a stage with a matching route</span>{{end}}</dd>
+          {{- with .Base}}<dt>base</dt><dd>{{.}}</dd>{{end}}
+          {{- with .Train}}<dt>train</dt><dd><a href="/beads/{{.ID}}">{{.ID}}</a> {{.Title}}</dd>{{end}}
+          {{- range .DiscoveredFrom}}<dt>discovered from</dt><dd><a href="/beads/{{.ID}}">{{.ID}}</a> {{.Title}}</dd>{{end}}
+          {{- with .Bead.Group}}<dt>group</dt><dd>{{.}}</dd>{{end}}
+          {{- with .Bead.Session}}<dt>session</dt><dd class="wv-mono">{{.}}</dd>{{end}}
+          {{- with .Bead.Labels}}<dt>labels</dt><dd>{{range $i, $l := .}}{{if $i}}, {{end}}{{$l}}{{end}}</dd>{{end}}
+          <dt>created</dt><dd>{{clock .Bead.CreatedAt}}{{with .Bead.CreatedBy}} by {{.}}{{end}}</dd>
+          <dt>changed</dt><dd>{{clock .Bead.UpdatedAt}}</dd>
+          {{- with .Bead.ClosedAt}}<dt>closed</dt><dd>{{clock .}}</dd>{{end}}
+        </dl>
+      </div>
+    </details>
+    {{- if .HasLinks}}
+    <details class="wv-fold" id="{{.FoldID "links"}}">
+      <summary>{{template "chev"}}<span class="wv-fold__label">Linked beads</span><span class="wv-fold__value">{{.LinksLine}}</span></summary>
+      <div class="wv-fold__body">
+        {{- if .Children}}
+        <h3>children</h3>
+        <ol>
+          {{- range .Children}}
+          <li>{{template "srow" .}}</li>
+          {{- end}}
+        </ol>
+        {{- end}}
+        {{- if .LedTo}}
+        <h3>led to</h3>
+        <ol>
+          {{- range .LedTo}}
+          <li>{{template "srow" .}}</li>
+          {{- end}}
+        </ol>
+        {{- end}}
+        {{- if .Deps}}
+        <h3>edges</h3>
+        <ul class="wv-edges">
+          {{- range .Deps}}
+          <li><a href="/beads/{{.From}}">{{.From}}</a> <span class="wv-dim">{{.Kind}}</span> <a href="/beads/{{.To}}">{{.To}}</a></li>
+          {{- end}}
+        </ul>
+        {{- end}}
+      </div>
+    </details>
     {{- end}}
-  </section>
-  <section class="item" id="history">
-    <h3 class="label">history</h3>
-    {{- range .History}}
-    <article class="note" id="h{{.Seq}}">
-      <header class="entry-head"><span class="label">{{markAuthor .Actor $.Data.Marks}}{{if .Via}} (via {{.Via}}){{end}}</span><time class="label" datetime="{{.At.UTC.Format "2006-01-02T15:04:05Z"}}">{{.Clock}}</time></header>
-      <p{{if .Tone}} class="{{.Tone}}"{{end}}>{{.Text}}</p>
-      {{- with .Note}}
-      <p class="entry-note">{{noteLetters .}}</p>
-      {{- end}}
-      {{- with .Diff}}
-      <pre class="text file">{{.}}</pre>
-      {{- end}}
-    </article>
-    {{- else}}
-    <p class="faint">No event of it is kept.</p>
+    {{- if .HasStage}}
+    <details class="wv-fold" id="{{.FoldID "stage"}}">
+      <summary>{{template "chev"}}<span class="wv-fold__label">Stage {{.Bead.Stage}}</span><span class="wv-fold__value">{{.StageLine}}</span></summary>
+      <div class="wv-fold__body">
+        {{- with .StageFile}}
+        <pre class="wv-text wv-file">{{.Body}}</pre>
+        {{- end}}
+        {{- /* Where the form above sends the bead on, it replaces the
+               outcomes: they stand here only for a person who has no move. */}}
+        {{- if .ShowsOutcomes}}
+        <div class="wv-scrollx">
+          <table class="wv-table">
+            <thead><tr><th>outcome</th><th>takes the bead to</th><th>report it with</th></tr></thead>
+            <tbody>
+              {{- range .Outcomes}}
+              <tr><td class="wv-name">{{.Name}}</td><td>{{.To}}</td><td><code>{{.Command}}</code>{{with .Note}} <span class="wv-dim">{{.}}</span>{{end}}</td></tr>
+              {{- end}}
+            </tbody>
+          </table>
+        </div>
+        {{- else if .ShowsNext}}
+        <p>next stages: {{range $i, $s := .Next}}{{if $i}}, {{end}}{{$s}}{{end}}{{if .Terminal}} <span class="wv-dim">({{range $i, $s := .Terminal}}{{if $i}}, {{end}}{{$s}}{{end}} closes the bead)</span>{{end}}</p>
+        {{- end}}
+      </div>
+    </details>
     {{- end}}
+    <details class="wv-fold" id="{{.FoldID "sessions"}}">
+      <summary>{{template "chev"}}<span class="wv-fold__label">Sessions</span><span class="wv-fold__value">{{.SessionsLine}}</span></summary>
+      <div class="wv-fold__body">
+        <ol class="wv-notes">
+          {{- range .Sessions}}
+          {{- /* A manual group's claim runs nothing: the store keeps it as a
+                 running session, the page says claimed, as /sessions does. */}}
+          {{- $live := or (eq .State "starting") (eq .State "running")}}
+          {{- $claim := and .Manual $live}}
+          <li class="wv-note">
+            <header class="wv-note__head"><span>{{.Group}} · stage {{.Stage}}{{with .Runner}} · {{.}}{{end}}</span><time datetime="{{.StartedAt.UTC.Format "2006-01-02T15:04:05Z"}}">{{clock .StartedAt}}</time></header>
+            <p>{{if $claim}}<span class="wv-dot"></span>claimed{{else if $live}}<span class="wv-dot wv-dot--run"></span>{{.State}}{{else if or (eq .State "died") (eq .State "failed") (eq .State "held") (eq .State "aborted")}}<span class="wv-dot wv-dot--fault"></span>{{.State}}{{else}}{{.State}}{{end}}{{with .EndedAt}} <span class="wv-dim">at {{clock .}}</span>{{end}} <span class="wv-faint wv-mono">{{.ID}}</span></p>
+            {{- with .Error}}
+            <pre class="wv-text wv-file wv-fault">{{.}}</pre>
+            {{- end}}
+          </li>
+          {{- else}}
+          <li class="wv-none">No session has worked it.</li>
+          {{- end}}
+        </ol>
+      </div>
+    </details>
+    <details class="wv-fold" id="{{.FoldID "history"}}">
+      <summary>{{template "chev"}}<span class="wv-fold__label">History</span><span class="wv-fold__value">{{.HistoryLine}}</span></summary>
+      <div class="wv-fold__body">
+        <ol class="wv-notes">
+          {{- range .History}}
+          <li class="wv-note" id="h{{.Seq}}">
+            <header class="wv-note__head"><span{{if $p.Person .Actor}} class="wv-person"{{end}}>{{markAuthor .Actor $p.Marks}}{{if .Via}} (via {{.Via}}){{end}}</span><time datetime="{{.At.UTC.Format "2006-01-02T15:04:05Z"}}">{{.Clock}}</time></header>
+            <p{{if eq .Tone "held"}} class="wv-fault"{{else if eq .Tone "landed"}} class="wv-faint"{{end}}>{{.Text}}</p>
+            {{- with .Note}}
+            <p class="wv-dim">{{noteLetters .}}</p>
+            {{- end}}
+            {{- with .Diff}}
+            <pre class="wv-text wv-file">{{.}}</pre>
+            {{- end}}
+          </li>
+          {{- else}}
+          <li class="wv-none">No event of it is kept.</li>
+          {{- end}}
+        </ol>
+      </div>
+    </details>
   </section>
-</div>
+</article>
 {{- end}}
 {{end}}

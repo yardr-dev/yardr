@@ -141,3 +141,7 @@ func (a askNotes) Of(n store.Note) string { return a.of(n) }
 
 // Head is what the note says where one line is all there is room for.
 func (a askNotes) Head(n store.Note) string { return a.head(n) }
+
+// ElementID is the id of an element named for names of the yard, which htmx
+// can find by it.
+func ElementID(kind string, parts ...string) string { return elementID(kind, parts...) }

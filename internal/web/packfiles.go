@@ -59,8 +59,8 @@ type PackFilePage struct {
 	Next string `json:"next,omitempty"`
 }
 
-// What names the file in a few words for its label: a file by what the
-// import does with it, the rest by what they are.
+// What names the file in a few words for the line under its name: a file by
+// what the import does with it, the rest by what they are.
 func (p PackFilePage) What() string {
 	switch p.Kind {
 	case "declaration":
@@ -68,7 +68,17 @@ func (p PackFilePage) What() string {
 	case "command file":
 		return "command file of a source it adds"
 	}
-	return "file to " + p.Action
+	return p.Action
+}
+
+// Size is the file's bytes and, for a file, the insertions and deletions the
+// card's line counts, as the line under its name says them.
+func (p PackFilePage) Size() string {
+	out := countWords(p.Bytes, "byte", "bytes")
+	if p.Kind == "file" {
+		out += " · " + countWords(p.Insertions, "insertion", "insertions") + ", " + countWords(p.Deletions, "deletion", "deletions")
+	}
+	return out
 }
 
 // packText is one file of a summary card's full text as the ask carries it.
@@ -155,7 +165,7 @@ func (s *Server) handlePackFile(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	s.respond(w, r, Page{Template: "packfile", Title: fmt.Sprintf("%s · file %d of %d", d.Bead, d.N, d.Of), Data: d})
+	s.respond(w, r, Page{Template: "packfile", Kind: "bead", Title: fmt.Sprintf("%s · file %d of %d", d.Bead, d.N, d.Of), Data: d})
 }
 
 // packFilePage reads one file of the full text behind a summary card. The

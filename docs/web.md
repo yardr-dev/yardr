@@ -757,8 +757,8 @@ origin; the test allows those and only those ([One bead](#one-bead)).
 | `/beads` | the open beads, the newest change first ([Beads](#beads)) | `Beads` |
 | `/beads?depot=<depot>&stage=<stage>` | the same, of one depot, in one stage, or both | `Beads` |
 | `/beads?all=1` | the closed beads too, every one (`yardr bead list --all`) | `Beads` |
-| `/beads/<id>` | one bead: what `yardr prime --bead <id>` knows, for a person ([One bead](#one-bead)) | `BeadPage` |
-| `/beads/<id>/asks/<ask>/files/<n>` | one file of the full text behind a summary card, counted from 1: its hashes, its text whole, and links to the file before it, the file after it and the card. The operator the ask is put to reads it while the ask is open; anyone else gets a 404 ([One bead](#one-bead)) | `PackFilePage` |
+| `/beads/<id>` | one bead, the second stage kind: what `yardr prime --bead <id>` knows, for a person, in the order a person acts on it: the head with its route, what blocks it, the asks put to the viewer, the form that sends it on, its words, its notes and, folded, the rest ([One bead](#one-bead)) | `BeadPage` |
+| `/beads/<id>/asks/<ask>/files/<n>` | one file of the full text behind a summary card, counted from 1, as the bead's stage kind in its record form: its name, what the import does with it, its hashes, its text whole, and links to the file before it, the file after it and the card. The operator the ask is put to reads it while the ask is open; anyone else gets a 404 ([One bead](#one-bead)) | `PackFilePage` |
 | `/beads/<id>/fresh/<ask>/<state>` | the return of a fresh sign-in: the gateway sends the browser here after it re-authenticates the user for a weighty card, a secret ask's giving or a mapping ask's pick ([One bead](#one-bead)). It spends the one-use state that the approval, giving or pick minted for this bead, ask and user. It then approves the card, gives the secret or picks the option the sign-in was raised for, and answers 303 to the bead's page. An approval that opens a device pairing is answered here instead, with the pairing's code and QR in that response alone. The return writes nothing and draws the bead's page again with why when its state was used already, expired, never raised or raised for another card or user, when the sign-in is not fresh, or when the card moved on. Only the user the state was raised for can spend it | |
 | `/blobs/<hash>` | a note's blob to anyone, and on a view that acts a mail's file to its sender or recipient: the bytes with their type; anything else is a 404 ([One bead](#one-bead)). An image and a page open inline, a file downloads (`Content-Disposition: attachment`) under the first name the lookup finds. On the sandbox origin a note's page runs under the scripted policy, a file downloads the same way | |
 | `/blobs/<hash>/<name>` | the same blob served under that name, when the name passes the rule; a name that fails it is a 404. One blob can carry different names on different letters, so the view's pages link with the name ([One bead](#one-bead)) | |
@@ -1364,7 +1364,12 @@ a page's leaf listens for. These hang on the stream:
   goes when it is unheld. The ask card on `/line` is put in place with the
   rest, and what is typed in its words field is kept: that field, and not
   the form around it, has an id and `hx-preserve`, so the read leaves the
-  words and the form takes the bead's fresh revision;
+  words and the form takes the bead's fresh revision. A bead's page keeps
+  the same words (its Send on form's note field has an id naming the bead
+  and its stage) and keeps open the folds a person opened (`yard.js`, by their
+  ids). The ids of the note field and of the folds are plain identifiers, since
+  htmx finds a kept field by a selector: a name of the yard with a dot or a
+  slash in it is written there with an underscore in its place;
 - `/`'s leaf refreshes the rail and the list alone, since its overview is a
   snapshot, and its feed takes each kept event's fragment on top
   ([The stream](#the-stream));
@@ -1744,23 +1749,56 @@ time.
 
 ## One bead
 
-`/beads/<id>` is what `yardr prime --bead <id>` knows, for a person: title,
-type, stage, status and priority; under the header, the ETA sentence and
-the late mark when there is anything to say
-([Estimates](#estimates-the-eta-and-the-late-mark)); its depot, the flow that governs it and
-where that comes from, its base, its train, the bead it was discovered from;
-the open beads that block it; a train's children; the beads it led to; the
-body; the stage file of its stage (without its
-`summary:` line, in the page; whole in the JSON); the outcomes the
-stage offers, each with the command that reports it and the stage it takes
-the bead to now, which a [round limit](flows.md#a-limit-on-rounds) can make
-another than the flow's own, with the round it is (the next stages, for a
-stage with no outcome); a `rounds` row for each limited outcome of the stage
-whose stage has rounds counted (`new 2 of 3 (the next changes from review
-goes to new)`); its edges; its board, the note pages in note order
-where there are any; its notes, the oldest first, each with
-its files below its words; the sessions that worked it; its
-history. A closed bead has a page too. An unknown id is a 404.
+`/beads/<id>` is what `yardr prime --bead <id>` knows, for a person, in the order a
+person acts on it. It is the second of the window's six stage kinds
+(`data-kind="bead"`, [The stage kinds](#the-stage)), and its pack file page is the same
+kind in its record form. A closed bead has a page too. An unknown id is a 404. The page's
+title in the browser is the bead's own. Top to bottom, in this order
+(`templates/bead.html`):
+
+- **The head**: the back link `‹ Decide`, the bead's title, and one meta line: its id,
+  type, `P<n>`, depot and flow (`no flow` where none governs it), then what stands with it
+  (`held` in red; `waits for you` in rust where it has an ask or a move for the viewer,
+  else `working` in green where an agent's or a command's session works it; a closed bead
+  says `closed: <reason>`). Under it the **route**: one stop to each stage of the bead's
+  flow, the stages it can sit in in the order the flow was written and its terminals last,
+  the bead's own stop in rust and semibold and the ones before it filled. A bead no flow
+  governs, and one whose stage its flow lacks, has its own stage as a last stop, so the
+  stage is always the route's current stop; the JSON carries the order as `route`. Then,
+  a line each, the ETA sentence and the late line (in words, with no sign before it,
+  [Estimates](#estimates-the-eta-and-the-late-mark)), and a `rounds` line for each
+  limited outcome of the stage whose stage has rounds counted (`rounds: new 2 of 3 (the
+  next changes from review goes to new)`). A warning (what could not be read: a flow that
+  is broken, a train that is ambiguous) and the reason a write was refused stand under
+  the head in red.
+- **Blocked by**: the open beads that must close before the bead is worked, as rows of
+  the stage, and only while something blocks it. It is why the bead waits, so it stands
+  above the asks.
+- **The asks** put to the viewing user, whole and in order, with no heading: the page is
+  theirs, and a card says who asks ([The ask card](#the-ask-card)).
+- **Send on as <user>**: the form that sends the bead on, where the view acts and the
+  bead waits for a manual group the user belongs to, as `yardr review` offers it: the
+  outcomes the flow names for the stage, else the stages it allows next, with a note.
+  Where the user has no move, the Stage fold below carries the outcomes in its place.
+- **The bead**: its first paragraph, then `Read it whole` with the line count, which
+  opens the body whole; a body of one paragraph has no fold. It is text with its lines
+  kept: nothing in it is outlined or rendered.
+- **Pages**, where a note carries one: the board of the bead's note pages in note order,
+  each with its note beside it.
+- **Notes**, the oldest first, each with its files below its words. The people of the
+  yard stand in the heavier face among the agents.
+- **Five folds**, in this order, each a label and what it holds in one line, opening to the
+  thing itself: **Facts** (depot, flow and where it comes from, base, train, the bead it
+  was discovered from, group, session, labels, created, changed, closed), **Linked
+  beads** (a train's children and the beads it led to as rows, and its edges as
+  `from kind to` lines; only where it has any), **Stage <name>** (the stage's file,
+  without its `summary:` line in the page, whole in the JSON, and the outcomes the stage
+  offers, each with the command that reports it and the stage it takes the bead to now,
+  which a [round limit](flows.md#a-limit-on-rounds) can make another than the flow's
+  own, with the round it is, or the next stages, for a stage with no outcome; only where
+  it has a file or something to say), **Sessions** and **History**. A page that reads
+  itself again at every event of the yard keeps the folds a person opened open, by their
+  ids (`fold-<name>-<bead>`; `yard.js`).
 
 On a view that acts, the page answers the bead's open asks to its user,
 oldest first: the question, who asked, the context, the
@@ -1787,8 +1825,11 @@ A run or setup card takes no words as an answer, so its field serves a
 decline alone and the card has no button to answer with words. A giving, a
 writing pick or an approval posted straight at the handler is still the
 yard's to refuse, in its own words, with nothing written. Where the bead
-waits for the user in a stage a manual group works, the outcomes send it
-on as `yardr review` offers them, with a note. Each write carries the
+waits for the user in a stage a manual group works, the Send on form sends it
+on with a note. Its note field keeps what is typed when the page reads itself
+again (`hx-preserve`, with an id naming the bead and its stage, so a bead that
+has moved on is given a new one); the form around it is not kept, since its
+revision must come fresh at every read. Each write carries the
 revision the page was drawn from ([Acting as a user](#acting-as-a-user)).
 
 On a hosted yard, every weighty run or setup card — any class in its
@@ -1875,18 +1916,21 @@ Each file's sentence links to that file's page,
 the first file, because a file folded into the card's closing count has no
 sentence of its own.
 
-A file's page shows the file's name, what the import does with it, its old
-and new SHA-256 as the sentence gives them (`(none)` for a file the import
-creates), and the pack's digest. A changed file shows its diff next. Then
-comes the text as the pack would install it, whole, with Previous, Back to
-the card and Next above and below it. At the first file Previous is off, and
-at the last Next is.
+A file's page is the bead's stage kind in its record form (`data-kind="bead"`):
+the back link `‹ <bead id>`, the file's name as the title in mono, one line under
+it (`ask 7 · file 4 of 42 · change · 2090 bytes · 1 insertion, 1 deletion`: what the
+import does with it, its bytes and, for a file, its insertions and deletions), its
+old and new SHA-256 as the sentence gives them (`(none)` for a file the import
+creates) and the pack's digest as facts. A changed file shows its diff next. Then
+comes the text as the pack would install it, whole, as file blocks under section
+heads, with Previous, Back to the card and Next above the diff and below the text. At
+the first file Previous is off, and at the last Next is.
 
 Files count from 1, in the order of the card's closing line. The files the
 import writes come first, in the order the card lists them. Each source the
 pack adds follows, its declaration and then its command files. The page
 writes each text as the terminal reads it under the card, without control and
-direction characters, in a `<pre class="text file">` that keeps its lines and
+direction characters, in a `<pre class="wv-text wv-file">` that keeps its lines and
 pans sideways inside its block on a narrow window. The file's name in the
 heading is read the same way, on one line, so a name written to turn the
 direction of the words around it is drawn as the letters it holds.
@@ -1939,10 +1983,10 @@ counted from 1), opening the bytes top-level and
 inert; each file stands as a download link, `file <name>`, and downloads
 instead of opening. One the yard no longer holds is a line saying so,
 never a broken icon or link. The JSON names them as the notes have them.
-Above the notes, the board lays the bead's note pages out in note order,
+Above the notes, `Pages` lays the bead's note pages out in note order,
 each with its note beside it: one entry per page, the link first and the
-note's words under it. A bead with no note page shows no board. Mail
-pages stand on no board: from here only a note's page opens.
+note's words under it. A bead with no note page has no such section. Mail
+pages stand in none: from here only a note's page opens.
 The bytes come from `/blobs/<hash>`, which serves a note's blob to
 anyone, and on a view that acts a mail's file to its sender or recipient;
 anything else answers as a missing blob. A page's bytes come from its
@@ -2621,7 +2665,7 @@ The list is built from what the shell has read for the page already, the overvie
 
 ### The stage
 
-`<main id="stage">` holds the phone's top bar, the page's leaf where it is live, the page's heading and the page's own content (a page of a stage kind, `Page.Kind`, draws its own head in place of the shell's heading, as [the overview](#the-overview) does): one column of 760 px at most, centred, with a 24 px gutter, and it starts 44 px down. The list and the stage scroll apart, each inside itself; the document does not. On load the list scrolls the open row to its middle, as far as its ends allow, in a browser that has `scroll-initial-target`, and opens at its top in one that has not. Wide text that must not wrap (a stage file, `.text.file`) scrolls sideways inside its block.
+`<main id="stage">` holds the phone's top bar, the page's leaf where it is live, the page's heading and the page's own content (a page of a stage kind, `Page.Kind`, draws its own head in place of the shell's heading, as [the overview](#the-overview) and [a bead's page](#one-bead) do): one column of 760 px at most, centred, with a 24 px gutter, and it starts 44 px down. The list and the stage scroll apart, each inside itself; the document does not. On load the list scrolls the open row to its middle, as far as its ends allow, in a browser that has `scroll-initial-target`, and opens at its top in one that has not. Wide text that must not wrap (a stage file, `.text.file`) scrolls sideways inside its block.
 
 ### Swaps
 
@@ -2719,18 +2763,23 @@ The overview's parts are the stage kind's own (`wv-page`, `.wv-answer` with
 `.wv-answer__sub`, `.wv-block` and `.wv-sh`, `.wv-feed` with `.wv-hour` and
 `.wv-entry`, and the ask card's `.wv-ask*`, `.wv-opt*`, `.wv-field` and
 `.wv-btn`), in the design system's names for the roles, and the kit's measures.
+A bead's page adds the stage head (`.wv-head`, `.wv-back`, `.wv-title`,
+`.wv-meta`, the route's `.wv-route` with `.wv-stop` and its `--past` and `--now`,
+`.wv-eta` and `.wv-callout`), the notes (`.wv-notes`, `.wv-note`), the body's
+`.wv-prose`, the folds (`.wv-fold` with `__label`, `__value` and `__body`), `.wv-facts`,
+`.wv-table`, the bead's rows (`.wv-srow`, the `srow` template) and the pack file
+pager (`.wv-pager`).
 
 Classes the other pages build from: `.item` (one entry of a page, with a
 hairline under it), `.item-head`, `.label`, `.figures` (name and number
-pairs), `.entry-head`, `.entry-title`, `.entry-note` (a bead's notes and
-history), `.card` (one bead in a list, the `card`
+pairs), `.entry-title`, `.card` (one bead in a list, the `card`
 template, with `.card-head`, `.card-title`, and `.arrived` for one the
 stream brought), `.cards` (a list of them), `.column` and `.stage` (a flow
 and one stage of it, with `.quiet` for one folded to its head line), `.peers` (the crew to talk to), `.talk-head` (the conversation's head), `.letter` (one mail
 of the talk page, with `.head`, `.day`, `.differs` and `.own` for how it reads, and
 `.day-break`, `.at`, `.who` and `.body` inside), `.error` (why a mail was not sent),
 `.filters` (a row of links, as a config page's way back), `.chips` (the Beads page's depot and stage rows, each a label over a wrapping run of pill links with their counts), `.facts` (name and value rows), `.routes` (one row per route, as `/routes` shows them on a wide window), `.text`
-(what someone wrote, lines kept), `.note`, `.outcomes`, `.bead` (a bead's
+(what someone wrote, lines kept), `.note`, `.bead` (a bead's
 id), `.state` (a status dot and its word),
 `.num`, `.faint`, `.held`, `.landed`, `.dot` and `.off-line` (the beads in
 no stage of a depot's flows).

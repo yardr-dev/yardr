@@ -16,7 +16,7 @@
        buttons; where it does not, or a pick would be refused, they are rows
        to read. */ -}}
 {{define "ask"}}
-<article class="wv-ask" id="ask-{{.Bead}}-{{.Ask}}">
+<article class="wv-ask" id="{{.ID}}">
   <p class="wv-ask__head"><span class="wv-dot wv-dot--wait"></span><span>{{.Asker}} asks you</span><span class="wv-ask__age">ask {{.Ask}} · {{.Age}} ago</span></p>
   {{- /* The weight stands first, before the question, one line a class, in
          the readable rust: the yard's own word that approving it is more
@@ -177,7 +177,7 @@
     <button class="wv-btn" type="submit" name="action" value="approve">{{if strong $.Weight}}Approve in {{$.Yard}}{{else}}Approve{{end}}</button>
     {{- end}}{{end}}
     {{- if .Words}}
-    <input class="wv-field" type="text" id="words-{{.Bead}}-{{.Ask}}" hx-preserve="true" name="words" placeholder="Words with the answer, or why not" aria-label="Words">
+    <input class="wv-field" type="text" id="{{.WordsID}}" hx-preserve="true" name="words" placeholder="Words with the answer, or why not" aria-label="Words">
     {{- if .Options}}{{if not .Setup}}
     <button class="wv-btn" type="submit" name="action" value="send">Send</button>
     {{- end}}{{else if .Answer}}

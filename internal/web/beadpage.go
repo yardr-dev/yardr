@@ -30,8 +30,11 @@ type BeadPage struct {
 	ETA  *eta.ETA  `json:"eta,omitempty"`
 	Late *eta.Late `json:"late,omitempty"`
 	// Flow is the flow that governs the bead, absent when none does: the
-	// bead may then move to a stage with a matching route.
-	Flow *BeadFlow `json:"flow,omitempty"`
+	// bead may then move to a stage with a matching route. Route is that
+	// flow's stages in the order its page draws them, the stages a bead can
+	// sit in first and its terminals last: the route strip's stops.
+	Flow  *BeadFlow `json:"flow,omitempty"`
+	Route []string  `json:"route,omitempty"`
 	// Base is what the bead's branch starts from and lands on: its train's
 	// branch, else the depot's base.
 	Base string `json:"base,omitempty"`
@@ -85,6 +88,9 @@ type BeadPage struct {
 	// unmarked. HTML-only: the JSON names the author as the note has
 	// it.
 	Marks map[string]string `json:"-"`
+	// People are the users of the yard, whose names the notes and the history
+	// set in the heavier face among the agents'. HTML-only, as Marks is.
+	People map[string]bool `json:"-"`
 	// Missing are the hashes of the notes' files the yard no longer
 	// holds: the page draws those as a line saying so, never a broken
 	// icon or link. HTML-only: the JSON names the files as the notes
@@ -161,7 +167,16 @@ func (s *Server) handleBead(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	s.respond(w, r, Page{Template: "bead", Title: d.Bead.ID, Data: d, head: d.Head, stream: "seq", live: liveStage})
+	s.respondBead(w, r, d)
+}
+
+// respondBead answers r with the bead's page d, whether it is the page read
+// or the one a write that changed nothing reads again: the browser's title is
+// the bead's, as the kit's page has it, and the page reads itself again at
+// the bead's own address, which a return from a fresh sign-in is not.
+func (s *Server) respondBead(w http.ResponseWriter, r *http.Request, d *BeadPage) {
+	s.respond(w, r, Page{Template: "bead", Kind: "bead", Title: d.Bead.Title, Data: d, head: d.Head,
+		stream: "seq", live: liveStage, self: d.Self()})
 }
 
 // beadPage reads the bead's page: what `yardr prime --bead <id>` knows,
@@ -226,6 +241,7 @@ func (s *Server) beadPage(ctx context.Context, id, hostport string) (*BeadPage, 
 		d.Warnings = append(d.Warnings, "no move is allowed until the flow is fixed: "+nerr.Error())
 	} else if next.Flow != nil {
 		d.Flow = &BeadFlow{Name: next.Flow.Name, Source: next.Source.String()}
+		d.Route = stageOrder(next.Flow)
 		d.Next, d.Terminal, d.StageFile = next.Stages, next.Terminal, next.StageFile
 		// A store flow's stage file is a file in the yard's home, which
 		// the store does not read.
@@ -291,6 +307,15 @@ func (s *Server) beadPage(ctx context.Context, id, hostport string) (*BeadPage, 
 	// keeps its own bytes (yardr-0wp5).
 	for i := range d.Notes {
 		d.Notes[i].Text = store.NoteLetters(d.Notes[i].Text)
+	}
+	// Who among the authors is a person of this yard.
+	users, err := s.st.Users(ctx)
+	if err != nil {
+		return nil, err
+	}
+	d.People = make(map[string]bool, len(users))
+	for _, u := range users {
+		d.People[u.Name] = true
 	}
 	// Whose word a note by a name of another yard is, as mail is
 	// marked; with no grants when the trusts cannot be read, so every

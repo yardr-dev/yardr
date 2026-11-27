@@ -386,6 +386,28 @@ func TestAskCardKeepsItsWords(t *testing.T) {
 			t.Errorf("%s: the form's revision is %q after the bead changed, want the fresh %q (was %q)", path, now, revOf(t, f, b.ID), first[path])
 		}
 	}
+	// A dot is valid in a depot and bead id, but htmx treats it as a class
+	// selector when it looks up a preserved field by #id.
+	dotted, _ := talkFixture(t, "jo")
+	_, err := dotted.st.AddUser(ctx, "jo", "jo")
+	must(t, err)
+	must(t, dotted.st.PutDepot(ctx, store.Depot{Name: "my.depot", Base: "origin/main"}, "jo"))
+	dottedBead, err := dotted.st.CreateBead(ctx, store.NewBead{
+		ID: "my.depot-1", Title: "a dotted bead", Stage: "new", Depot: "my.depot",
+	}, "jo")
+	must(t, err)
+	ask := pickAsk()
+	ask.To = "jo"
+	dottedAsk, err := dotted.st.AddAsk(ctx, dottedBead.ID, ask, "yardmaster")
+	must(t, err)
+	dottedCard := oneCard(t, dotted.get("/beads/"+dottedBead.ID).body)
+	dottedID := fmt.Sprintf("words-my_depot-1-%d", dottedAsk)
+	if m := field.FindStringSubmatch(dottedCard); m == nil || m[1] != dottedID {
+		t.Errorf("a dotted bead's words field is not selector-safe id %q: %s", dottedID, dottedCard)
+	}
+	if !strings.Contains(dottedCard, fmt.Sprintf(`id="ask-my_depot-1-%d"`, dottedAsk)) {
+		t.Errorf("a dotted bead's ask id is not selector-safe: %s", dottedCard)
+	}
 }
 
 // Enter in a text field of an ask card presses its form's default button, the
@@ -1239,20 +1261,20 @@ func TestBeadPageReadsAsksAsWords(t *testing.T) {
 					t.Errorf("%s, %s: the page carries %s", c.name, v.name, raw)
 				}
 			}
-			notes := section(t, page, `id="notes"`, `id="sessions"`)
+			notes := section(t, page, `id="notes"`, `id="folds"`)
 			wants := append([]string{at(c.head), c.ask.Question}, c.notes...)
 			for _, want := range wants {
 				if !strings.Contains(notes, at(want)) {
 					t.Errorf("%s, %s: the notes lack %q:\n%s", c.name, v.name, at(want), notes)
 				}
 			}
-			if n := strings.Count(notes, `<article class="note">`); n != 1 {
+			if n := strings.Count(notes, `<li class="wv-note">`); n != 1 {
 				t.Errorf("%s, %s: the notes draw %d notes, want the ask alone with its %d answers in it", c.name, v.name, n, c.answers)
 			}
 			// The ask's note says the ask in the history, and each answer to it
 			// the ask's first line, which says how it stands: the question
 			// stands once.
-			history := section(t, page, `id="history"`, `</section>`)
+			history := section(t, page, `id="fold-history-`+b.ID+`"`, `</details>`)
 			if n, want := strings.Count(history, at(c.head)), 1+c.answers; n != want || strings.Count(history, c.ask.Question) != 1 {
 				t.Errorf("%s, %s: the history says %q %d times, want %d, and the question once:\n%s", c.name, v.name, at(c.head), n, want, history)
 			}

@@ -59,6 +59,9 @@ func (c Card) DOM() string { return domID("bead", c.ID) }
 // Clock is when the bead last changed, as the feed writes a time.
 func (c Card) Clock() string { return clock(c.UpdatedAt) }
 
+// Age is how long ago the bead last changed: what ends its row.
+func (c Card) Age() string { return age(time.Since(c.UpdatedAt)) }
+
 // manualClaims are the ids of the sessions among sessions that are a manual
 // group's claim.
 func manualClaims(sessions []store.Session) map[string]bool {

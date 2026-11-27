@@ -176,7 +176,6 @@ func TestBeadAskButtons(t *testing.T) {
 	b, seq := actYard(t, f, pickAsk())
 	r := f.get("/beads/" + b.ID)
 	for _, want := range append([]string{
-		`<h3 class="label">asks for jo</h3>`,
 		`<p class="wv-ask__head"><span class="wv-dot wv-dot--wait"></span><span>yardmaster asks you</span><span class="wv-ask__age">ask ` + strconv.FormatUint(seq, 10) + ` · `,
 		`<h2 class="wv-ask__q">Move the links now?</h2>`,
 		"The links file declares the new source.",
@@ -196,9 +195,14 @@ func TestBeadAskButtons(t *testing.T) {
 			t.Errorf("the page lacks %q:\n%s", want, r.body)
 		}
 	}
-	// The bead's page is the card's about line: the card names no bead.
+	// The bead's page is the card's about line: the card names no bead. The
+	// page is the person's, and a card says who asks, so the cards have no
+	// heading and stand directly under the head.
 	if strings.Contains(r.body, `class="wv-ask__about"`) {
 		t.Errorf("the card on its bead's page names its bead again:\n%s", r.body)
+	}
+	if strings.Contains(r.body, "asks for") || !strings.Contains(squash(r.body), `</header><article class="wv-ask" id="ask-`+b.ID+`-`+strconv.FormatUint(seq, 10)+`">`) {
+		t.Errorf("the card has a heading, or does not stand under the head:\n%s", r.body)
 	}
 	// A routine card carries no weight and no decline path.
 	for _, foreign := range []string{`class="wv-ask__weight"`, "WEIGHTY", "no gate", "Recommends", "Recommended:"} {
@@ -309,7 +313,7 @@ func TestBeadAskButtons(t *testing.T) {
 	}
 	// pickAsk asks mckean; the bead page without --as shows no asks either way.
 	r = f3.get("/beads/" + b3.ID)
-	if strings.Contains(r.body, "<form") || strings.Contains(r.body, "asks for") {
+	if strings.Contains(r.body, "<form") || strings.Contains(r.body, `class="wv-ask"`) {
 		t.Errorf("without --as the bead page answers:\n%s", r.body)
 	}
 }
@@ -351,7 +355,7 @@ const moveEnter = `<button class="wv-enter" type="submit" disabled tabindex="-1"
 func moveFormOf(t *testing.T, body string) string {
 	t.Helper()
 	for _, form := range formsOf(body) {
-		if strings.HasPrefix(form, `<form class="move-form"`) {
+		if strings.HasPrefix(form, `<form class="wv-block"`) {
 			return form
 		}
 	}
@@ -382,12 +386,13 @@ func TestBeadMoveButtons(t *testing.T) {
 	must(t, err)
 	r := f.get("/beads/" + b.ID)
 	for _, want := range []string{
-		`<h3 class="label">send on as jo</h3>`,
-		`<form class="move-form" method="post" action="/beads/` + b.ID + `" hx-post="/beads/` + b.ID + `" hx-push-url="false">`,
+		`<h2 class="wv-sh"><span>Send on as jo</span></h2>`,
+		`<form class="wv-block" method="post" action="/beads/` + b.ID + `" hx-post="/beads/` + b.ID + `" hx-push-url="false">`,
 		`<input type="hidden" name="rev" value="` + moved.Revision + `">`,
 		moveEnter,
-		`<button type="submit" name="outcome" value="done">done: finish as merged (closes the bead)</button>`,
-		`<button type="submit" name="outcome" value="changes">changes: send back to new (note required)</button>`,
+		`<input class="wv-field" type="text" id="note-` + b.ID + `-decide" hx-preserve="true" name="note" placeholder="Note with the move" aria-label="Note">`,
+		`<button class="wv-btn" type="submit" name="outcome" value="done">done: finish as merged (closes the bead)</button>`,
+		`<button class="wv-btn" type="submit" name="outcome" value="changes">changes: send back to new (note required)</button>`,
 	} {
 		if !strings.Contains(r.body, want) {
 			t.Errorf("the page lacks %q:\n%s", want, r.body)
@@ -396,6 +401,22 @@ func TestBeadMoveButtons(t *testing.T) {
 	// The first move here is done, which closes the bead: Enter in the note
 	// field must not press it.
 	assertMoveEnter(t, r.body)
+	// A read of the page again keeps what is typed in the note, by the
+	// field's id; the form around it is the page's own, whose revision must
+	// come fresh at every read, so it is not kept.
+	if forms := startTags(moveFormOf(t, r.body), "form"); len(forms) != 1 || forms[0]["hx-preserve"] != "" || forms[0]["id"] != "" {
+		t.Errorf("the move form is kept through a read of the page again: %v", forms)
+	}
+	// Where the form sends the bead on it replaces the Stage fold's outcomes,
+	// and it stands between the asks and the bead's words, under the head.
+	// This stage has no file, so with the outcomes gone the Stage fold would
+	// hide nothing, and the page draws none.
+	if strings.Contains(r.body, "<table") || strings.Contains(r.body, "yardr bead done") || strings.Contains(r.body, `<span class="wv-fold__label">Stage `) {
+		t.Errorf("the page names the outcomes beside the form that sends the bead on:\n%s", r.body)
+	}
+	if head, form := strings.Index(r.body, `</header>`), strings.Index(r.body, `<form class="wv-block"`); head < 0 || form < head || strings.Contains(r.body[head:form], "<section") {
+		t.Errorf("the send-on form does not stand directly under the head")
+	}
 	var got web.BeadPage
 	if r := f.get("/beads/"+b.ID, "Accept", "application/json"); json.Unmarshal([]byte(r.body), &got) != nil {
 		t.Fatal("the bead page is no JSON")
@@ -424,7 +445,7 @@ func TestBeadMoveButtons(t *testing.T) {
 	}
 	must(t, f6.st.AddNote(ctx6, b6.ID, "use the reviewed route", "jo"))
 	r = f6.get("/beads/" + b6.ID)
-	if want := `<button type="submit" name="to" value="review">Return to review</button>`; !strings.Contains(r.body, want) {
+	if want := `<button class="wv-btn" type="submit" name="to" value="review">Return to review</button>`; !strings.Contains(r.body, want) {
 		t.Errorf("the page lacks the asker move %q:\n%s", want, r.body)
 	}
 	b6, err = f6.st.GetBead(ctx6, b6.ID)
@@ -477,7 +498,7 @@ func TestBeadMoveButtons(t *testing.T) {
 		t.Fatal(err)
 	}
 	r = f4.get("/beads/" + b4.ID)
-	if want := `<button type="submit" name="outcome" value="changes">changes: move to decide (the 1 round back to new is used)</button>`; !strings.Contains(r.body, want) {
+	if want := `<button class="wv-btn" type="submit" name="outcome" value="changes">changes: move to decide (the 1 round back to new is used)</button>`; !strings.Contains(r.body, want) {
 		t.Errorf("the page lacks %q:\n%s", want, r.body)
 	}
 	terminal, err := store.ParseFlow("new -> review\nreview -> new on changes max 1 then merged\nmerged terminal\n")
@@ -513,9 +534,14 @@ func TestBeadMoveButtons(t *testing.T) {
 	b2, err := f2.st.CreateBead(ctx2, store.NewBead{Title: "a door", Stage: "decide", Depot: "home"}, "ada")
 	must(t, err)
 	actFlow(t, f2)
+	// The Stage fold carries the outcomes in its place, with the command that
+	// reports each.
 	r = f2.get("/beads/" + b2.ID)
-	if strings.Contains(r.body, "move-form") || strings.Contains(r.body, "send on as") {
+	if strings.Contains(r.body, `<form class="wv-block"`) || strings.Contains(r.body, "Send on as") {
 		t.Errorf("the bead waits for decisions, and ada may send it:\n%s", r.body)
+	}
+	if fold := foldOf(t, r.body, b2.ID, "stage"); !strings.Contains(fold, "<code>yardr bead done "+b2.ID+" --outcome changes</code>") || !strings.Contains(fold, `<td class="wv-name">done</td><td>merged</td>`) {
+		t.Errorf("the Stage fold of a bead ada may not send lacks its outcomes:\n%s", fold)
 	}
 	// Without --as the outcomes read as commands.
 	f3 := newFixture(t)
@@ -530,7 +556,7 @@ func TestBeadMoveButtons(t *testing.T) {
 	must(t, err)
 	must(t, f3.st.SetFlowPointer(ctx3, "home", "", "code", "me"))
 	r = f3.get("/beads/" + b3.ID)
-	if !strings.Contains(r.body, "<code>yardr bead done "+b3.ID+" --outcome changes</code>") || strings.Contains(r.body, "move-form") {
+	if !strings.Contains(foldOf(t, r.body, b3.ID, "stage"), "<code>yardr bead done "+b3.ID+" --outcome changes</code>") || strings.Contains(r.body, `<form class="wv-block"`) {
 		t.Errorf("without --as the outcomes are not commands:\n%s", r.body)
 	}
 }
@@ -860,7 +886,6 @@ func TestBeadSecretWeightyCard(t *testing.T) {
 	f, b, seq := secretActYard(t)
 	r := f.get("/beads/" + b.ID)
 	for _, want := range []string{
-		`<h3 class="label">asks for mckean</h3>`,
 		`<p class="wv-ask__weight">WEIGHTY · credential: gives a credential or an address to the yard: CRM_TOKEN, for the source crm (https://crm.example.com)</p>`,
 		`a secret: CRM_TOKEN, for the source crm (https://crm.example.com)`,
 		// What the value reaches, in the lines the terminal's card has.
@@ -1014,7 +1039,6 @@ func TestBeadMappingWeightyCard(t *testing.T) {
 		t.Fatalf("the page JSON carries the held body: %s", apiPage.body)
 	}
 	for _, want := range []string{
-		`<h3 class="label">asks for mckean</h3>`,
 		`<p class="wv-ask__weight">WEIGHTY · as-user: lets calls or words count as a person&#39;s: a pick says which user U777 in talk is, and a delivery from them is then heard as that user&#39;s</p>`,
 		`A message reached talk from U777 in channel C1. Who is this?`,
 		`<h3 class="wv-ask__label">Held messages · 1</h3>`,
@@ -1120,9 +1144,9 @@ func TestBeadMoveFold(t *testing.T) {
 	r := f.get("/beads/" + b.ID)
 	for _, want := range []string{
 		`none: it may move to a stage with a matching route`,
-		`<select name="to" aria-label="Stage">`,
+		`<select class="wv-field" name="to" aria-label="Stage">`,
 		`<option value="s3">Move to s3</option>`,
-		`<button type="submit">Move to ...</button>`,
+		`<button class="wv-btn" type="submit">Move to ...</button>`,
 	} {
 		if !strings.Contains(r.body, want) {
 			t.Errorf("the folded page lacks %q:\n%s", want, r.body)
@@ -1131,7 +1155,7 @@ func TestBeadMoveFold(t *testing.T) {
 	if n := strings.Count(r.body, "<option value="); n != 7 {
 		t.Errorf("the folded page holds %d options, want 7", n)
 	}
-	if strings.Contains(r.body, `<button type="submit" name="to"`) {
+	if strings.Contains(r.body, `<button class="wv-btn" type="submit" name="to"`) {
 		t.Errorf("the folded page still lists buttons:\n%s", r.body)
 	}
 	// The one Move to ... button is what Enter in the note field presses, as
@@ -1164,7 +1188,7 @@ func TestBeadMoveFold(t *testing.T) {
 	if strings.Contains(r6.body, "<select") {
 		t.Errorf("six moves fold:\n%s", r6.body)
 	}
-	if n := strings.Count(r6.body, `<button type="submit" name="to"`); n != 6 {
+	if n := strings.Count(r6.body, `<button class="wv-btn" type="submit" name="to"`); n != 6 {
 		t.Errorf("six moves show %d buttons, want 6:\n%s", n, r6.body)
 	}
 	// Each has a button of its own, so the disabled one stands first.

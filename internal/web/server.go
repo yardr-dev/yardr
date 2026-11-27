@@ -513,6 +513,11 @@ type Page struct {
 	// the swap of the leaf the shell carries (liveStage, liveNone), "" for a
 	// page that is a snapshot, or follows the yard in fragments of its own.
 	live string
+	// self is the address the page's leaf reads again where it is not the
+	// address the page was asked at: a bead's page that a return from a fresh
+	// sign-in lands on is read at the bead's own address, since the return's
+	// is spent.
+	self string
 }
 
 // Overview is the overview the page was drawn from, for the two pages that
@@ -580,6 +585,9 @@ func (s *Server) respond(w http.ResponseWriter, r *http.Request, p Page) {
 	v := s.bare(r, p)
 	if p.Template != "error" && p.Template != "unbuilt" {
 		v.Bare, v.Head, v.Stream, v.Live = false, p.head, p.stream, p.live
+		if p.self != "" {
+			v.Self = p.self
+		}
 		if err := s.window(r.Context(), r, &v); err != nil {
 			s.fail(w, r, err)
 			return
@@ -628,10 +636,20 @@ func (s *Server) window(ctx context.Context, r *http.Request, v *view) error {
 			return err
 		}
 	}
+	pl := placeOf(r, *p)
 	l := p.line
 	if l == nil {
 		if l, err = s.line(ctx, ov); err != nil {
 			return err
+		}
+		// Decide's list says how late a running bead is, on every page of the
+		// mode: a page that read the line itself (the overview's) has read
+		// them already, and any other has them read here, so the list is the
+		// same whichever page it stands beside.
+		if pl.mode == "decide" {
+			if l.Late, err = s.lateRows(ctx, ov.yard); err != nil {
+				return err
+			}
 		}
 	}
 	// The rail's Crew badge beside the line: the acting user's aggregate
@@ -657,7 +675,6 @@ func (s *Server) window(ctx context.Context, r *http.Request, v *view) error {
 		unread = inbox.Unread
 	}
 	waits := attention(ov, l)
-	pl := placeOf(r, *p)
 	v.Rail = railFor(v.Yard, pl.mode, len(waits), unread)
 	switch pl.mode {
 	case "decide":

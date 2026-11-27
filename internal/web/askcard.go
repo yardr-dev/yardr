@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"net/url"
+	"strconv"
 	"time"
 
 	"yardr.dev/yardr/internal/store"
@@ -92,6 +93,16 @@ type AskCard struct {
 	// giving to a member. A person's own Google sign-in is theirs alone
 	// likewise, so no page offers its giving to anyone.
 	Give bool
+}
+
+// ID is the ask card's id, made safe for selectors that find preserved fields.
+func (c AskCard) ID() string {
+	return elementID("ask", c.Bead, strconv.FormatUint(c.Ask, 10))
+}
+
+// WordsID is the id of the card's preserved words field.
+func (c AskCard) WordsID() string {
+	return elementID("words", c.Bead, strconv.FormatUint(c.Ask, 10))
 }
 
 // optionRow is one option as the card draws its row: its number, its label and
