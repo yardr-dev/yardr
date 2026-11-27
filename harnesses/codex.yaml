@@ -35,7 +35,7 @@ fetch:
       member: codex-x86_64-apple-darwin
 
 # Codex asks whether a folder is trusted the first time it is started in
-# it: yardr answers it (internal/runner/trust.go). The dialog is its
+# it: yardr answers it (internal/runner/herdr/trust.go). The dialog is its
 # question, the answer the one that accepts it, as codex-cli 0.160.1
 # prints them, read 2026-10-15 from a review session's pane. Codex trusts
 # by git repository root, so one answer covers the depot; answering the
@@ -259,7 +259,7 @@ errors:
 #      2. Keep current model
 #      3. Keep current model (never show again)
 #
-# yardr declines it with Esc (internal/runner/herdr_screen.go): the prompt
+# yardr declines it with Esc (internal/runner/herdr/herdr_screen.go): the prompt
 # is a picker with no cancel action, so Esc dismisses it without choosing:
 # the session keeps its model and nothing is persisted. The first option
 # would switch the model, which yardr never selects; a session found on

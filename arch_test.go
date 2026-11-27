@@ -38,6 +38,7 @@ const (
 	cliPkg         = internalPrefix + "cli"
 	dispatchPkg    = internalPrefix + "dispatch"
 	runnerPkg      = internalPrefix + "runner"
+	runnerHerdrPkg = internalPrefix + "runner/herdr"
 	serverPkg      = internalPrefix + "server"
 	rootPkg        = "yardr.dev/yardr"
 )
@@ -152,7 +153,7 @@ func TestLayersMatchCode(t *testing.T) {
 			leaves = append(leaves, pkg)
 		}
 	}
-	otherLayers := map[string]bool{storePkg: true, dispatchPkg: true, runnerPkg: true, serverPkg: true, cliPkg: true}
+	otherLayers := map[string]bool{storePkg: true, dispatchPkg: true, runnerPkg: true, runnerHerdrPkg: true, serverPkg: true, cliPkg: true}
 	leaf := map[string]bool{}
 	for _, pkg := range leaves {
 		leaf[pkg] = true
@@ -212,7 +213,7 @@ func TestLayersMatchCode(t *testing.T) {
 	leavesLine := countOf("- leaves", len(leaves))
 	storeLine := countOf("- store", 1)
 	servicesLine := countOf("- services", len(services))
-	dispatchLine := countOf("- `dispatch`", 3)
+	dispatchLine := countOf("- `dispatch`", 4)
 	cliLine := countOf("- cli", 1)
 	checkLayer := func(line string, want []string) {
 		got := layerNames(line)
@@ -228,7 +229,7 @@ func TestLayersMatchCode(t *testing.T) {
 	checkLayer(leavesLine, slices.Clone(leaves))
 	checkLayer(storeLine, []string{storePkg})
 	checkLayer(servicesLine, slices.Clone(services))
-	checkLayer(dispatchLine, []string{dispatchPkg, runnerPkg, serverPkg})
+	checkLayer(dispatchLine, []string{dispatchPkg, runnerPkg, runnerHerdrPkg, serverPkg})
 	checkLayer(cliLine, []string{cliPkg})
 	// The store's internal-import count and the CLI's imports count.
 	f := strings.Fields(storeLine)

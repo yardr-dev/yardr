@@ -65,7 +65,7 @@ import (
 // commitHook).
 //
 // And the entries of the group's config.env_file, as a herdr group's agents
-// get theirs (see envFile): what the script needs to act outside the yard,
+// get theirs (see EnvFile): what the script needs to act outside the yard,
 // such as the path of a deploy key, which belongs neither in the store, where
 // cmd is, nor in the daemon's own environment.
 //
@@ -93,7 +93,7 @@ func (e *Exec) Start(ctx context.Context, job dispatch.Job) (map[string]any, err
 			return nil, err
 		}
 	}
-	hookEnv, err := commitHookEnv(e.Home)
+	hookEnv, err := CommitHookEnv(e.Home)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +107,7 @@ func (e *Exec) Start(ctx context.Context, job dispatch.Job) (map[string]any, err
 	}
 	// Before anything is made: a group whose env_file is refused starts
 	// nothing until it is fixed.
-	secrets, err := envFile(e.Log, job.Group.Config, "group "+job.Group.Name)
+	secrets, err := EnvFile(e.Log, job.Group.Config, "group "+job.Group.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -128,9 +128,9 @@ func (e *Exec) Start(ctx context.Context, job dispatch.Job) (map[string]any, err
 	cmd.Dir = dir
 	// The file's entries come after what is inherited, so they win over the
 	// daemon's own, and are held to what the daemon's are: none of what
-	// withheld leaves out, and no key yardr sets itself (withEnvFile).
+	// withheld leaves out, and no key yardr sets itself (WithEnvFile).
 	cmd.Env = slices.Concat(inherited(job),
-		withEnvFile(slices.Concat(Env(job, job.Group.Name), e.env(job, hookEnv)), withheld(job, secrets)))
+		WithEnvFile(slices.Concat(Env(job, job.Group.Name), e.env(job, hookEnv)), withheld(job, secrets)))
 	cmd.Stdout, cmd.Stderr = logf, logf
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	// The command starts with nothing of the daemon's above stdio: os/exec
@@ -236,7 +236,7 @@ func withUser(env []string) []string {
 // systemGitconfigClean); for a dir depot's bead, which has no base, branch
 // or worktree, any of those too; and git's GIT_CONFIG_COUNT/KEY_n/VALUE_n,
 // which would otherwise win over (or add to) the core.hooksPath the session
-// points at its own commit-msg hook with (see commitHookEnv): a repeated
+// points at its own commit-msg hook with (see CommitHookEnv): a repeated
 // variable is answered with its first, so one inherited from the daemon
 // would beat the session's appended one. GIT_CONFIG_PARAMETERS is
 // command-line config and has higher precedence still, so the session
@@ -276,7 +276,7 @@ func (e *Exec) env(job dispatch.Job, hookEnv []string) []string {
 	// an agent. Beside it, the core.hooksPath that points the session's git
 	// at the hook, through the environment, so the depot's shared
 	// .git/config is never written.
-	env = slices.Concat(env, config.Env("KIND", "exec"), config.Env("MODEL", sessionModel(job)))
+	env = slices.Concat(env, config.Env("KIND", "exec"), config.Env("MODEL", SessionModel(job)))
 	env = append(env, hookEnv...)
 	// Always set, empty for a bead with no train, so that one the daemon was
 	// itself started with cannot read as this bead's.
@@ -395,7 +395,7 @@ func (e *Exec) Stop(_ context.Context, h map[string]any) error {
 // signalled. (Alive and Stop call this only where they can verify; where
 // the OS reports no state, the pid is trusted as before.)
 func owns(h map[string]any, st stat) bool {
-	want, ok := uintOf(h["start"])
+	want, ok := UintOf(h["start"])
 	return ok && want == st.start
 }
 
@@ -442,7 +442,11 @@ func procStat(pid int) (stat, error) {
 	return stat{state: st.State, start: st.Start}, nil
 }
 
-func uintOf(v any) (uint64, bool) {
+// UintOf reads a number of a session's handle as an unsigned integer. The
+// store keeps a handle as JSON, so what a runner wrote as a uint64 comes back
+// a float64; a string of digits reads as its number. ok is false for any
+// other value.
+func UintOf(v any) (uint64, bool) {
 	switch v := v.(type) {
 	case uint64:
 		return v, true

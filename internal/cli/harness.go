@@ -9,7 +9,7 @@ import (
 
 	"io"
 	"yardr.dev/yardr/internal/agents"
-	"yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -156,7 +156,7 @@ var atUnits = map[string]string{"s": "seconds", "ms": "milliseconds", "us": "mic
 // field each of the four counts is read from, and in at, where a line's time
 // is. A count the entry names no field for reads as 0, and an entry that
 // names no time for its lines is left out of a count that stops at a time
-// (usageEntries in internal/runner/usage.go).
+// (usageEntries in internal/runner/herdr/usage.go).
 func usageEntry(u store.UsageSource) (lines, counts, at string) {
 	numbers := " that has numbers at " + u.Usage
 	if slices.Contains(strings.Split(u.Usage, "."), "*") {
@@ -385,7 +385,7 @@ func printHarness(w io.Writer, h store.Harness, has bool) {
 		rows = nil
 		for _, d := range h.Dialogs {
 			answer := "never"
-			if runner.CancelsDialog(d.Dialog) {
+			if herdr.CancelsDialog(d.Dialog) {
 				answer = "Esc (cancelled)"
 			}
 			rows = append(rows, []string{"  " + d.Dialog, d.Pattern, answer})

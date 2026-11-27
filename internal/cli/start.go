@@ -17,7 +17,7 @@ import (
 	"yardr.dev/yardr/internal/chat"
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/dispatch"
-	"yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -147,7 +147,7 @@ func daemonEnv(environ []string, home string) []string {
 
 // focusAgent brings an agent's pane to the front in herdr; tests replace it.
 var focusAgent = func(ctx context.Context, agent string) error {
-	out, err := runner.HerdrCommand(ctx, "herdr", "agent", "focus", agent).CombinedOutput()
+	out, err := herdr.HerdrCommand(ctx, "herdr", "agent", "focus", agent).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("herdr agent focus %s: %w: %s", agent, err, strings.TrimSpace(string(out)))
 	}
@@ -159,7 +159,7 @@ var focusAgent = func(ctx context.Context, agent string) error {
 // The pane's program gets the keys, so it is the terminal's own that herdr
 // is given.
 var attachAgent = func(ctx context.Context, agent string) error {
-	cmd := runner.HerdrCommand(ctx, "herdr", "agent", "attach", agent)
+	cmd := herdr.HerdrCommand(ctx, "herdr", "agent", "attach", agent)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("herdr agent attach %s: %w", agent, err)
@@ -178,20 +178,20 @@ const (
 // paneTail is the last lines a session's pane shows, blank ones left out;
 // tests replace it.
 var paneTail = func(ctx context.Context, handle map[string]any, lines int) (string, error) {
-	return (&runner.Herdr{Bin: "herdr"}).Tail(ctx, handle, lines)
+	return (&herdr.Herdr{Bin: "herdr"}).Tail(ctx, handle, lines)
 }
 
 // paneHistory is paneTail with the agent's history fetched, for which herdr
-// may scroll the transcript of an idle agent and back (runner.Herdr.History);
+// may scroll the transcript of an idle agent and back (herdr.Herdr.History);
 // tests replace it.
 var paneHistory = func(ctx context.Context, handle map[string]any, lines int) (string, error) {
-	return (&runner.Herdr{Bin: "herdr"}).History(ctx, handle, lines)
+	return (&herdr.Herdr{Bin: "herdr"}).History(ctx, handle, lines)
 }
 
 // agentStatus is herdr's reading of a session's agent (idle, working,
 // blocked, done, unknown; "" when it is gone); tests replace it.
 var agentStatus = func(ctx context.Context, handle map[string]any) (string, error) {
-	return (&runner.Herdr{Bin: "herdr"}).Status(ctx, handle)
+	return (&herdr.Herdr{Bin: "herdr"}).Status(ctx, handle)
 }
 
 const (
@@ -235,7 +235,7 @@ func (s *startResult) describe(ctx context.Context, cfg *config.Config, st store
 	s.Running, s.Yardmaster, s.Chat, s.Problem, s.Pane, s.Known, s.Next = false, nil, "", "", "", nil, nil
 	if r != nil && r.Live() {
 		all, _ := st.Settings(ctx)
-		s.Yardmaster = placeOf(*r, runner.YardName(cfg.Home, all))
+		s.Yardmaster = placeOf(*r, herdr.YardName(cfg.Home, all))
 	}
 	if problem == "" {
 		s.Running, s.Chat = true, yardrAt(cfg.Home)+" chat"
@@ -565,7 +565,7 @@ func waitYardmaster(ctx context.Context, cfg *config.Config, st store.API, yardm
 // a login). The dispatcher types the prompt once the screen is up, which
 // takes the pending prompt off the handle and ends the state.
 func pendingNoScreen(r store.CrewMember) bool {
-	return r.Handle[store.PendingPrompt] != nil && r.Handle[dispatch.PromptLook] == runner.PromptNotTyped
+	return r.Handle[store.PendingPrompt] != nil && r.Handle[dispatch.PromptLook] == herdr.PromptNotTyped
 }
 
 // sayHarnessWaits says, the once during the wait, that the yardmaster's
@@ -581,7 +581,7 @@ func sayHarnessWaits(warn io.Writer, ctx context.Context, cfg *config.Config, st
 		}
 	}
 	all, _ := st.Settings(ctx)
-	if p := placeOf(*r, runner.YardName(cfg.Home, all)); p.Agent != "" {
+	if p := placeOf(*r, herdr.YardName(cfg.Home, all)); p.Agent != "" {
 		fmt.Fprintf(warn, "\nTo reach it:\n\n"+
 			"  herdr agent focus %s     # in herdr: brings its pane to the front\n"+
 			"  herdr agent attach %s    # from any other terminal: opens its pane there\n", p.Agent, p.Agent)
@@ -604,7 +604,7 @@ func up(ctx context.Context, r store.CrewMember) bool {
 	if err != nil {
 		return false
 	}
-	if strings.Contains(text, runner.CrewPromptLead) {
+	if strings.Contains(text, herdr.CrewPromptLead) {
 		return promptAnswered(text)
 	}
 	// Not in what the pane shows: an agent that answered with more than a
@@ -620,13 +620,13 @@ func up(ctx context.Context, r store.CrewMember) bool {
 // prompt. A pane without the prompt has no answer to it: a harness at a
 // login screen takes the keys and shows none of them.
 func promptAnswered(text string) bool {
-	i := strings.LastIndex(text, runner.CrewPromptLead)
+	i := strings.LastIndex(text, herdr.CrewPromptLead)
 	if i < 0 {
 		return false
 	}
 	rest := text[i:]
-	if j := strings.Index(rest, runner.CrewPromptEnd); j >= 0 {
-		rest = rest[j+len(runner.CrewPromptEnd):]
+	if j := strings.Index(rest, herdr.CrewPromptEnd); j >= 0 {
+		rest = rest[j+len(herdr.CrewPromptEnd):]
 	} else if j := strings.IndexByte(rest, '\n'); j >= 0 {
 		rest = rest[j:]
 	} else {
@@ -658,7 +658,7 @@ func absent(r store.CrewMember) []string {
 // placeOf reads where a running crew member is from the handle the runner
 // recorded; the workspace's label is the one the runner gave it.
 func placeOf(r store.CrewMember, yard string) *yardmasterPlace {
-	return &yardmasterPlace{Agent: show(r.Handle["agent"]), Workspace: runner.CrewLabel(yard, r.Name),
+	return &yardmasterPlace{Agent: show(r.Handle["agent"]), Workspace: herdr.CrewLabel(yard, r.Name),
 		WorkspaceID: show(r.Handle["workspace"]), Tab: show(r.Handle["tab"]), Pane: show(r.Handle["pane"])}
 }
 

@@ -935,7 +935,7 @@ func (a *app) primeCmd() *cobra.Command {
 			}
 			// What the bead's session was put on, when it is not the bead's
 			// branch: the head of the pull request it tracks, which the
-			// runner fetched (runner.Herdr), so nobody has to fetch it.
+			// runner fetched (herdr.Herdr), so nobody has to fetch it.
 			var pull, pullHead string
 			if b.Session != nil {
 				if sess, err := st.GetSession(c.Context(), *b.Session); err != nil {

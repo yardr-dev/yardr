@@ -19,7 +19,7 @@ import (
 
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/rpc"
-	"yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 	"yardr.dev/yardr/internal/server"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/telemetry"
@@ -388,7 +388,7 @@ func (a *app) store(ctx context.Context) (store.API, error) {
 	}
 	// The panes a command asks herdr about are the yard's, whatever herdr
 	// session its shell is in.
-	runner.FollowSetting(a.st)
+	herdr.FollowSetting(a.st)
 	return a.st, nil
 }
 

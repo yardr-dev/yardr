@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"yardr.dev/yardr/internal/dispatch"
-	"yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
 )
@@ -21,7 +21,7 @@ import (
 type crewCountRunner struct {
 	*crewRunner
 	files  *countRunner // writes an agent's session file, where its harness keeps it
-	reader *runner.Herdr
+	reader *herdr.Herdr
 	kind   string
 	noID   bool // the runtime names no id for its agents, as for muse
 	asked  int  // SessionID calls
@@ -64,7 +64,7 @@ func crewCountSetup(t *testing.T, kind string) (store.API, *crewCountRunner, *di
 	home := t.TempDir()
 	c := &crewCountRunner{crewRunner: &crewRunner{status: map[string]string{}}, kind: kind,
 		files:  &countRunner{kind: kind, home: home},
-		reader: &runner.Herdr{AgentHomes: map[string]string{"claude": home, "codex": home, "muse": home}}}
+		reader: &herdr.Herdr{AgentHomes: map[string]string{"claude": home, "codex": home, "muse": home}}}
 	_, err := s.PutCrew(context.Background(), store.CrewMember{Name: "yardmaster", Runner: "fake"}, "me")
 	must(t, err)
 	return s, c, crewCountDispatcher(s, c)

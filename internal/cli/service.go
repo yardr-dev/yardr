@@ -183,7 +183,7 @@ func serviceInstalled(cfg *config.Config, kind string) bool {
 // home), the daemon's own retention setting, and where herdr's socket is
 // when the installer's herdr is not at its default place (a yard that names
 // its herdr session needs none of it: the daemon reads the herdr_session
-// setting itself, see runner.Herdr), and the variables the kind reads
+// setting itself, see herdr.Herdr), and the variables the kind reads
 // itself. Nothing else of the shell it was installed from: no
 // credential but the kind's own, no identity.
 func serviceEnv(environ []string, home string, k *longRunning) []string {

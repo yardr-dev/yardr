@@ -21,7 +21,7 @@ import (
 
 	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/peer"
-	"yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -186,7 +186,7 @@ type serverCheck struct {
 	// Session is the herdr session that was asked: the one the yard's
 	// herdr_session setting names, else this shell's own, which need not
 	// be the daemon's.
-	Session *runner.HerdrSession `json:"session,omitempty"`
+	Session *herdr.HerdrSession `json:"session,omitempty"`
 }
 
 // The states of a tryCheck.
@@ -361,7 +361,7 @@ func machineNeeds(ctx context.Context, uses []harnessUse, try bool) []need {
 			go func() {
 				defer wg.Done()
 				s := herdrServer(ctx, n.Path)
-				in := runner.SessionInUse()
+				in := herdr.SessionInUse()
 				s.Session = &in
 				n.Server = &s
 			}()
@@ -441,7 +441,7 @@ var herdrServer = func(ctx context.Context, path string) serverCheck {
 	}
 	ctx, cancel := context.WithTimeout(ctx, versionTimeout)
 	defer cancel()
-	down, err := (&runner.Herdr{Bin: path}).ServerUp(ctx)
+	down, err := (&herdr.Herdr{Bin: path}).ServerUp(ctx)
 	switch {
 	case err == nil:
 		return serverCheck{State: herdrUp}
@@ -529,7 +529,7 @@ func (s *serverCheck) line(n need) docLine {
 	in, start := "", "run herdr in a terminal"
 	if s.Session != nil {
 		in = "; " + s.Session.String()
-		if s.Session.From == runner.SessionSet {
+		if s.Session.From == herdr.SessionSet {
 			start = fmt.Sprintf("run herdr session attach %s in a terminal", s.Session.Name)
 		}
 	}

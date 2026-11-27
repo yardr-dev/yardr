@@ -577,18 +577,19 @@ func repairHookExec(path string, f hookFile) error {
 	return nil
 }
 
-// sessionModel is the agent model the session runs: the bead's
+// SessionModel is the agent model the session runs: the bead's
 // metadata.model, else the group's config.model, as the agent's own
-// --model (see agentArgs).
-func sessionModel(job dispatch.Job) string {
+// --model (see AgentArgs in internal/runner/herdr).
+func SessionModel(job dispatch.Job) string {
 	model, _ := job.Bead.Metadata["model"].(string)
-	return modelFor(job.Group.Config, model)
+	return ModelFor(job.Group.Config, model)
 }
 
-// modelFor resolves the agent model: the bead's override, else the group's
-// config.model. AgentArgs and the session environment (YARDR_MODEL) share
-// the one rule, so the model the agent runs is the model its commits name.
-func modelFor(cfg map[string]any, override string) string {
+// ModelFor resolves the agent model: the bead's override, else the group's
+// config.model. The herdr runner's AgentArgs and the session environment
+// (YARDR_MODEL) share the one rule, so the model the agent runs is the model
+// its commits name.
+func ModelFor(cfg map[string]any, override string) string {
 	if override != "" {
 		return override
 	}
@@ -637,7 +638,7 @@ func withoutGitOverrides(environ []string) []string {
 	})
 }
 
-// commitHookEnv points the session's git at the yard's commit-msg hook
+// CommitHookEnv points the session's git at the yard's commit-msg hook
 // (EnsureCommitHook): core.hooksPath through the environment, so the depot's
 // shared .git/config is never written. A runner with a home cannot start a
 // session without its hook: otherwise commits would silently miss the
@@ -645,7 +646,7 @@ func withoutGitOverrides(environ []string) []string {
 // install's system gitconfig (see systemGitconfigClean): 1 when it names no
 // core.hooksPath and no include, 0 otherwise, always set so no inherited
 // value reads as the session's.
-func commitHookEnv(home string) ([]string, error) {
+func CommitHookEnv(home string) ([]string, error) {
 	if home == "" {
 		return nil, nil
 	}

@@ -16,7 +16,7 @@ import (
 
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/dispatch"
-	"yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
 )
@@ -126,8 +126,8 @@ func TestOnboardingStartsTheYard(t *testing.T) {
 	}
 	// The yardmaster greets the operator the onboarding named, whoever
 	// the login is: the form takes who the run acts as.
-	if r, err := st.GetCrew(context.Background(), "yardmaster"); err != nil || runner.Greets(*r) != "" || r.Config[runner.GreetKey] != testOperator(t, st) {
-		t.Fatalf("the yardmaster, once started, greets %q again (config %v): %v", runner.Greets(*r), r.Config, err)
+	if r, err := st.GetCrew(context.Background(), "yardmaster"); err != nil || herdr.Greets(*r) != "" || r.Config[herdr.GreetKey] != testOperator(t, st) {
+		t.Fatalf("the yardmaster, once started, greets %q again (config %v): %v", herdr.Greets(*r), r.Config, err)
 	}
 }
 
@@ -353,7 +353,7 @@ func TestWaitSaysTheHarnessWaitsInItsPane(t *testing.T) {
 	screenHandle := func() map[string]any {
 		h := yardmasterHandle()
 		h[store.PendingPrompt] = prompt
-		h[dispatch.PromptLook] = runner.PromptNotTyped
+		h[dispatch.PromptLook] = herdr.PromptNotTyped
 		return h
 	}
 	shortenWait := func(t *testing.T, poll, settle time.Duration) {
@@ -609,7 +609,7 @@ func TestUpReadsHistoryOnlyWhenThePromptLeftTheScreen(t *testing.T) {
 		histories             int
 	}{
 		{"answered, on the screen", answeredPane, "", true, 0},
-		{"on the screen, no answer", "❯ " + runner.CrewPromptLead + "\"yardmaster\".", answeredPane, false, 0},
+		{"on the screen, no answer", "❯ " + herdr.CrewPromptLead + "\"yardmaster\".", answeredPane, false, 0},
 		{"answered, above the screen", "⏺ The yard is quiet.\n❯", answeredPane, true, 1},
 		{"nowhere", "sh$ claude", "sh$ claude", false, 1},
 	} {

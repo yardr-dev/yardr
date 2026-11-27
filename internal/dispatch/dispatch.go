@@ -57,7 +57,7 @@ type Job struct {
 	// Pull is the pull request the bead tracks; nil when it tracks none, and
 	// for a train, whose own pull request is of the yard's branch. A runner
 	// that gives the bead a worktree makes it stand on the pull request's
-	// head (see runner.Herdr).
+	// head (see herdr.Herdr).
 	Pull *Pull
 }
 

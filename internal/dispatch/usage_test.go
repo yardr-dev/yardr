@@ -18,6 +18,7 @@ import (
 	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/dispatch"
 	"yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
 )
@@ -30,7 +31,7 @@ import (
 // the runner reads, and the harness files of the kinds are the real ones.
 type countRunner struct {
 	*fakeRunner
-	reader *runner.Herdr
+	reader *herdr.Herdr
 	kind   string
 	home   string
 
@@ -166,7 +167,7 @@ func countSetup(t *testing.T, kind string, cfg map[string]any, limit int) (store
 	s := storetest.New(t)
 	home := t.TempDir()
 	r := &countRunner{fakeRunner: &fakeRunner{dead: map[string]bool{}}, kind: kind, home: home, gone: map[string]bool{},
-		reader: &runner.Herdr{AgentHomes: map[string]string{"claude": home, "codex": home, "muse": home}}}
+		reader: &herdr.Herdr{AgentHomes: map[string]string{"claude": home, "codex": home, "muse": home}}}
 	ctx := context.Background()
 	config := map[string]any{"kind": kind}
 	maps.Copy(config, cfg)
@@ -495,7 +496,7 @@ func TestSessionWithoutAnIDIsMatchedOrMissing(t *testing.T) {
 func TestSessionsWithoutAnAgentAreNotCounted(t *testing.T) {
 	t.Parallel()
 	for name, r := range map[string]dispatch.Runner{
-		"manual": &runner.Manual{}, "exec": &runner.Exec{}, "peer": &runner.Peer{}, "herdr": &runner.Herdr{}} {
+		"manual": &runner.Manual{}, "exec": &runner.Exec{}, "peer": &runner.Peer{}, "herdr": &herdr.Herdr{}} {
 		if _, reads := r.(dispatch.UsageReader); reads != (name == "herdr") {
 			t.Errorf("the %s runner reads a count: %v", name, reads)
 		}
@@ -504,8 +505,8 @@ func TestSessionsWithoutAnAgentAreNotCounted(t *testing.T) {
 		}
 	}
 	for name, countable := range map[string]bool{
-		"no handle":    dispatch.Countable(&runner.Herdr{}, nil),
-		"empty handle": dispatch.Countable(&runner.Herdr{}, map[string]any{}),
+		"no handle":    dispatch.Countable(&herdr.Herdr{}, nil),
+		"empty handle": dispatch.Countable(&herdr.Herdr{}, map[string]any{}),
 		"no runner":    dispatch.Countable(nil, map[string]any{"agent": "a1"}),
 	} {
 		if countable {

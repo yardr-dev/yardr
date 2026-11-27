@@ -49,7 +49,7 @@ The norm pages of the core's contracts are in `docs/contracts/` in yardr's repos
 ```
 internal/store      the bbolt store: records, indexes, revisions, event log and push hub
 internal/dispatch   routing, claims, liveness, teardown (the only control loop)
-internal/runner     manual, exec, herdr, peer
+internal/runner     manual, exec, peer; the herdr runner is internal/runner/herdr
 internal/bdp        the server of BDP's Core reads (protocol rules, selector, paging)
 internal/web        the read-only web view (pages as HTML or JSON, embedded assets)
 internal/rpc        the store API over the server's unix socket; go generate ./internal/rpc writes the client's wrappers from store.API

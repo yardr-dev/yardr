@@ -12,13 +12,11 @@ import (
 
 // A yard without a key can send its peers nothing, which is the group's to
 // be told of and no failure of the bead: the start is refused as blocked.
-// The runner is one of the built-in ones, and its session one that waits.
+// Its session is one that waits. That it is one of the built-in runners is
+// internal/cli's TestBuiltinRunners.
 func TestPeerRunner(t *testing.T) {
 	t.Parallel()
-	r, ok := All(t.TempDir(), nil, nil, nil)[store.PeerRunner].(*Peer)
-	if !ok {
-		t.Fatal("the peer runner is not one of the built-in runners")
-	}
+	r := &Peer{Home: t.TempDir()}
 	if w, ok := dispatch.Runner(r).(dispatch.Waiter); !ok || w.WaitLimit() != PeerWait {
 		t.Fatal("a peer session is not one that waits")
 	}

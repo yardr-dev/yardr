@@ -39,7 +39,7 @@ type Harness struct {
 	// harness is installed by hand, as Install says.
 	Fetch *Fetch `yaml:"fetch" json:"fetch,omitempty"`
 	// Trust is the harness's folder-trust dialog, which yardr answers
-	// (internal/runner/trust.go); nil when it answers none.
+	// (internal/runner/herdr/trust.go); nil when it answers none.
 	Trust *Trust `yaml:"trust" json:"trust,omitempty"`
 	Marks Marks  `yaml:"marks" json:"marks"`
 	Flags Flags  `yaml:"flags" json:"flags"`
@@ -72,7 +72,7 @@ type Harness struct {
 	Errors []ErrorLine   `yaml:"errors" json:"errors,omitempty"`
 	// Dialogs are the questions the harness is known to draw in place of
 	// its input. yardr tells of each one and answers none, except those the
-	// herdr runner cancels with Esc (runner.CancelsDialog).
+	// herdr runner cancels with Esc (herdr.CancelsDialog).
 	Dialogs []Dialog `yaml:"dialogs" json:"dialogs,omitempty"`
 	// Login are the lines of the harness's login screen, drawn in place
 	// of its input when it has no login, which yardr types nothing into

@@ -22,7 +22,7 @@ import (
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/hooks"
 	"yardr.dev/yardr/internal/pack"
-	"yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/packs"
 )
@@ -846,7 +846,7 @@ func (a *app) putYardmaster(ctx context.Context, st store.API, o initOptions, re
 	}
 	// greet: its first session writes to the operator by mail, which is
 	// where the onboarding takes them (yardr chat).
-	conf := map[string]any{"kind": o.Harness, runner.GreetKey: res.Operator}
+	conf := map[string]any{"kind": o.Harness, herdr.GreetKey: res.Operator}
 	if res.Prompt != "" {
 		conf["prompt"] = res.Prompt
 	}
@@ -1368,7 +1368,7 @@ func settingRows(home string, stored map[string]string) []settingRow {
 			case store.OperatorSetting:
 				v, from = defaultOperator(), store.FromDefault
 			case store.NameSetting:
-				v, from = runner.YardName(home, nil), store.FromDefault
+				v, from = herdr.YardName(home, nil), store.FromDefault
 			}
 		}
 		rows = append(rows, settingRow{k, v, from})

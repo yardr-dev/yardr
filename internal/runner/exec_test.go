@@ -49,7 +49,7 @@ func TestExecZombieEndsTheSession(t *testing.T) {
 	mustT(t, err)
 	pid, err := pidOf(s.Handle)
 	mustT(t, err)
-	if _, ok := uintOf(s.Handle["start"]); !ok {
+	if _, ok := UintOf(s.Handle["start"]); !ok {
 		t.Fatalf("handle has no start time: %v", s.Handle)
 	}
 
@@ -448,7 +448,7 @@ func TestExecAdoptedSessionRunsUntilItsProcessExits(t *testing.T) {
 	mustT(t, err)
 	pid, err := pidOf(s.Handle)
 	mustT(t, err)
-	start, ok := uintOf(s.Handle["start"])
+	start, ok := UintOf(s.Handle["start"])
 	if !ok {
 		t.Fatalf("handle has no start time: %v", s.Handle)
 	}
@@ -654,7 +654,7 @@ func TestExecTimeoutEndsTheSession(t *testing.T) {
 	mustT(t, err)
 	pid, err := pidOf(s.Handle)
 	mustT(t, err)
-	start, ok := uintOf(s.Handle["start"])
+	start, ok := UintOf(s.Handle["start"])
 	if !ok {
 		t.Fatalf("handle has no start time: %v", s.Handle)
 	}
@@ -676,7 +676,7 @@ func TestExecTimeoutEndsTheSession(t *testing.T) {
 				continue
 			}
 			pid, err := pidOf(s.Handle)
-			start, ok := uintOf(s.Handle["start"])
+			start, ok := UintOf(s.Handle["start"])
 			if err != nil || !ok {
 				continue
 			}

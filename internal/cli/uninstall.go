@@ -17,7 +17,7 @@ import (
 
 	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/config"
-	"yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -232,7 +232,7 @@ func readYard(ctx context.Context, cfg *config.Config, st store.API) (*yardFacts
 	if err != nil {
 		return nil, err
 	}
-	f := &yardFacts{name: runner.YardName(cfg.Home, settings)}
+	f := &yardFacts{name: herdr.YardName(cfg.Home, settings)}
 	beads, err := st.ListBeads(ctx, store.BeadFilter{All: true})
 	if err != nil {
 		return nil, err
@@ -480,7 +480,7 @@ func depotWorktrees(ctx context.Context, repo string) []depotWorktree {
 
 // uncommitted is what keeps a worktree from being removed, "" for one with
 // nothing in it that is in no commit: what yardr's own cleanup asks before
-// it removes one (runner.Herdr.Finish). A directory git cannot read as a
+// it removes one (herdr.Herdr.Finish). A directory git cannot read as a
 // worktree counts as one with changes: nobody can say it has none.
 func uncommitted(ctx context.Context, path string) string {
 	top, err := git(ctx, path, "rev-parse", "--show-toplevel")

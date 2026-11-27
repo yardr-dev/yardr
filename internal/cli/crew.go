@@ -20,7 +20,7 @@ import (
 	"yardr.dev/yardr/internal/agents"
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/hooks"
-	"yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 	"yardr.dev/yardr/internal/source"
 	"yardr.dev/yardr/internal/store"
 )
@@ -831,7 +831,7 @@ func (a *app) crewSession(flag string) string {
 	if flag != "" {
 		return flag
 	}
-	return a.yardrenv(runner.CrewForEnv)
+	return a.yardrenv(herdr.CrewForEnv)
 }
 
 // noteAuthor is who wrote a journal note, with the conversation session

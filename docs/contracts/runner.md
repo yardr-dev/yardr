@@ -1,12 +1,12 @@
 # Runner
 
-A runner is how a session starts. What crosses the core's edge here is the `Runner` interface of `internal/dispatch`, the optional interfaces a runner may add to it, and the session handle: a `map[string]any` that a runner's `Start` returns and the store keeps on the session. The dispatch pass and the store sit on one side of it, and `internal/runner` on the other, with four runners: `manual` (a person or an outside agent works the bead), `exec` (a command), `herdr` (an agent program in a pane that herdr runs) and `peer` (another yard). The herdr runner's reading of a pane is how-and-what, and herdr, which it reaches by its command line and its socket, is an outside program that is no part of the core. The design is section 3.2.3 of [the design](../design/2026-11-24-yardr-h5wn-core-contracts.md).
+A runner is how a session starts. What crosses the core's edge here is the `Runner` interface of `internal/dispatch`, the optional interfaces a runner may add to it, and the session handle: a `map[string]any` that a runner's `Start` returns and the store keeps on the session. The dispatch pass and the store sit on one side of it. On the other side are four runners: `internal/runner` holds `manual` (a person or an outside agent works the bead), `exec` (a command) and `peer` (another yard), and `internal/runner/herdr` holds `herdr` (an agent program in a pane that herdr runs). The herdr runner is how-and-what, and herdr, which it reaches by its command line and its socket, is an outside program that is no part of the core. The design is section 3.2.3 of [the design](../design/2026-11-24-yardr-h5wn-core-contracts.md).
 
 ## Form
 
 **The interface.** `dispatch.Runner` (`internal/dispatch/dispatch.go:Runner`) has three methods. `Start(ctx, job)` starts the work for a `dispatch.Job` (`internal/dispatch/dispatch.go:Job`) and returns the handle. `Alive(ctx, handle)` says whether the work still runs, and an error from it means unknown and never ends a session. `Stop(ctx, handle)` tears down what the runner made once the session has ended. A `Start` error may say whose fault it is: `dispatch.Runtime` marks the runtime's (herdr missing or down), `dispatch.Blocked` the session's own configuration's (an `env_file` that is missing or open to others), and `dispatch.BeadBlocked` the bead's own, for which a person must act (`internal/dispatch/runerrors.go:Runtime`, `internal/dispatch/runerrors.go:Blocked` and `internal/dispatch/runerrors.go:BeadBlocked`).
 
-**The registry.** `runner.All` (`internal/runner/runner.go:All`) returns the runners by the name a group refers to them by: `manual`, `exec`, `herdr` and `store.PeerRunner`, which is `peer`. The daemon builds its runners with it (`internal/cli/ops.go:daemonRunners`), and `yardr down` asks each about its agent with it (`internal/cli/updown.go:yardRunners`).
+**The registry.** The runners are built in one place, `internal/cli/runners.go:builtinRunners`, which returns them by the name a group refers to them by: `manual`, `exec`, `herdr` and `store.PeerRunner`, which is `peer`. The daemon's start (`internal/cli/ops.go:daemonRunners`), `yardr down`, which asks each runner about its agent (`internal/cli/updown.go:yardRunners`), and `yardr group add`'s check of a runner's name all call it. Adding a runner implementation to that map is a package beside `internal/runner/herdr` and one entry there; a usable second runner still needs the store's and dispatch's runner-name literals widened, which this page names as open under Planned.
 
 **The optional interfaces.** A runner implements any of the interfaces below that it can answer, and the dispatcher asks each question only of a runner that does; one that implements none is a complete runner. The interfaces are the exported interface types of the non-test files of `internal/dispatch`, 29 with `Runner`. The herdr runner implements all of them but `Waiter`, which the peer runner implements; `manual` and `exec` implement `Runner` alone.
 
@@ -44,7 +44,7 @@ A runner is how a session starts. What crosses the core's edge here is the `Runn
 
 **The session handle.** `Session.Handle` (`internal/store/routing.go:Session`) and `CrewSession.Handle` (`internal/store/crew.go:CrewSession`) hold the map. What is in it is the runner's, except for the few keys that the store and the dispatcher read or write besides (see Stored data).
 
-**The herdr program.** Herdr is reached by its command line and its socket (`internal/runner/herdr_api.go`, `internal/runner/herdr_events.go`). What yardr asks of it is herdr 0.9's, and the oldest herdr yardr starts agents with is `herdrOldest` (`internal/cli/needs.go:herdrOldest`), checked by `yardr doctor` and `yardr up` (`herdrTooOld`, `internal/cli/needs.go:herdrTooOld`), not by the runner.
+**The herdr program.** Herdr is reached by its command line and its socket (`internal/runner/herdr/herdr_api.go`, `internal/runner/herdr/herdr_events.go`). What yardr asks of it is herdr 0.9's, and the oldest herdr yardr starts agents with is `herdrOldest` (`internal/cli/needs.go:herdrOldest`), checked by `yardr doctor` and `yardr up` (`herdrTooOld`, `internal/cli/needs.go:herdrTooOld`), not by the runner.
 
 ## Owner
 
@@ -69,20 +69,20 @@ Each runner builds its handle in `Start`:
 - `peer` (`internal/runner/peer.go:Peer.Start`) writes `peer`, `bead` and, once the message is sent, `message`.
 - `herdr` writes for a bead's session `agent`, `branch`, `repo`, `workspace`,
   `worktree`, `tab`, `pane`, `brief`, and `pull` and `pull_head` or `head` for
-  a pull request (`internal/runner/herdr.go:Herdr.Start`,
-  `internal/runner/herdr.go:Herdr.brief`), and the pane's shell as `shell_pid`,
-  `shell_start` and `herdr_session` (`internal/runner/herdr.go:Herdr.shellOn`).
+  a pull request (`internal/runner/herdr/herdr.go:Herdr.Start`,
+  `internal/runner/herdr/herdr.go:Herdr.brief`), and the pane's shell as `shell_pid`,
+  `shell_start` and `herdr_session` (`internal/runner/herdr/herdr.go:Herdr.shellOn`).
   For a bead of a dir depot it writes `agent`, `dir`, `depot`, `bead`,
-  `workspace`, `tab` and `pane` (`internal/runner/herdr_dir.go:Herdr.startDir`),
+  `workspace`, `tab` and `pane` (`internal/runner/herdr/herdr_dir.go:Herdr.startDir`),
   and for a crew member `agent`, `workspace`, `tab`, `pane` and `dir`, and
   `for`, the user, only when the session is a conversation session for that
-  user (`internal/runner/herdr_crew.go:Herdr.StartCrew`), and also
+  user (`internal/runner/herdr/herdr_crew.go:Herdr.StartCrew`), and also
   `launch_reference` when its harness finds the transcript by a live index
-  (`internal/runner/herdr_crew.go:launchReference`),
+  (`internal/runner/herdr/herdr_crew.go:launchReference`),
   `pane_home` when the pane's environment sets HOME
-  (`internal/runner/herdr_crew.go:paneHome`), and always
-  `first_prompt` (`internal/runner/herdr_prompt.go:firstPrompt`) and
-  `context_started_at` (`internal/runner/context.go:contextStartedAt`).
+  (`internal/runner/herdr/herdr_crew.go:paneHome`), and always
+  `first_prompt` (`internal/runner/herdr/herdr_prompt.go:firstPrompt`) and
+  `context_started_at` (`internal/runner/herdr/context.go:contextStartedAt`).
 
 The store names the keys it reads or writes itself where it declares the record: `pending_prompt` (`internal/store/routing.go:PendingPrompt`), `snooze_until` and `snooze_count` (`internal/store/routing.go:SnoozeUntil`, `internal/store/routing.go:SnoozeCount`), `count_due` (`internal/store/routing.go:CountDue`), `agent_session` and `kind` (`internal/store/crew.go:HandleAgentSession`, `internal/store/crew.go:HandleKind`), `harness_login` and `harness_login_ask` (`internal/store/crew.go:HarnessLoginKey`, `internal/store/crew.go:HarnessLoginAskKey`) and `herdr_session` (`internal/store/settings.go:HandleHerdrSession`). The dispatcher names the keys it writes in `internal/dispatch/dispatch.go`: `prompt_unconfirmed`, `prompt_started` and `prompt_look` (`internal/dispatch/dispatch.go:PromptUnconfirmed`, `internal/dispatch/dispatch.go:PromptStarted`, `internal/dispatch/dispatch.go:PromptLook`), and the keys of the harness passes that [harness.md](harness.md) lists.
 
@@ -106,3 +106,4 @@ The store names the keys it reads or writes itself where it declares the record:
 
 - **planned** (design 3.2.3): the herdr version named and checked at the runner's start. The herdr runner names the herdr version it reads in one place and checks it when it starts, and refuses a herdr it does not read with the version it needs. Today the one check is in `internal/cli/needs.go`, in `yardr doctor` and `yardr up`, and not in the runner.
 - **planned** (design 3.2.3): every handle key listed on this page with the runner that writes it. The lists under Stored data name what each runner builds in `Start` and where the store and the dispatcher declare theirs; a key that a runner adds to a running session's handle later is not yet listed.
+- **planned** (design 3.2.3): the runner names the store and dispatch hold as literals. A runner added to `builtinRunners` is built, but `internal/store` and `internal/dispatch` write the names of the runners the yard has in 78 non-test string literals of `"herdr"` or `"manual"` (counted at d688bc83f): a group-add card refuses any runner but `manual`, `herdr` and `exec` (`internal/store/runask_groupadd.go:parseGroupAdd`), and which runners count against `max_sessions` is a test of names (`internal/store/routing.go:RunsHere`). A second runner is usable once those are widened, which moves with the run-card rows and the later contract moves.

@@ -26,7 +26,7 @@ import (
 	"yardr.dev/yardr/internal/pprof"
 	"yardr.dev/yardr/internal/preview"
 	"yardr.dev/yardr/internal/rpc"
-	runners "yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 	"yardr.dev/yardr/internal/source"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/telemetry"
@@ -169,7 +169,7 @@ func (r *runner) serve(ctx context.Context) (string, bool, error) {
 	// How the operator's SessionScreen reads a pane's screen: herdr, as
 	// the runner builds it, with the store to follow the yard's herdr
 	// session setting on every read.
-	st.SetPaneReader(&runners.Herdr{Bin: "herdr", WorktreeRoot: c.Worktrees(), YardHome: c.Home, Store: st})
+	st.SetPaneReader(&herdr.Herdr{Bin: "herdr", WorktreeRoot: c.Worktrees(), YardHome: c.Home, Store: st})
 	// How TelemetryShow and TelemetrySet turn the switch and preview the
 	// next request: the CLI's own functions, on this home's state file.
 	st.SetTelemetrySwitch(telemetry.Switch{})
@@ -510,7 +510,7 @@ func serveHooks(ctx context.Context, c *config.Config, st *store.Store, log *slo
 	st.SetHeldFilesFetch(rc.FetchHeldFiles)
 	users := rpc.NewUserServer(st, func(ctx context.Context) string {
 		all, _ := st.Settings(ctx)
-		return runners.YardName(c.Home, all)
+		return herdr.YardName(c.Home, all)
 	}, log)
 	// A sealed pairing redemption is opened with the yard's channel
 	// key, read from its file for each one (rpc.SetChannelKeyFile).

@@ -1,0 +1,350 @@
+package herdr
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"yardr.dev/yardr/internal/agents"
+	"yardr.dev/yardr/internal/dispatch"
+	"yardr.dev/yardr/internal/store"
+)
+
+// Model is the model the session's agent itself reports, "" while it has
+// not answered yet or when its kind offers no source. An agent may run
+// another model than the --model it was started with (an outdated agent
+// that does not know the name falls back to one it does), and only the
+// agent can say which.
+//
+// The source is the agent's own session file, found through the session id
+// herdr reports for the pane (agent get: agent_session), or, when herdr
+// names no id and the kind declares a workspace, through the session's
+// worktree (matchWorkspace); not the pane's status line, which shows a
+// display name in a layout that changes. Where the file is and which line
+// names the model is in the kind's harness file (`model`,
+// store.ModelSource):
+//
+//	claude  ~/.claude/projects/<dir>/<id>.jsonl: the model of the first
+//	        assistant message, which is what the API answered with
+//	codex   ~/.codex/sessions/<y>/<m>/<d>/rollout-<time>-<id>.jsonl: the
+//	        model of the first turn_context
+//	muse    ~/.local/share/muse/sessions/<y>/<m>/<d>/<id>/session.jsonl:
+//	        the model_id of the first run.model.configured line, which is
+//	        what the run was started or reconfigured with
+//	pi      ~/.pi/agent/sessions/<dir>/<time>_<id>.jsonl: the model of the
+//	        first assistant message; herdr names the session by this path
+//
+// A kind whose file names no source reports nothing, as does one with no
+// session id and no worktree match for it.
+func (h *Herdr) Model(ctx context.Context, handle map[string]any, startedAt time.Time) (string, error) {
+	kind, id, err := h.sessionKind(ctx, handle)
+	if err != nil {
+		return "", err
+	}
+	if id == "" {
+		kind, id, err = h.matchSession(kind, handle, startedAt, 0)
+		if err != nil || id == "" {
+			return "", err
+		}
+	}
+	if kind.Model == nil {
+		return "", nil
+	}
+	return firstModel(kind.Model.Pattern(h.agentHome(kind), id), kind.Model.ModelIn)
+}
+
+// SessionID is the session id of the agent handle names, by which its own
+// session file is found: what herdr reports for the pane, or, when herdr
+// names no id and the kind declares a workspace, the worktree match's
+// (matchWorkspace). An indexed crew session answers its launch's verified
+// conversation instead (indexSession), whatever herdr reports: a pane may
+// resume another launch's conversation. "" while there is none: the agent
+// has not started its session, is gone, or its file matches nothing yet.
+// It is where Model and Context start, without their reading of the file,
+// so an agent that has not answered yet, or whose kind names no model,
+// has its id all the same.
+func (h *Herdr) SessionID(ctx context.Context, handle map[string]any, startedAt time.Time) (string, error) {
+	kind, id, err := h.sessionKind(ctx, handle)
+	if err != nil {
+		return "", err
+	}
+	if kind.Kind == "" {
+		if name, _ := handle[harnessKind].(string); name != "" {
+			kind, _ = agents.Lookup(name)
+		}
+	}
+	if src := kind.SessionFile(); src != nil && src.Index != nil {
+		if dir, _ := handle["dir"].(string); dir != "" {
+			// An indexed crew session pins only its launch's own
+			// conversation, verified by its first prompt; what herdr
+			// reports for the pane is never pinned unverified.
+			launch, _ := handle[launchReference].(string)
+			prompt, _ := handle[firstPrompt].(string)
+			if launch == "" || !strings.Contains(prompt, crewSessionReference(launch)) {
+				return "", nil
+			}
+			// agy can log the first prompt before the dispatcher records the start.
+			text, _ := handle[contextStartedAt].(string)
+			launchAt, err := time.Parse(time.RFC3339Nano, text)
+			if err != nil {
+				return "", fmt.Errorf("session index: invalid crew launch timestamp")
+			}
+			return h.indexSession(kind, handle, dir, launchAt, prompt)
+		}
+		// An ordinary bead session of an indexed kind keeps upstream's
+		// answer: what herdr reports, else the worktree match.
+	}
+	if id != "" {
+		return id, nil
+	}
+	_, id, err = h.matchSession(kind, handle, startedAt, 0)
+	return id, err
+}
+
+// matchSession is the kind and session id found for handle when herdr names
+// no id: kind is herdr's when it named an agent, else the handle's own, and
+// id is the worktree match's, "" when no file qualifies or two or more do.
+// An ambiguous match reads as no id here; the count says why (Usage).
+func (h *Herdr) matchSession(kind store.Harness, handle map[string]any, startedAt time.Time, preStart time.Duration) (store.Harness, string, error) {
+	if kind.Kind == "" {
+		name, _ := handle[harnessKind].(string)
+		kind, _ = agents.Lookup(name)
+	}
+	worktree, _ := handle["worktree"].(string)
+	id, _, err := h.matchWorkspace(kind, worktree, startedAt, preStart)
+	return kind, id, err
+}
+
+// matchWorkspace is the id of the session file the worktree match finds for
+// a session herdr reports no id for (a Muse pane): the one file whose
+// workspace line names worktree and whose start, the first of its lines
+// with a time that reads, was written no more than preStart before startedAt
+// or ModelWindow after it. ambiguous is true when two or more files qualify: an
+// ambiguous match is never the earliest of them, so no model or count is
+// read from a retry or a manual run. A kind that declares no workspace, or
+// no worktree, matches nothing.
+func (h *Herdr) matchWorkspace(kind store.Harness, worktree string, startedAt time.Time, preStart time.Duration) (id string, ambiguous bool, err error) {
+	if kind.Model == nil || kind.Model.Workspace == nil || worktree == "" {
+		return "", false, nil
+	}
+	dir := h.agentHome(kind)
+	files, err := filepath.Glob(kind.Model.Pattern(dir, "*"))
+	if err != nil {
+		return "", false, err
+	}
+	begin, end := startedAt.Add(-preStart), startedAt.Add(dispatch.ModelWindow)
+	var found string
+	for _, path := range files {
+		in, err := fileNamesWorktree(kind.Model, path, worktree, begin, end)
+		if err != nil {
+			return "", false, err
+		}
+		id, okID := kind.Model.SessionIn(dir, path)
+		// A file that names no id it can be read by is no candidate: it
+		// can be neither the match nor what makes one ambiguous.
+		if !in || !okID || !plainSessionID(id) {
+			continue
+		}
+		if found != "" {
+			return "", true, nil
+		}
+		found = id
+	}
+	return found, false, nil
+}
+
+// fileNamesWorktree reports whether the session file at path started from
+// begin to end, its start being the time of its first line with one that
+// reads, and one of its lines names worktree. One read answers both: a file
+// that started outside the window is left after its first lines, and a
+// worktree line the read passed on its way to the start still counts.
+func fileNamesWorktree(src *store.ModelSource, path, worktree string, begin, end time.Time) (bool, error) {
+	var start time.Time
+	var names, outside bool
+	err := eachLine(path, func(line []byte) bool {
+		l, has := src.WorkspaceIn(line)
+		if !has {
+			return false
+		}
+		if start.IsZero() && !l.At.IsZero() {
+			start = l.At
+			outside = start.Before(begin) || start.After(end)
+		}
+		names = names || l.Workspace == worktree
+		return outside || (names && !start.IsZero())
+	})
+	return !outside && names && !start.IsZero(), err
+}
+
+// sessionKind is the harness kind of the agent handle names and its
+// session id, by which the agent's own session file is found. id is ""
+// when herdr names no agent or no session id for it, or one that is no
+// plain id (it goes into a glob, where one finds nothing); kind is still
+// herdr's when it named an agent, so the worktree match knows what matched
+// nothing.
+//
+// herdr names some agents' sessions by the path of the file (pi's, whose
+// file stands under a directory of its own and is named by its start time
+// before its id): the id of such a session is what the kind's glob holds at
+// {session} in that path (ModelSource.SessionIn). A path the glob does not
+// hold, outside the agent's own directory or of another shape, names none.
+func (h *Herdr) sessionKind(ctx context.Context, handle map[string]any) (store.Harness, string, error) {
+	name, _ := handle["agent"].(string)
+	if name == "" {
+		return store.Harness{}, "", nil
+	}
+	raw, err := h.run(ctx, "agent", "get", name)
+	if err != nil {
+		var herr *herdrError
+		if errors.As(err, &herr) && herr.Code == "agent_not_found" {
+			return store.Harness{}, "", nil
+		}
+		return store.Harness{}, "", err
+	}
+	var info struct {
+		Agent struct {
+			Kind    string `json:"agent"`
+			Session struct {
+				Kind  string `json:"kind"`
+				Value string `json:"value"`
+			} `json:"agent_session"`
+		} `json:"agent"`
+	}
+	if err := json.Unmarshal(raw, &info); err != nil {
+		return store.Harness{}, "", err
+	}
+	kind, _ := agents.Lookup(info.Agent.Kind)
+	id := info.Agent.Session.Value
+	if info.Agent.Session.Kind == "path" && kind.Model != nil {
+		id, _ = kind.Model.SessionIn(h.agentHome(kind), id)
+	}
+	if plainSessionID(id) {
+		return kind, id, nil
+	}
+	return kind, "", nil
+}
+
+// plainSessionID reports whether id can stand for a session in the glob of
+// its file: one with a separator or a pattern character in it would find
+// another session's file, or none.
+func plainSessionID(id string) bool {
+	return id != "" && !strings.ContainsAny(id, `/\*?[`)
+}
+
+// agentHome is the own directory of an agent of kind, whose file names a
+// model source: set (tests), else the one the agent's environment variable
+// names, else its directory in the user's home.
+func (h *Herdr) agentHome(kind store.Harness) string {
+	return h.harnessHome(kind.Kind, kind.Model.Home, kind.Model.HomeEnv)
+}
+
+// harnessHome is the own directory of an agent of kind, whose file names
+// its home at dir, moved by the variable env names: set (tests), else the
+// one the variable names, else its directory in the user's home.
+func (h *Herdr) harnessHome(kind, dir, env string) string {
+	if set := h.AgentHomes[kind]; set != "" {
+		return set
+	}
+	if p := os.Getenv(env); env != "" && p != "" {
+		return p
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, dir)
+}
+
+// sessionHome is the harness home an indexed session's files are read
+// from: the test override, else the pane's HOME recorded at its start
+// with dir under it, else the daemon's home (harnessHome). A crew pane's
+// environment may set HOME apart from the daemon's, and the harness
+// writes its index and transcripts there.
+func (h *Herdr) sessionHome(handle map[string]any, kind, dir, env string) string {
+	if set := h.AgentHomes[kind]; set != "" {
+		return set
+	}
+	if home := cleanPaneHome(str(handle, paneHome, "")); home != "" {
+		return filepath.Join(home, dir)
+	}
+	return h.harnessHome(kind, dir, env)
+}
+
+// cleanPaneHome is a recorded pane HOME as the prefix of a session-file
+// glob: absolute and without pattern characters, else "".
+func cleanPaneHome(home string) string {
+	if !filepath.IsAbs(home) || strings.ContainsAny(home, `*?[\`) {
+		return ""
+	}
+	return filepath.Clean(home)
+}
+
+// sessionFile is the session file matching pattern; "" when there is none
+// yet, which is no error.
+func sessionFile(pattern string) (string, error) {
+	files, err := filepath.Glob(pattern)
+	if err != nil || len(files) == 0 {
+		return "", err
+	}
+	return files[0], nil
+}
+
+// eachLine calls each with the lines of the file at path in turn, the last
+// one too when it has no newline yet, until each answers true.
+func eachLine(path string, each func(line []byte) (stop bool)) error {
+	_, err := eachLineFrom(path, 0, each)
+	return err
+}
+
+// eachLineFrom is eachLine read from offset, which rests on a line boundary,
+// and the offset it read to at the last line boundary: the end of the file
+// when its last line ends in a newline, else the start of its trailing
+// half-written line, which the next read takes whole.
+func eachLineFrom(path string, offset int64, each func(line []byte) (stop bool)) (end int64, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return offset, err
+	}
+	defer f.Close()
+	if offset > 0 {
+		if _, err := f.Seek(offset, io.SeekStart); err != nil {
+			return offset, err
+		}
+	}
+	end, pos := offset, offset
+	// A line holds a whole message, tool output included: no fixed buffer.
+	r := bufio.NewReader(f)
+	for {
+		line, err := r.ReadBytes('\n')
+		stop := each(line)
+		pos += int64(len(line))
+		if len(line) > 0 && line[len(line)-1] == '\n' {
+			end = pos
+		}
+		if stop || err == io.EOF {
+			return end, nil
+		}
+		if err != nil {
+			return end, err
+		}
+	}
+}
+
+// firstModel reads the session file matching pattern line by line and
+// returns the first model pick finds; "" when there is no file yet or no
+// line names one.
+func firstModel(pattern string, pick func(line []byte) string) (model string, err error) {
+	path, err := sessionFile(pattern)
+	if path == "" || err != nil {
+		return "", err
+	}
+	err = eachLine(path, func(line []byte) bool {
+		model = pick(line)
+		return model != ""
+	})
+	return model, err
+}

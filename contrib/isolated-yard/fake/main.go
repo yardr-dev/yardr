@@ -124,7 +124,7 @@ func main() {
 	// `Select login method:` line the runner matches on, the methods with
 	// the selected option carrying the input mark, then the code-paste
 	// line. The menu's words follow the transcription in
-	// internal/runner/login_test.go; what must hold exactly is the
+	// internal/runner/herdr/login_test.go; what must hold exactly is the
 	// `Select login method:` line and the marked option, since without
 	// them the screen matches no login pattern and no led login is
 	// offered. There is no menu to answer: the led login plays
@@ -172,7 +172,7 @@ func main() {
 
 	// The box leaves the cursor after its mark, as Claude Code's does: what
 	// is typed into the pane is echoed by the terminal where the cursor is,
-	// and yardr reads an agent's input from the mark's line (runner.InputText,
+	// and yardr reads an agent's input from the mark's line (herdr.InputText,
 	// promptPlace). Left below the box, the cursor put typed text under the
 	// bottom rule and the input read as empty while text waited in it
 	// (yardr-0g9g).
@@ -196,7 +196,7 @@ func main() {
 			// is where yardr looks for a first prompt that arrived.
 			fmt.Printf("❯ %s\n", line)
 			// A yardmaster's first prompt asks it to greet its operator by mail
-			// (runner.Greets): the stand-in does, so a chat opened on it
+			// (herdr.Greets): the stand-in does, so a chat opened on it
 			// gets a first message.
 			if m := greet.FindStringSubmatch(line); m != nil && !greeted {
 				greeted = true

@@ -1,13 +1,14 @@
-// Package runner holds the built-in Runner implementations.
+// Package runner holds the built-in Runner implementations manual, exec and
+// peer, and what they share with the herdr runner, which lives in
+// internal/runner/herdr and imports this package, never the other way.
 //
 //	manual  nothing is started; a human or outside agent picks the bead up
 //	        with `yardr bead list --group <name>` and advances it. With
-//	        config notify=true a herdr notification says a bead is waiting.
+//	        config notify=true a notification (Manual.Show) says a bead is
+//	        waiting.
 //	exec    runs config.cmd through sh -c in the depot (or config.dir), with the
 //	        depot, base, branch and worktree in its environment (a dir depot's
 //	        bead has no base, branch or worktree).
-//	herdr   opens a worktree per bead in herdr and starts an agent in it; a
-//	        dir depot's bead is worked in the depot's directory itself.
 //	peer    sends the bead to the linked yard config.peer names, which
 //	        works it in a flow of its own; that yard's return ends the
 //	        session with the outcome its flow came to.
@@ -19,9 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"log/slog"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -34,19 +33,6 @@ import (
 	"yardr.dev/yardr/internal/source"
 	"yardr.dev/yardr/internal/store"
 )
-
-// All returns every built-in runner keyed by the name groups refer to.
-// st and log, if set, let manual groups notify humans; onError, if set,
-// receives background errors (herdr event stream down).
-func All(home string, st store.API, log *slog.Logger, onError func(error)) map[string]dispatch.Runner {
-	return map[string]dispatch.Runner{
-		"manual": &Manual{Store: st, Show: HerdrNotifier("herdr"), Log: log},
-		"exec":   &Exec{Home: home, Bin: self(), Log: log},
-		"herdr": &Herdr{Bin: "herdr", WorktreeRoot: config.At(home).Worktrees(), YardHome: home,
-			YardBin: self(), OnError: onError, Store: st, Log: log},
-		store.PeerRunner: &Peer{Store: st, Home: home},
-	}
-}
 
 // Env is the environment every started process gets: the five YARDR_
 // entries BEAD, SESSION, STAGE, GROUP and ACTOR (see config.Env), and the
@@ -77,8 +63,17 @@ func str(cfg map[string]any, key, def string) string {
 	return def
 }
 
-func strs(cfg map[string]any, key string) []string {
-	return config.StringList(cfg[key])
+// Branch is the git branch a bead is worked on (see store.Branch).
+func Branch(b store.Bead) string { return store.Branch(b.ID) }
+
+// BaseOf is what the job's bead branches from and lands on: its train's
+// branch for a child of a train, the commit a linked yard named for a bead
+// that came from it (store.Family), else the depot's base.
+func BaseOf(job dispatch.Job) string {
+	if job.Base != "" || job.Depot == nil {
+		return job.Base
+	}
+	return job.Depot.Base
 }
 
 // Brief renders the instructions an agent session starts from: the group's
@@ -602,16 +597,4 @@ func nextWhen(n dispatch.NextStage) string {
 	default:
 		return fmt.Sprintf("an agent in `%s` picks it up; use it when your part is ready for them.", n.Group)
 	}
-}
-
-// self is this yard's executable, so agents run the same version.
-func self() string {
-	p, err := os.Executable()
-	if err != nil {
-		return ""
-	}
-	if r, err := filepath.EvalSymlinks(p); err == nil {
-		return r
-	}
-	return p
 }

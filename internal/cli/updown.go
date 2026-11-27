@@ -18,7 +18,7 @@ import (
 	"yardr.dev/yardr/internal/bdp"
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/dispatch"
-	"yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 	"yardr.dev/yardr/internal/server"
 	"yardr.dev/yardr/internal/store"
 )
@@ -103,11 +103,11 @@ type upReport struct {
 // spawnHerdr starts herdr's headless server, `herdr server`, detached from
 // this terminal as the yard's own server is, logging to log; tests replace
 // it. It is the server of the herdr session the yard names when it names
-// one (runner.HerdrCommand). One server serves every yard of the machine
+// one (herdr.HerdrCommand). One server serves every yard of the machine
 // and the person's own panes, so it gets nothing that names this yard or
 // its caller (no YARDR_*), and runs in the person's home.
 var spawnHerdr = func(bin, log string) (exited <-chan error, err error) {
-	cmd := runner.HerdrCommand(context.Background(), bin, "server")
+	cmd := herdr.HerdrCommand(context.Background(), bin, "server")
 	if cmd.Err != nil {
 		return nil, cmd.Err
 	}
@@ -136,7 +136,7 @@ var stopServer = server.Stop
 // to ask each about its agent and to stop it as the daemon would; tests
 // replace it.
 var yardRunners = func(home string, st store.API) map[string]dispatch.Runner {
-	return runner.All(home, st, slog.New(slog.DiscardHandler), nil)
+	return builtinRunners(home, st, slog.New(slog.DiscardHandler), nil)
 }
 
 // herdrProgram is the herdr on this machine: the one on PATH, else the one
@@ -322,11 +322,11 @@ func (a *app) up(ctx context.Context, cfg *config.Config, login bool) (*upReport
 		if info, ok := serverInfo(ctx, cfg); ok {
 			srv.PID = info.PID
 		}
-		runner.UseSession(settings[store.HerdrSessionSetting])
+		herdr.UseSession(settings[store.HerdrSessionSetting])
 	}
 
-	herdr, herdrLogin := a.upHerdr(ctx, cfg, login)
-	rep.Parts = append(rep.Parts, herdr, srv)
+	herdrPart, herdrLogin := a.upHerdr(ctx, cfg, login)
+	rep.Parts = append(rep.Parts, herdrPart, srv)
 	if herdrLogin != nil {
 		rep.Login = append(rep.Login, *herdrLogin)
 	}
@@ -357,13 +357,13 @@ func (a *app) up(ctx context.Context, cfg *config.Config, login bool) (*upReport
 	}
 	running := config.DaemonRunning(cfg.DaemonLock())
 	switch {
-	case running && (!install || !srv.Running || !herdr.Running):
+	case running && (!install || !srv.Running || !herdrPart.Running):
 		daemon.Running, daemon.PID = true, config.DaemonPID(cfg.DaemonLock())
 		notInstalled()
 	case !srv.Running:
 		daemon.Error, daemon.Do = "the server does not run, and the daemon works on its store", yardr+" up, once the server starts"
 		notInstalled()
-	case !herdr.Running:
+	case !herdrPart.Running:
 		daemon.Error = "herdr's server does not run: every agent the daemon started would fail, and count as a failed start"
 		daemon.Do = yardr + " up, once herdr's server runs"
 		notInstalled()
@@ -434,7 +434,7 @@ func (a *app) up(ctx context.Context, cfg *config.Config, login bool) (*upReport
 		}
 		rep.Parts = append(rep.Parts, p)
 	}
-	rep.Up = herdr.Running && srv.Running && daemon.Running
+	rep.Up = herdrPart.Running && srv.Running && daemon.Running
 	return rep, nil
 }
 
@@ -809,15 +809,15 @@ func (a *app) down(w, warn io.Writer, ctx context.Context, cfg *config.Config, y
 	}
 	// Where herdr is, for the runners that ask it: found as up finds it.
 	herdrBin, _ := herdrProgram(ctx)
-	herdr := yardPart{Part: partHerdr, Detail: "left running: other yards and your own panes are in it"}
+	herdrPart := yardPart{Part: partHerdr, Detail: "left running: other yards and your own panes are in it"}
 	noHerdr := false
 	if herdrBin == "" {
-		herdr.Detail = "not found on this machine"
+		herdrPart.Detail = "not found on this machine"
 	} else {
 		check := herdrServer(ctx, herdrBin)
-		herdr.Running, noHerdr = check.State == herdrUp, check.State == herdrDown
-		if !herdr.Running {
-			herdr.Detail = "not running"
+		herdrPart.Running, noHerdr = check.State == herdrUp, check.State == herdrDown
+		if !herdrPart.Running {
+			herdrPart.Detail = "not running"
 		}
 	}
 	runners := yardRunners(cfg.Home, st)
@@ -830,7 +830,7 @@ func (a *app) down(w, warn io.Writer, ctx context.Context, cfg *config.Config, y
 	// asFound is the answer of a down that stopped no agent: the parts as
 	// they are.
 	asFound := func(srv yardPart) []yardPart {
-		return append(append([]yardPart{daemon}, others(cfg)...), srv, herdr)
+		return append(append([]yardPart{daemon}, others(cfg)...), srv, herdrPart)
 	}
 
 	// Agents that are gone are no agents to ask about. The list is useful
@@ -942,7 +942,7 @@ func (a *app) down(w, warn io.Writer, ctx context.Context, cfg *config.Config, y
 	// does: the herdr session whose server one of them starts is the yard's
 	// setting.
 	if login != loginKept {
-		runner.UseSession(settings[store.HerdrSessionSetting])
+		herdr.UseSession(settings[store.HerdrSessionSetting])
 		rep.Login = downLogin(ctx, cfg, settings, login == loginAll)
 	}
 
@@ -956,7 +956,7 @@ func (a *app) down(w, warn io.Writer, ctx context.Context, cfg *config.Config, y
 			srv.PID = info.PID
 		}
 	}
-	rep.Parts = append(append([]yardPart{daemon}, stopped...), srv, herdr)
+	rep.Parts = append(append([]yardPart{daemon}, stopped...), srv, herdrPart)
 	rep.Down = !srv.Running && !daemon.Running &&
 		!slices.ContainsFunc(agents, func(g yardAgent) bool { return !g.Stopped }) &&
 		!slices.ContainsFunc(stopped, func(p yardPart) bool { return p.Error != "" })

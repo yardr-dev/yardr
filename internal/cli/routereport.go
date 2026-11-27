@@ -16,7 +16,7 @@ import (
 
 	"io"
 	"yardr.dev/yardr/internal/limits"
-	"yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -317,7 +317,7 @@ type beadFixes struct{ review, sec int }
 
 // countBeadFixes counts bead's forward fixes from its notes, oldest
 // first. For stage S the attributed notes are those by the stage's agent
-// (runner.AgentName) or by an actor that advanced the bead out of S,
+// (herdr.AgentName) or by an actor that advanced the bead out of S,
 // which covers manual and exec reviews, whose actors are not agent names;
 // a note matching both stages reads as review's. A SHA counts for the
 // stage of the attributed note that first names it, so a quoted builder
@@ -327,7 +327,7 @@ type beadFixes struct{ review, sec int }
 func countBeadFixes(bead string, notes []store.Note, advancedBy map[string]map[string]bool, since time.Time) beadFixes {
 	var out beadFixes
 	attributed := func(author, stage string) bool {
-		return author == runner.AgentName(bead, stage) || advancedBy[stage][author]
+		return author == herdr.AgentName(bead, stage) || advancedBy[stage][author]
 	}
 	ordered := slices.Clone(notes)
 	slices.SortFunc(ordered, func(a, b store.Note) int { return cmp.Compare(a.Seq, b.Seq) })

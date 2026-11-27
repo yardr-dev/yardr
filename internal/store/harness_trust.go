@@ -14,7 +14,7 @@ import (
 // a use-this-API-key confirmation and an onboarding screen share this
 // shape. The dialog is answered only when the mark shows, one answer
 // shows exactly, and the cursor is seen on that answer
-// (internal/runner/trust.go). An entry with no cursor, an onboarding
+// (internal/runner/herdr/trust.go). An entry with no cursor, an onboarding
 // screen with nothing to choose, is answered with Enter alone when its
 // mark and one answer show. There is one
 // answer per harness version that renamed it: Kimi 2.2.0 renamed 'Trust

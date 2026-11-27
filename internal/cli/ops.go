@@ -28,7 +28,6 @@ import (
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/dispatch"
 	"yardr.dev/yardr/internal/pprof"
-	"yardr.dev/yardr/internal/runner"
 	"yardr.dev/yardr/internal/server"
 	"yardr.dev/yardr/internal/store"
 )
@@ -94,9 +93,7 @@ unaffected.`,
 
 // daemonRunners are the runners the daemon supervises sessions with; tests
 // stand one in for herdr's runner.
-var daemonRunners = func(home string, st store.API, log *slog.Logger, onError func(error)) map[string]dispatch.Runner {
-	return runner.All(home, st, log, onError)
-}
+var daemonRunners = builtinRunners
 
 func (a *app) daemonCmd() *cobra.Command {
 	var interval time.Duration
@@ -548,7 +545,7 @@ yardmaster):
 			if g.Runner == "" {
 				return fmt.Errorf("--runner is required")
 			}
-			if _, ok := runner.All("", nil, nil, nil)[g.Runner]; !ok {
+			if _, ok := builtinRunners("", nil, nil, nil)[g.Runner]; !ok {
 				return fmt.Errorf("unknown runner %q", g.Runner)
 			}
 			st, err := a.store(c.Context())

@@ -14,7 +14,7 @@ import (
 
 	"yardr.dev/yardr/internal/chat"
 	"yardr.dev/yardr/internal/config"
-	"yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -146,7 +146,7 @@ func (a *app) chats() bool {
 
 // toChat is the hand-over to the yardmaster: it opens the chat on it for the
 // user this run acts as and, once they leave the view, says how to come
-// back. A yardmaster in the session that was asked to greet (runner.Greeted) is
+// back. A yardmaster in the session that was asked to greet (herdr.Greeted) is
 // expected to write first, and the view says so until it has.
 //
 // It reports false, having said why and opened nothing, when who acts is no
@@ -169,7 +169,7 @@ func (a *app) toChat(w io.Writer, ctx context.Context, cfg *config.Config, st st
 	expect := ""
 	if r, err := st.GetCrew(ctx, yardmaster); err != nil {
 		return false, err
-	} else if runner.Greeted(*r) {
+	} else if herdr.Greeted(*r) {
 		expect = yardmaster
 	}
 	if err := a.chatOn(ctx, st, me.Name, yardmaster, expect); err != nil {

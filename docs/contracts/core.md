@@ -69,7 +69,7 @@ By this rule these are core:
 These are how-and-what:
 
 - harness knowledge in any package
-- the herdr runner's pane reading
+- the herdr runner (`internal/runner/herdr`), which reaches herdr, an outside program
 - every run-ask row's parser, card sentences and run
 - pack content and the pack planner
 - the provider logic of source declarations
@@ -161,7 +161,7 @@ Seven of the eight live in `internal/store`, where the records live:
 | flow | `internal/store` | the stages of a bead's life and the moves allowed |
 | route | `internal/store` | which group takes the beads of a stage |
 | group | `internal/store` | who works a stage, and its runner |
-| runner | `internal/dispatch` | how the work starts: the `Runner` interface, implemented in `internal/runner` |
+| runner | `internal/dispatch` | how the work starts: the `Runner` interface, implemented in `internal/runner` and `internal/runner/herdr` |
 | event | `internal/store` | the ordered log of what happened |
 | depot | `internal/store` | where a bead is worked: the repository and what tests it |
 | source | `internal/store` | a service outside the yard: the `Source` record, declared and called through `internal/source` |
@@ -241,15 +241,16 @@ Each cross-concept verb is owned by exactly one interface:
 
 ## Layers
 
-37 packages under `internal/` at 4bee454, each in one layer (38 at
+38 packages under `internal/` at 4bee454, each in one layer (38 at
 f75abf88; `shared` and `udiff` folded into `store` since, `pprof` moved
-out of `server`, `mcp` and `previewtest` added, `flowdraw` removed):
+out of `server`, `mcp` and `previewtest` added, `flowdraw` removed,
+`runner/herdr` split out of `runner`):
 
 - leaves, importing no internal package (7): `pairing`, `peer`, `pprof`, `previewtest`, `rpc/clientgen`, `scripttest`, `version`.
 - store (1): `store`. Measured: 220 non-test Go files, a 310-method `store.API`, 2 internal imports — the peer and source exceptions under the rules. Shared types the leaf splits move stay in store itself: there is no separate types package.
 - services (25): `agents`, `bdp`, `chat`, `config`, `depotfile`, `diskkeep`, `edgelink`, `eta`, `hooks`, `limits`, `mcp`, `notify`, `otel`, `pack`, `preview`, `rpc`, `rpc/gen`, `source`, `standin`, `storetest`, `telemetry`, `testload`, `web`, `yardkey`, `yards`. (`storetest` and `testload` are test-only helpers; `rpc/gen` is a generator.)
-- `dispatch`, `runner`, `server` (3): the control loop and the process owners.
-- cli (1): `cli`. Measured: imports 28 of the 37 internal packages.
+- `dispatch`, `runner`, `runner/herdr`, `server` (4): the control loop and the process owners.
+- cli (1): `cli`. Measured: imports 29 of the 38 internal packages.
 - main: the root package, the binary; the only importer of `cli`.
 
 ## Import rules

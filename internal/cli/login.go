@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"yardr.dev/yardr/internal/config"
-	"yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 	"yardr.dev/yardr/internal/source"
 )
 
@@ -64,9 +64,9 @@ func errNoLogin() error {
 // the environment's), "" for herdr's first, with what names it to herdr. A
 // socket of no session herdr knows is no server a login could start.
 func loginSession() (name string, env []string, err error) {
-	in := runner.SessionInUse()
+	in := herdr.SessionInUse()
 	switch {
-	case filepath.Clean(in.Socket) == filepath.Clean(runner.SessionSocket("")):
+	case filepath.Clean(in.Socket) == filepath.Clean(herdr.SessionSocket("")):
 		return "", nil, nil
 	case in.Name == "":
 		return "", nil, fmt.Errorf("HERDR_SOCKET_PATH names a socket of no herdr session (%s), and a login service starts the server of one", in.Socket)

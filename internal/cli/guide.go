@@ -16,7 +16,7 @@ import (
 
 	"io"
 	"yardr.dev/yardr/internal/config"
-	"yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -340,7 +340,7 @@ func (g *guide) toYardmaster(ctx context.Context) error {
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		return err
 	}
-	silent := err == nil && r.Live() && g.a.chats() && runner.Greeted(*r) && !up(ctx, *r)
+	silent := err == nil && r.Live() && g.a.chats() && herdr.Greeted(*r) && !up(ctx, *r)
 	if silent {
 		// Its harness may wait at something in its pane: the way there and
 		// back, as after a start (offerPane).
@@ -375,7 +375,7 @@ func (g *guide) toYardmaster(ctx context.Context) error {
 		}
 	}
 	all, _ := g.st.Settings(ctx)
-	place := placeOf(*r, runner.YardName(g.cfg.Home, all))
+	place := placeOf(*r, herdr.YardName(g.cfg.Home, all))
 	fmt.Fprintln(g.w)
 	place.print(g.w, yardmaster)
 	fmt.Fprintln(g.w)

@@ -6,7 +6,7 @@ provider: Meta
 # Muse asks whether a workspace is trusted the first time it is started in
 # it ("Do you trust this workspace?", read live, Muse Code 1.4.9), and
 # every bead is a new worktree, so every Muse session stops there: yardr
-# answers it (internal/runner/trust.go). The dialog opens with its cursor
+# answers it (internal/runner/herdr/trust.go). The dialog opens with its cursor
 # on the accepting answer, and the cursor wraps neither way, so a dialog
 # whose cursor is off the answer is left for a human (read live, four
 # launches and both arrow keys). Answering the dialog writes the

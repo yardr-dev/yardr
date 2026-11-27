@@ -16,7 +16,7 @@ import (
 	"github.com/charmbracelet/huh"
 
 	"yardr.dev/yardr/internal/config"
-	"yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -275,7 +275,7 @@ func TestUninstallStopsTheYardAndRemovesItsServices(t *testing.T) {
 			if err != nil {
 				t.Fatalf("uninstall: %v\n%s", err, out)
 			}
-			name := runner.YardName(home, nil)
+			name := herdr.YardName(home, nil)
 			wantText(t, out,
 				"daemon          stopped (pid ",
 				"server          stopped (pid 4711)\n",
@@ -544,7 +544,7 @@ func purgeYard(t *testing.T) (home, name string, depot store.Depot, panes *paneR
 	if err != nil {
 		t.Fatal(err)
 	}
-	return home, runner.YardName(home, settings), depot, panes, a, serverStops, st
+	return home, herdr.YardName(home, settings), depot, panes, a, serverStops, st
 }
 
 // --purge deletes a person's yard, so no caller does it by a habit of
@@ -639,7 +639,7 @@ func TestPurgeRemovesAHomeWithNothingKept(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(home, "yard.db"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rep, err := uninstallJSON(t, a(true), "--yes", "--purge="+runner.YardName(home, nil))
+	rep, err := uninstallJSON(t, a(true), "--yes", "--purge="+herdr.YardName(home, nil))
 	if err != nil || !rep.Uninstalled || rep.Purge == nil || !rep.Purge.Deleted || !rep.Purge.Gone || len(rep.Purge.Kept) != 0 || len(leftOf(rep, leftHome)) != 0 {
 		t.Fatalf("uninstall --purge --json: %v %+v\npurge %+v", err, rep, rep.Purge)
 	}
@@ -691,7 +691,7 @@ func TestPurgeRefusesAHomeThatIsMoreThanAYard(t *testing.T) {
 	home, st, panes, _, a, _ := downYard(t, map[string]string{"yardmaster": "idle"})
 	stubServices(t, "darwin")
 	asOperator(t, st)
-	name := runner.YardName(home, nil)
+	name := herdr.YardName(home, nil)
 	if err := os.MkdirAll(filepath.Join(home, "jo"), 0o755); err != nil {
 		t.Fatal(err)
 	}

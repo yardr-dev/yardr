@@ -98,12 +98,12 @@ func holdAgentStart() bool {
 // shellPath holds the pid the fake gives as every pane's shell: the
 // server's own, a process that lives as long as the panes it stands for and
 // that no yardr command descends from. yardr starts no agent in a pane
-// whose shell herdr does not tell (runner.Herdr.shellKnown).
+// whose shell herdr does not tell (herdr.Herdr.shellKnown).
 func shellPath() string { return filepath.Join(state, "server.pid") }
 
 // server runs the API socket: one JSON object per line,
 // {"id","method","params"} answered by {"id","result"}, the protocol
-// yardr's runner speaks (internal/runner/herdr_api.go).
+// yardr's runner speaks (internal/runner/herdr/herdr_api.go).
 func server(sock string) {
 	os.Remove(sock)
 	l, err := net.Listen("unix", sock)
@@ -222,7 +222,7 @@ func main() {
 				f.Close()
 			}
 			// The harness's screen: its input's mark, as HarnessScreen
-			// reads it (internal/runner/herdr.go).
+			// reads it (internal/runner/herdr/herdr.go).
 			os.WriteFile(panePath(), []byte("❯ \n"), 0o600)
 			fmt.Printf("{\"result\":{\"type\":\"agent_started\",\"agent\":{\"agent_name\":%q}}}\n", name)
 		case "prompt":

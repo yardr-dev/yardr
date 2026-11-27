@@ -21,7 +21,7 @@ import (
 	peerscripts "yardr.dev/yardr/contrib/peer"
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/hooks"
-	"yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/yardkey"
 )
@@ -1315,7 +1315,7 @@ func invite(ctx context.Context, cfg *config.Config, st store.API, url string) (
 	if err != nil {
 		return store.Invite{}, err
 	}
-	inv := store.Invite{Name: runner.YardName(cfg.Home, all), Key: store.Public(k), Enc: encPub}
+	inv := store.Invite{Name: herdr.YardName(cfg.Home, all), Key: store.Public(k), Enc: encPub}
 	if url != "" {
 		if inv.URL, err = store.CleanURL(url); err != nil {
 			return store.Invite{}, fmt.Errorf("--url: %w", err)

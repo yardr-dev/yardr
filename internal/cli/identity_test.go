@@ -12,19 +12,19 @@ import (
 
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/rpc"
-	"yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 	"yardr.dev/yardr/internal/store"
 )
 
 // worktreeOf makes a checkout that yardr started ws in, as the herdr runner
 // leaves a bead's worktree, and returns its path.
-func worktreeOf(t *testing.T, ws runner.WorktreeSession) string {
+func worktreeOf(t *testing.T, ws herdr.WorktreeSession) string {
 	t.Helper()
 	dir := t.TempDir()
 	if out, err := exec.Command("git", "init", "-q", dir).CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v\n%s", err, out)
 	}
-	briefs, err := runner.BriefDir(context.Background(), dir)
+	briefs, err := herdr.BriefDir(context.Background(), dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestWorktreeNamesTheSessionWhenTheEnvironmentIsAnothers(t *testing.T) {
 	}
 	actorA, actorB := beadA.ID+"-new", beadB.ID+"-new"
 	env := testEnv(t, "", "YARDR_ACTOR="+actorA, "YARDR_SESSION="+sessA.ID, "YARDR_BEAD="+beadA.ID)
-	t.Chdir(worktreeOf(t, runner.WorktreeSession{Bead: beadB.ID, Session: sessB.ID, Actor: actorB, Stage: "new", Group: "builders"}))
+	t.Chdir(worktreeOf(t, herdr.WorktreeSession{Bead: beadB.ID, Session: sessB.ID, Actor: actorB, Stage: "new", Group: "builders"}))
 	errs := errOutput(t)
 
 	a := &app{st: st, stderr: errs, env: env}
@@ -173,7 +173,7 @@ func TestWorktreeLeavesTheBeadsOwnEnvironmentAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(worktreeOf(t, runner.WorktreeSession{Bead: b.ID, Session: reviewer.ID, Actor: b.ID + "-review", Stage: "review", Group: "reviewers"}))
+	t.Chdir(worktreeOf(t, herdr.WorktreeSession{Bead: b.ID, Session: reviewer.ID, Actor: b.ID + "-review", Stage: "review", Group: "reviewers"}))
 	errs := errOutput(t)
 
 	env := testEnv(t, "", "YARDR_ACTOR="+b.ID+"-new", "YARDR_SESSION="+builder.ID, "YARDR_BEAD="+b.ID)

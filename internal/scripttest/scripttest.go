@@ -1,5 +1,7 @@
 // Package scripttest writes the stand-in scripts of tests: a fake herdr, a
-// provider, a harness, a git or gh first on PATH.
+// provider, a harness, a git or gh first on PATH. It also holds the git the
+// tests of the runners make their repositories with (git.go): one hermetic
+// environment, and repositories seeded once per run and copied.
 //
 // A stand-in is not a new executable file. On macOS the first exec of an
 // executable file that was not there before takes hundreds of milliseconds,
@@ -153,10 +155,12 @@ func Relink(t testing.TB, dir string) {
 	}
 }
 
-// Remove removes the launchers: a package's TestMain calls it after m.Run.
-// The stand-ins are in their tests' own directories and go with those.
+// Remove removes the launchers, and the git home and seed repositories a test
+// asked for (see git.go): a package's TestMain calls it after m.Run. The
+// stand-ins are in their tests' own directories and go with those.
 func Remove() {
 	if dir != "" {
 		os.RemoveAll(dir)
 	}
+	removeGit()
 }

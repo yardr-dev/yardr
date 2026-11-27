@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -13,32 +11,6 @@ import (
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
 )
-
-type shown struct{ titles, bodies []string }
-
-func (s *shown) show(fail error) func(context.Context, string, string) error {
-	return func(_ context.Context, title, body string) error {
-		if fail != nil {
-			return fail
-		}
-		s.titles, s.bodies = append(s.titles, title), append(s.bodies, body)
-		return nil
-	}
-}
-
-// daemon is a fresh dispatcher with a fresh manual runner, as after a
-// daemon restart: nothing is remembered but the store.
-func daemon(st store.API, show func(context.Context, string, string) error) *dispatch.Dispatcher {
-	return &dispatch.Dispatcher{Store: st, Runners: map[string]dispatch.Runner{
-		"manual": &Manual{Store: st, Show: show}}}
-}
-
-func mustT(t *testing.T, err error) {
-	t.Helper()
-	if err != nil {
-		t.Fatal(err)
-	}
-}
 
 func TestManualNotifiesOncePerBeadAndStage(t *testing.T) {
 	t.Parallel()
@@ -193,38 +165,5 @@ func TestManualGivesUpWhenNotificationsOff(t *testing.T) {
 	mustT(t, d.Reconcile(ctx))
 	if calls != 1 {
 		t.Fatalf("disabled notifications retried: %d calls", calls)
-	}
-}
-
-// herdr exits 0 with shown=false when it showed nothing; that must not
-// count as notified.
-func TestHerdrNotifierChecksShown(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	log := filepath.Join(t.TempDir(), "calls")
-	bin := fakeHerdrBin(t, `printf '%s\n' "$@" >> `+log+`
-case "$3" in
-  shown)    echo '{"id":"x","result":{"reason":"shown","shown":true,"type":"notification_show"}}' ;;
-  nobody)   echo '{"id":"x","result":{"reason":"no_foreground_client","shown":false,"type":"notification_show"}}' ;;
-  disabled) echo '{"id":"x","result":{"reason":"disabled","shown":false,"type":"notification_show"}}' ;;
-  *)        echo '{"error":{"code":"server_not_running","message":"no herdr server"},"id":"x"}' >&2; exit 1 ;;
-esac`)
-	show := HerdrNotifier(bin)
-	if err := show(ctx, "shown", "line 1\nline 2"); err != nil {
-		t.Fatalf("shown: %v", err)
-	}
-	if err := show(ctx, "nobody", "b"); err == nil || errors.Is(err, ErrNotifyOff) ||
-		!strings.Contains(err.Error(), "no_foreground_client") {
-		t.Fatalf("no client: %v", err)
-	}
-	if err := show(ctx, "disabled", "b"); !errors.Is(err, ErrNotifyOff) {
-		t.Fatalf("disabled: %v", err)
-	}
-	if err := show(ctx, "down", "b"); err == nil {
-		t.Fatal("herdr down not reported")
-	}
-	calls, _ := os.ReadFile(log)
-	if !strings.Contains(string(calls), "notification\nshow\nshown\n--body\nline 1\nline 2\n--sound\nrequest") {
-		t.Fatalf("argv:\n%s", calls)
 	}
 }

@@ -11,7 +11,7 @@ import (
 
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/dispatch"
-	"yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -167,14 +167,14 @@ func TestHerdrServiceFilesGolden(t *testing.T) {
 // server, under a name of its own and told which socket it is.
 func TestHerdrServiceOfANamedSession(t *testing.T) {
 	stubServices(t, "darwin")
-	runner.UseSession("work")
-	t.Cleanup(func() { runner.UseSession("") })
+	herdr.UseSession("work")
+	t.Cleanup(func() { herdr.UseSession("") })
 	u, err := herdrUnit(nil, "/bin/herdr")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if u.Name != "dev.yardr.herdr.work" || !slices.Contains(u.Env, "HERDR_SESSION=work") ||
-		!slices.Contains(u.Env, "HERDR_SOCKET_PATH="+runner.SessionSocket("work")) {
+		!slices.Contains(u.Env, "HERDR_SOCKET_PATH="+herdr.SessionSocket("work")) {
 		t.Fatalf("unit %s with %v", u.Name, u.Env)
 	}
 	// A service of the person's own for the first session is not this one's.
@@ -198,8 +198,8 @@ func TestHerdrServiceOfANamedSession(t *testing.T) {
 func TestHerdrLoginRejectsUnsafeSessionName(t *testing.T) {
 	stubServices(t, "darwin")
 	t.Setenv("HERDR_SESSION", "../../../../tmp/yardr-review.plist")
-	runner.UseSession("")
-	t.Cleanup(func() { runner.UseSession("") })
+	herdr.UseSession("")
+	t.Cleanup(func() { herdr.UseSession("") })
 
 	if _, err := herdrUnit(nil, "/bin/herdr"); err == nil || !strings.Contains(err.Error(), "cannot name a login service file") {
 		t.Fatalf("herdrUnit accepted an unsafe inherited session name: %v", err)

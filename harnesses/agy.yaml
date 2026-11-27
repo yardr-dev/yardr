@@ -80,7 +80,7 @@ context:
     gpt-oss-120b-medium: 131072
 
 # agy asks whether a folder is trusted the first time it is started in
-# it: yardr answers it (internal/runner/trust.go). The dialog is its
+# it: yardr answers it (internal/runner/herdr/trust.go). The dialog is its
 # question, the answer the one that accepts it, as agy 1.5.14 prints
 # them, read 2026-11-21 under a pty in a scratch directory:
 #

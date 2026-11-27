@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 	"yardr.dev/yardr/internal/scripttest"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
@@ -32,7 +32,7 @@ func otherShell(t *testing.T) string {
 	t.Setenv("XDG_CONFIG_HOME", dir)
 	t.Setenv("HERDR_SOCKET_PATH", filepath.Join(dir, "herdr", "sessions", "other", "herdr.sock"))
 	t.Setenv("HERDR_SESSION", "other")
-	t.Cleanup(func() { runner.FollowSetting(nil); runner.UseSession("") })
+	t.Cleanup(func() { herdr.FollowSetting(nil); herdr.UseSession("") })
 	return dir
 }
 
@@ -56,14 +56,14 @@ func TestDoctorNamesTheHerdrSession(t *testing.T) {
 	}
 	// The gated runs act as the operator init named, not the OS user.
 	op := testOperator(t, st)
-	herdr := filepath.Join(tools, "herdr")
+	herdrPath := filepath.Join(tools, "herdr")
 	sock := func(name string) string { return filepath.Join(dir, "herdr", "sessions", name, "herdr.sock") }
 
 	out, err := run(t, a().rootCmd(), "doctor")
 	if !errors.Is(err, errCheckFailed) {
 		t.Fatalf("err = %v\n%s", err, out)
 	}
-	wantText(t, out, "FAULT  herdr       "+herdr+": on PATH, but its server is not running",
+	wantText(t, out, "FAULT  herdr       "+herdrPath+": on PATH, but its server is not running",
 		"Start it: run herdr in a terminal",
 		"; session other, socket "+sock("other")+" (this shell's, since the yard's herdr_session setting is unset)")
 
@@ -71,13 +71,13 @@ func TestDoctorNamesTheHerdrSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, _ = run(t, a().rootCmd(), "doctor")
-	wantText(t, out, "ok     herdr       "+herdr+", its server is running; session gc, socket "+sock("gc")+" (the yard's herdr_session setting)")
+	wantText(t, out, "ok     herdr       "+herdrPath+", its server is running; session gc, socket "+sock("gc")+" (the yard's herdr_session setting)")
 	rep, _ := doctorJSON(t, st)
 	for _, n := range rep.Machine {
 		if n.Program != "herdr" {
 			continue
 		}
-		if s := n.Server.Session; s == nil || *s != (runner.HerdrSession{Name: "gc", Socket: sock("gc"), From: runner.SessionSet}) {
+		if s := n.Server.Session; s == nil || *s != (herdr.HerdrSession{Name: "gc", Socket: sock("gc"), From: herdr.SessionSet}) {
 			t.Fatalf("doctor --json: herdr session = %+v", s)
 		}
 	}
@@ -89,7 +89,7 @@ func TestDoctorNamesTheHerdrSession(t *testing.T) {
 	if !errors.Is(err, errCheckFailed) {
 		t.Fatalf("err = %v\n%s", err, out)
 	}
-	wantText(t, out, "FAULT  herdr       "+herdr+": on PATH, but its server is not running (herdr session \"nope\", which the yard's herdr_session setting names, is not running",
+	wantText(t, out, "FAULT  herdr       "+herdrPath+": on PATH, but its server is not running (herdr session \"nope\", which the yard's herdr_session setting names, is not running",
 		"Start it: run herdr session attach nope in a terminal",
 		"; session nope, socket "+sock("nope")+" (the yard's herdr_session setting)")
 	if _, err := os.Stat(filepath.Join(dir, "herdr")); !errors.Is(err, os.ErrNotExist) {
@@ -123,7 +123,7 @@ func TestStatusNamesTheHerdrSession(t *testing.T) {
 	if strings.Contains(out, "this shell's") {
 		t.Errorf("a set session is not the shell's:\n%s", out)
 	}
-	if got := statusJSON(t, a()).Herdr; got == nil || *got != (runner.HerdrSession{Name: "gc", Socket: sock("gc"), From: runner.SessionSet}) {
+	if got := statusJSON(t, a()).Herdr; got == nil || *got != (herdr.HerdrSession{Name: "gc", Socket: sock("gc"), From: herdr.SessionSet}) {
 		t.Fatalf("status --json: herdr = %+v", got)
 	}
 }
@@ -162,7 +162,7 @@ func TestDaemonServiceReachesTheHerdrSessionSet(t *testing.T) {
 	dir, _ := stubServices(t, "darwin")
 	stubLookPath(t, "git", "herdr")
 	t.Setenv("HERDR_SESSION", "")
-	t.Cleanup(func() { runner.FollowSetting(nil); runner.UseSession("") })
+	t.Cleanup(func() { herdr.FollowSetting(nil); herdr.UseSession("") })
 	st := storetest.New(t)
 	testYard(t, st, home)
 	a := func() *app {
@@ -193,7 +193,7 @@ func TestDaemonServiceReachesTheHerdrSessionSet(t *testing.T) {
 	// The daemon of that service: HOME and no herdr variable, as here.
 	bin := filepath.Join(t.TempDir(), "herdr")
 	scripttest.Write(t, bin, herdrBySocket)
-	h := &runner.Herdr{Bin: bin, Store: st}
+	h := &herdr.Herdr{Bin: bin, Store: st}
 	if down, err := h.ServerUp(context.Background()); err != nil {
 		t.Fatalf("the daemon did not reach the session gc: down=%v, %v", down, err)
 	}

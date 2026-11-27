@@ -18,7 +18,7 @@ import (
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/edgelink"
 	"yardr.dev/yardr/internal/pack"
-	"yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 	"yardr.dev/yardr/internal/source"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/yardkey"
@@ -209,7 +209,7 @@ func (a *app) edgeConnect(c *cobra.Command, address, as string) error {
 	// operator's choice. The edge takes only its own rule, which the yard's
 	// own name may not meet.
 	asWasSet := c.Flags().Changed("as")
-	name := runner.YardName(cfg.Home, settings)
+	name := herdr.YardName(cfg.Home, settings)
 	if asWasSet {
 		name = as
 	}

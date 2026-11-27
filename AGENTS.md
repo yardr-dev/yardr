@@ -117,9 +117,14 @@ it lists every exported name with its comment, faster than grepping.
   it calls `MaybeServe` first in its `TestMain`.
 - `rpc`: the store API over a local unix socket (`POST /call/<Method>`);
   the client is generated from `store.API`.
-- `runner`: starts work: herdr agents and exec commands in worktrees at
-  `<root>/<depot>/<bead>`.
-- `scripttest`: stand-in scripts for tests (one launcher, symlinks to it).
+- `runner`: starts work: manual, exec and peer sessions, and what the herdr
+  runner shares with them (the brief, a session's environment, the commit
+  hook). The runner list is built in one place, `builtinRunners` in
+  `internal/cli/runners.go`.
+- `runner/herdr`: the herdr runner: herdr agents in worktrees at
+  `<root>/<depot>/<bead>`. It imports `runner`, never the other way.
+- `scripttest`: stand-in scripts for tests (one launcher, symlinks to it), and
+  the git environment and seeded repositories the runners' tests share.
 - `server`: the `yardr server` process: owns the store, serves the socket,
   re-execs itself on upgrade.
 - `source`: declared sources: declarations, credentials, mints, calls; the

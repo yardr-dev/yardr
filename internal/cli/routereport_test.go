@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
 )
@@ -1202,7 +1202,7 @@ func TestSummarizeRouteEventsReviewFixes(t *testing.T) {
 	note := func(seq uint64, at time.Time, author, text string) store.Note {
 		return store.Note{Author: author, Text: text, At: at, Seq: seq}
 	}
-	agent := runner.AgentName
+	agent := herdr.AgentName
 	prefixes := []string{"difficulty:"}
 	stages := map[string]bool{"new": true}
 	beads := map[string]store.Bead{
@@ -1622,7 +1622,7 @@ func TestSummarizeRouteEventsBest(t *testing.T) {
 	note := func(seq uint64, at time.Time, author, text string) store.Note {
 		return store.Note{Author: author, Text: text, At: at, Seq: seq}
 	}
-	agent := runner.AgentName
+	agent := herdr.AgentName
 	beads := map[string]store.Bead{}
 	batch := func(prefix, org string, n int, label string) {
 		for i := 0; i < n; i++ {
@@ -1779,7 +1779,7 @@ func TestRouteReportReviewFixed(t *testing.T) {
 		_, err := st.AddNoted(ctx, id, text, author)
 		must(err)
 	}
-	agent := runner.AgentName
+	agent := herdr.AgentName
 
 	_, err := st.CreateBead(ctx, store.NewBead{ID: "yard-a", Title: "fixed", Depot: "yard", Labels: []string{"difficulty:3", "size:large"}}, "me")
 	must(err)

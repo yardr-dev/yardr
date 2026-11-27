@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 )
 
 // identity is the session a command acts as: its actor, its session and
@@ -22,7 +22,7 @@ type identity struct {
 // session that started it (Codex's background server did, yardr-8bhk), and
 // its notes would be another agent's and its moves refused as stale. The
 // worktree is the bead's alone, so the session yardr last started in it
-// (runner.SessionOf) is the one acting, and a line on stderr says so.
+// (herdr.SessionOf) is the one acting, and a line on stderr says so.
 //
 // Only another bead's environment gives way. One naming this bead is kept
 // even when its session is not the worktree's: that is an earlier stage's
@@ -55,7 +55,7 @@ func (a *app) worktreeIdentity(env identity) identity {
 	if err != nil {
 		return env
 	}
-	ws := runner.SessionOf(context.Background(), dir)
+	ws := herdr.SessionOf(context.Background(), dir)
 	if ws == nil || ws.Bead == env.bead {
 		return env
 	}

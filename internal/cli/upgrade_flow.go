@@ -14,7 +14,7 @@ import (
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/notify"
 	"yardr.dev/yardr/internal/rpc"
-	"yardr.dev/yardr/internal/runner"
+	"yardr.dev/yardr/internal/runner/herdr"
 	"yardr.dev/yardr/internal/server"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/version"
@@ -345,7 +345,7 @@ func (a *app) upgradeRun(w, warn io.Writer, ctx context.Context, cfg *config.Con
 				yardSettings, _ = c.Settings(ctx)
 				_ = c.Close(ctx)
 			}
-			yardName := runner.YardName(home, yardSettings)
+			yardName := herdr.YardName(home, yardSettings)
 			if err != nil {
 				fmt.Fprintf(warn, "warn: the pack imports for %s could not be read, so stale copies there cannot be matched to re-apply commands\n", yardName)
 				return nil, yardName, false
