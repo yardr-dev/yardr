@@ -356,6 +356,11 @@ runlogged() {
 # A run nested in another's race leg shares its hold instead of waiting on
 # it (YARDR_RACE_HELD, which the run's own tests set too): without that the
 # tests, which run this script, would wait on the run they are in.
+# sh .yardr/test --hold <cmd> is the one entry for a command that is no step of
+# the gate: the worker runs the command in place of the leg. The worker drops
+# YARDR_TEST_RACE_LEG before that exec, since a script the command starts that
+# runs this one, as root's tests do, would see it set and re-enter as a race leg
+# with no step to run.
 racelocked() {
   lock=$HOME/.yardr/race.lock
   if [ "$1" = "--show-queue" ]; then
@@ -2886,6 +2891,15 @@ if [ -n "$YARDR_TEST_RACE_LEG" ]; then
   unset YARDR_TEST_RACE_LEG
   YARDR_RACE_HELD=1
   export YARDR_RACE_HELD
+  # The command of --hold below, run here in place of a leg: under the hold
+  # (YARDR_RACE_HELD, so a gate it starts shares it) and without
+  # YARDR_TEST_RACE_LEG, which a script it starts would take for the re-entry of
+  # a leg. It writes no counts: nothing ran.
+  if [ "$1" = "--hold-run" ]; then
+    shift
+    trap - EXIT
+    exec "$@"
+  fi
   race_leg_child=1
   rc=0
   again "$@" || rc=$?
@@ -2901,6 +2915,51 @@ if [ "$1" = "--race-queue" ]; then
   racelocked --show-queue
   rc=$?
   trap - EXIT
+  exit "$rc"
+fi
+# An outside command under the machine race lock: a measurement or a trial that
+# must not run beside a race leg or a landing queues here, on the ticket, flock,
+# holder record and signal forwarding a leg has, instead of copying racelocked's
+# perl into a script of its own. The ticket's class is the caller's, 0 where
+# YARDR_LANDING is set and else 1: the entry leaves the variable alone, where a
+# plain step's call empties it. It runs no step, so it needs no base and no
+# selection, the disk floor does not read it, and it prints no test line. Its
+# status is the command's, or 128+n for one ended by signal n, which the perl
+# gives. The command runs in the environment the top of this script has made
+# (docs/testing.md, the race lock, says which). Nested in a hold
+# (YARDR_RACE_HELD) it runs the command at once, as a nested leg does.
+if [ "$1" = "--hold" ]; then
+  shift
+  if [ "$#" = 0 ]; then
+    echo "usage: sh .yardr/test --hold <cmd> [args...]" >&2
+    trap - EXIT
+    exit 2
+  fi
+  if [ -n "$YARDR_RACE_HELD" ]; then
+    trap - EXIT
+    exec "$@"
+  fi
+  status=$(mktemp)
+  # In place of finish, which would print a test line when a TERM or INT ends
+  # the shell: a hold ran no step, and its status file is all there is to take
+  # away. A TERM that kills the shell before any trap runs leaves the file, as
+  # it leaves a leg's.
+  trap 'rm -f "$status"' EXIT
+  # In the background, waited for, as again does for a leg: a shell runs no trap
+  # while a foreground command waits, so a TERM to a hold queued behind another
+  # run would run only when the command ended (yardr-k9mv). A background job
+  # starts with stdin on /dev/null, which a command that reads its input would
+  # take for an empty one, so keep the caller's open stdin on fd 3. Check in a
+  # subshell first: a caller may have closed stdin, and dash exits on a failed
+  # `exec 3<&0` instead of running the command.
+  rc=0
+  if ( : 3<&0 ) 2>/dev/null; then
+    exec 3<&0
+    racelocked "$status" --hold-run "$@" <&3 3<&- &
+  else
+    racelocked "$status" --hold-run "$@" <&- &
+  fi
+  wait $! || rc=$?
   exit "$rc"
 fi
 # The report of how much room the Go files have under their ceilings

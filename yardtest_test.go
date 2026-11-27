@@ -6340,6 +6340,323 @@ func TestYardTestRaceQueueView(t *testing.T) {
 	}
 }
 
+// holdScript is the gate's absolute path, for runs that start in a directory of
+// their own: --hold records that directory as the worktree, and its worker
+// re-enters the script by the path it was started with.
+func holdScript(t *testing.T) string {
+	t.Helper()
+	script, err := filepath.Abs(yardTest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return script
+}
+
+// raceHeldBySelf makes this process the holder of the race lock under home, as
+// a run that holds it shows: the flock on the lock file, the holder's record
+// beside it and its ticket in the queue, both naming this process, which is
+// live. It returns the queue's directory. The lock is let go when the test ends.
+func raceHeldBySelf(t *testing.T, home string) (qdir string) {
+	t.Helper()
+	yard := filepath.Join(home, ".yardr")
+	qdir = filepath.Join(yard, "race.queue")
+	if err := os.MkdirAll(qdir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	self := os.Getpid()
+	now := strconv.FormatInt(time.Now().Unix(), 10)
+	who := "pid=" + strconv.Itoa(self) + "\nstart=" + raceOwnStart(t, self) + "\nbead=holder-bead\ndir=/wt/holder\n"
+	for path, body := range map[string]string{
+		filepath.Join(qdir, "1-"+now+"000000000-"+strconv.Itoa(self)): who + "created=" + now + "\n",
+		filepath.Join(yard, "race.holder"):                            who + "since=" + now + "\n",
+	} {
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	lock, err := os.OpenFile(filepath.Join(yard, "race.lock"), os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { lock.Close() })
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatal(err)
+	}
+	return qdir
+}
+
+// gateTestLine matches the test line a run of the gate ends with: a run of a
+// command, which ran no step, prints none, whatever happens to it.
+var gateTestLine = regexp.MustCompile(`(?m)^test: sh \.yardr/test @ `)
+
+// sh .yardr/test --hold runs a command under the machine race lock, as one of
+// the gate's own steps takes it: the queue shows the hold as the holder, under
+// a ticket of the caller's class (a landing's when YARDR_LANDING is set, which
+// the entry leaves as it is) that names the bead and the worktree. The command
+// has YARDR_RACE_HELD, so a gate it starts shares the hold, and not
+// YARDR_TEST_RACE_LEG, which the worker drops before the exec: a script the
+// command starts that runs this one, as root's tests do, would see it set and
+// re-enter as a race leg with no step to run. The command keeps an open stdin,
+// which a job the shell puts in the background starts without, and runs with
+// stdin closed if its caller closed it. When it ends the queue is empty, the
+// holder's record gone, the lock free and nothing left in the run's TMPDIR. Its
+// own home stands in for the yard's, so no real gate waits on it.
+func TestYardTestHoldRunsTheCommandUnderTheLock(t *testing.T) {
+	// Its home, queue and processes are its own.
+	t.Parallel()
+	needTool(t, "perl")
+	script := holdScript(t)
+	for _, c := range []struct {
+		name       string
+		env        []string // the caller's, as the gate finds them
+		class      string   // the first part of the ticket's name
+		closeStdin bool
+	}{
+		{"a plain run", nil, "1", false},
+		{"a landing", []string{"YARDR_LANDING=1"}, "0", false},
+		{"stdin already closed", nil, "1", true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			home, tmp, seen := t.TempDir(), t.TempDir(), t.TempDir()
+			wt, err := filepath.EvalSymlinks(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			// What the command sees, written from inside it: its variables, its
+			// stdin, the queue as it stands and the --race-queue view of it.
+			inside := `printf 'held=%s leg=%s\n' "${YARDR_RACE_HELD-unset}" "${YARDR_TEST_RACE_LEG-unset}" >"$SEEN/env"
+cat >"$SEEN/stdin" 2>/dev/null || :
+cp -R "$HOME/.yardr/race.queue" "$SEEN/queue"
+sh "$GATE" --race-queue >"$SEEN/view"`
+			args := []string{script, "--hold", "sh", "-c", inside}
+			var cmd *exec.Cmd
+			if c.closeStdin {
+				cmd = exec.Command("sh", append([]string{"-c", `exec 0<&-; exec "$@"`, "closed-stdin"}, args...)...)
+			} else {
+				cmd = exec.Command("sh", args...)
+			}
+			cmd.Dir = wt
+			cmd.Env = append(scriptEnv(), append([]string{"HOME=" + home, "TMPDIR=" + tmp, "YARDR_BEAD=hold-bead", "SEEN=" + seen, "GATE=" + script}, c.env...)...)
+			cmd.Stdin = strings.NewReader("trial")
+			out, code := runCmd(t, cmd)
+			if code != 0 {
+				t.Fatalf("exit %d, output:\n%s", code, out)
+			}
+			if gateTestLine.MatchString(out) {
+				t.Errorf("a hold printed a test line, though it ran no step:\n%s", out)
+			}
+			read := func(name string) string {
+				t.Helper()
+				b, err := os.ReadFile(filepath.Join(seen, name))
+				if err != nil {
+					t.Fatalf("the command left no %s: %v\noutput:\n%s", name, err, out)
+				}
+				return string(b)
+			}
+			if got := read("env"); got != "held=1 leg=unset\n" {
+				t.Errorf("the command saw %q, want the hold's YARDR_RACE_HELD and no YARDR_TEST_RACE_LEG", got)
+			}
+			wantStdin := "trial"
+			if c.closeStdin {
+				wantStdin = ""
+			}
+			if got := read("stdin"); got != wantStdin {
+				t.Errorf("the command read %q from its stdin, want %q", got, wantStdin)
+			}
+			// The hold is the holder, and the only one in line: a ticket of
+			// the caller's class with the bead it was run for.
+			tickets := raceQueue(t, filepath.Join(seen, "queue"))
+			if len(tickets) != 1 || !strings.HasPrefix(tickets[0].name, c.class+"-") || tickets[0].bead != "hold-bead" {
+				t.Errorf("the queue under the hold is %+v, want one ticket of class %s for hold-bead", tickets, c.class)
+			}
+			if want := regexp.MustCompile(`^test: race lock: held by hold-bead for \d+ [a-z]+ \(` + regexp.QuoteMeta(wt) + `\)\n$`); !want.MatchString(read("view")) {
+				t.Errorf("--race-queue under the hold prints %q, want the hold as the holder, from %s", read("view"), wt)
+			}
+			yard := filepath.Join(home, ".yardr")
+			if tickets := raceQueue(t, filepath.Join(yard, "race.queue")); len(tickets) != 0 {
+				t.Errorf("the queue still holds %+v after the hold", tickets)
+			}
+			if _, err := os.Stat(filepath.Join(yard, "race.holder")); !os.IsNotExist(err) {
+				t.Errorf("the holder's record is still there after the hold: %v", err)
+			}
+			lock, err := os.Open(filepath.Join(yard, "race.lock"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer lock.Close()
+			if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+				t.Errorf("the lock is still held after the hold: %v", err)
+			}
+			wantEmpty(t, tmp)
+		})
+	}
+}
+
+// --hold ends with the status of its command as a shell reports it: the
+// command's own, 128+n for one ended by signal n, 127 for one that is not there.
+// With no command it is exit 2 and the usage line, and nothing is made: no
+// ticket, no file. None of them prints a test line, which would pass for the
+// record of a run that ran no step; a command that cannot be started is the one
+// a leftover exit trap would print it for. Its own home stands in for the
+// yard's, so no real gate waits on it.
+func TestYardTestHoldKeepsTheCommandsStatus(t *testing.T) {
+	// Its home and processes are its own.
+	t.Parallel()
+	needTool(t, "perl")
+	script := holdScript(t)
+	const usage = "usage: sh .yardr/test --hold <cmd> [args...]\n"
+	for _, c := range []struct {
+		name string
+		args []string
+		code int
+		out  string // all it prints, for a run that never reaches the lock
+	}{
+		{"a command that succeeds", []string{"true"}, 0, ""},
+		{"a command that fails", []string{"sh", "-c", "exit 7"}, 7, ""},
+		{"a command ended by TERM", []string{"sh", "-c", "kill -TERM $$"}, 143, ""},
+		{"a command that is not there", []string{"no-such-command-yardr"}, 127, ""},
+		{"no command", nil, 2, usage},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			home, tmp := t.TempDir(), t.TempDir()
+			cmd := exec.Command("sh", append([]string{script, "--hold"}, c.args...)...)
+			cmd.Dir = t.TempDir()
+			cmd.Env = append(scriptEnv(), "HOME="+home, "TMPDIR="+tmp, "YARDR_BEAD=hold-bead")
+			out, code := runCmd(t, cmd)
+			if code != c.code {
+				t.Errorf("exit %d, want %d, output:\n%s", code, c.code, out)
+			}
+			if gateTestLine.MatchString(out) {
+				t.Errorf("a hold printed a test line, though it ran no step:\n%s", out)
+			}
+			if c.out != "" && out != c.out {
+				t.Errorf("output %q, want %q", out, c.out)
+			}
+			if tickets := raceQueue(t, filepath.Join(home, ".yardr", "race.queue")); len(tickets) != 0 {
+				t.Errorf("the queue still holds %+v", tickets)
+			}
+			if c.args == nil {
+				if entries, _ := os.ReadDir(home); len(entries) != 0 {
+					t.Errorf("a hold with no command made %d entries in the home", len(entries))
+				}
+			}
+			wantEmpty(t, tmp)
+		})
+	}
+}
+
+// A hold nested in another's (YARDR_RACE_HELD: its command has it, and so a
+// gate or a hold that command starts) runs its command at once, as a nested leg
+// does: it takes no ticket and does not wait on the run that holds the lock,
+// which here is held for as long as the test runs, so a hold that queued would
+// never return. It prints nothing, having waited on nothing.
+func TestYardTestHoldInsideAHoldTakesNoTicket(t *testing.T) {
+	// Its home, holder and process are its own.
+	t.Parallel()
+	needTool(t, "perl")
+	script := holdScript(t)
+	home, seen := t.TempDir(), t.TempDir()
+	qdir := raceHeldBySelf(t, home)
+	ctx, cancel := context.WithTimeout(context.Background(), testload.Scale(30*time.Second))
+	defer cancel()
+	cmd, outFile := raceStart(t, ctx, t.TempDir(), "sh",
+		append(scriptEnv(), "HOME="+home, "TMPDIR="+t.TempDir(), "YARDR_BEAD=nested-bead", "YARDR_RACE_HELD=1", "SEEN="+seen),
+		nil, script, "--hold", "sh", "-c", `echo ran >"$SEEN/ran"`)
+	err := cmd.Wait()
+	out, _ := os.ReadFile(outFile.Name())
+	if ctx.Err() != nil {
+		t.Fatalf("a hold inside a hold waits on the run that holds the lock:\n%s", out)
+	}
+	if err != nil {
+		t.Fatalf("a hold inside a hold ends %v, output:\n%s", err, out)
+	}
+	if got, _ := os.ReadFile(filepath.Join(seen, "ran")); string(got) != "ran\n" {
+		t.Errorf("the command of a hold inside a hold wrote %q, want it to have run:\n%s", got, out)
+	}
+	if len(out) != 0 {
+		t.Errorf("a hold inside a hold printed:\n%s", out)
+	}
+	if tickets := raceQueue(t, qdir); len(tickets) != 1 || tickets[0].bead != "holder-bead" {
+		t.Errorf("the queue is %+v, want the holder's ticket alone", tickets)
+	}
+}
+
+// A TERM to the shell of a hold queued behind another run stops it at once, as
+// it does a gate's (yardr-k9mv): the shell waits for the lock's helper in the
+// background, where its trap runs, instead of running it in the foreground,
+// where the trap would wait for the command to end. The hold's ticket is gone
+// from the queue and the holder's stays, and the run prints no test line, which
+// the gate's own exit trap would print for a run that ended this way. The signal
+// goes to the shell's pid alone, as the evidence of yardr-k9mv had it. Where the
+// shell dies of the signal its status file stays in TMPDIR, as the gate's files
+// do, so that is not asked here. Its own home stands in for the yard's, so no
+// real gate waits on it.
+func TestYardTestHoldTermWhileQueuedStopsItAtOnce(t *testing.T) {
+	// Its home, holder and process are its own.
+	t.Parallel()
+	needTool(t, "perl")
+	script := holdScript(t)
+	home := t.TempDir()
+	qdir := raceHeldBySelf(t, home)
+	ctx, cancel := context.WithTimeout(context.Background(), testload.Scale(90*time.Second))
+	defer cancel()
+	cmd, outFile := raceStart(t, ctx, t.TempDir(), "sh",
+		append(scriptEnv(), "HOME="+home, "TMPDIR="+t.TempDir(), "YARDR_BEAD=hold-bead"),
+		nil, script, "--hold", "true")
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	output := func() string {
+		b, _ := os.ReadFile(outFile.Name())
+		return string(b)
+	}
+	// The hold's ticket beside the holder's: the shell is past its trap and
+	// its helper has started.
+	pollUntil(t, 30*time.Second, 10*time.Millisecond, func(_ time.Time) bool {
+		select {
+		case err := <-done:
+			t.Fatalf("the hold ended %v before it queued, output:\n%s", err, output())
+		default:
+		}
+		return len(raceQueue(t, qdir)) == 2
+	}, func(scaled time.Duration) {
+		t.Fatalf("the hold queued nothing in %s, output:\n%s", scaled, output())
+	})
+	if err := syscall.Kill(cmd.Process.Pid, syscall.SIGTERM); err != nil {
+		t.Fatalf("TERM the hold's shell: %v", err)
+	}
+	var runErr error
+	select {
+	case runErr = <-done:
+	case <-time.After(testload.Scale(10 * time.Second)):
+		t.Fatalf("the hold is still queued 10 s after TERM, output:\n%s", output())
+	}
+	// onterm re-sends TERM to its group, itself included at the default
+	// disposition, so the shell may die of the signal; one that reached the
+	// exit it then calls reports 143. Either is the trap running.
+	var ee *exec.ExitError
+	if !errors.As(runErr, &ee) {
+		t.Fatalf("the hold ended %v, want ended by TERM", runErr)
+	}
+	if st, _ := ee.ProcessState.Sys().(syscall.WaitStatus); ee.ExitCode() != 143 && !(st.Signaled() && st.Signal() == syscall.SIGTERM) {
+		t.Errorf("the hold ended %v, want exit 143 or death by TERM", runErr)
+	}
+	if gateTestLine.MatchString(output()) {
+		t.Errorf("a hold ended by TERM printed a test line:\n%s", output())
+	}
+	// The helper's cleanup runs beside the shell's death, so the ticket
+	// follows the exit: the holder's is what stays.
+	pollUntil(t, 10*time.Second, 10*time.Millisecond, func(_ time.Time) bool {
+		return len(raceQueue(t, qdir)) == 1
+	}, func(scaled time.Duration) {
+		t.Fatalf("the hold's ticket is still queued %s after TERM: %+v", scaled, raceQueue(t, qdir))
+	})
+	if tickets := raceQueue(t, qdir); tickets[0].bead != "holder-bead" {
+		t.Errorf("the ticket left names %q, want the holder's", tickets[0].bead)
+	}
+}
+
 // yardTestProbe pulls the budget checks out of .yardr/test: the three
 // allow-lists, the three functions that judge them, and what they call
 // (took, runlogged, machineload and loadedmachine, and for the file size

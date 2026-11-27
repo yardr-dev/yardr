@@ -604,14 +604,24 @@ Where the case needs more:
 
 The race lock (R4, R5) is the gate's. `racelocked` in `.yardr/test` takes it
 for a race leg, a landing's or the quiet run's, and for a plain step that
-covers most of the suite, and no other command takes it: `contrib/burn` runs
-beside it, and so does a leaf gate run. A run of this recipe is a leaf run, one
-package or a few in one stream on three cpus, and takes no ticket. `sh
-.yardr/test --race-queue` shows who holds the lock and who waits without taking
-a place, and is worth a look before a run of minutes. A run that would cover
-the whole suite, or most of it, is the load the lock exists for, and a
-container run cannot queue for it: the lock is reached only through the gate's
-own steps. CI's Linux legs run the whole suite after the landing.
+covers most of the suite. An outside command takes it only through `sh
+.yardr/test --hold <cmd> [args...]`, as class 1 unless `YARDR_LANDING` is set:
+a measurement or a trial that must not run beside a race leg or a landing
+queues there, on the ticket and holder record a leg has, instead of copying the
+lock's code into a script of its own. The command runs under the hold with its
+status as the call's (128+n for a signal), and with `YARDR_RACE_HELD` set, so a
+gate it starts shares the hold. It runs in the gate's environment, not the
+caller's: `GOFLAGS` gains `-trimpath`, so a `go` it starts caches as a gate step
+does, and `YARDR_TEST_LOAD` and the yard server's own settings are unset, so
+a command that needs one sets it itself (`--hold env YARDR_TEST_LOAD=4 go test
+...`). `contrib/burn` runs beside the lock, and so does a leaf gate run. A run
+of this recipe is a leaf run, one package or a few in one stream on three cpus,
+and takes no ticket. `sh .yardr/test --race-queue` shows who holds the lock and
+who waits without taking a place, and is worth a look before a run of minutes.
+A run that would cover the whole suite, or most of it, is the load the lock
+exists for, and a container run still cannot queue for it: the lock is a file in
+the yard's home on the machine, which a container does not mount. CI's Linux
+legs run the whole suite after the landing.
 
 ## The disk floor
 
@@ -655,12 +665,12 @@ knows, and what it cannot see. A rotation of
 GOCACHE that nothing has built in yet does not exist, so each volume is read at
 the nearest directory that does. A `df` or
 `go env` that cannot be read lets the run go on, since a gate that cannot see
-the disk must not refuse a healthy one. A plan (`YARDR_TEST_PLAN`), `sizes` and
-`--race-queue` run no step and are never refused, nor is a CI runner
-(`GITHUB_ACTIONS`), which is not the yard's shared machine and whose free space
-is its provider's. The floor is read once, at the start: a run that waits on the
-race lock is not read again, and several gates that start together each see the
-same free space.
+the disk must not refuse a healthy one. A plan (`YARDR_TEST_PLAN`), `sizes`,
+`--race-queue` and `--hold` run no step and are never refused, nor is a CI
+runner (`GITHUB_ACTIONS`), which is not the yard's shared machine and whose free
+space is its provider's. The floor is read once, at the start: a run that waits
+on the race lock is not read again, and several gates that start together each
+see the same free space.
 
 A disk that fills after the floor was read still fails tests, and the gate does
 not take that for a flake. A failed test whose first-run output holds the exact
