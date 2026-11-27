@@ -87,7 +87,14 @@
     {{- /* The form posts and puts the page's answer in the stage, keeping
            the address; without scripts it posts and loads the bead it
            lands on. */}}
-    <form class="move-form" method="post" action="{{.Self}}" hx-post="{{.Self}}" hx-push-url="false"><input type="hidden" name="rev" value="{{.Bead.Revision}}">{{template "csrf"}}<input type="text" name="note" placeholder="Note with the move" aria-label="Note">{{if .FoldMoves}}<select name="to" aria-label="Stage">{{range .Moves}}<option value="{{.To}}">{{.Label}}</option>{{end}}</select><button type="submit">Move to ...</button>{{else}}{{range .Moves}}{{if .Outcome}}<button type="submit" name="outcome" value="{{.Outcome}}">{{.Label}}</button>{{else}}<button type="submit" name="to" value="{{.To}}">{{.Label}}</button>{{end}}{{end}}{{end}}</form>
+    {{- /* Enter in the note field presses the form's first submit button in
+           tree order. That would be the first move, and a person typing a
+           note chose none of them. So where each move has a button of its
+           own, the form opens with a disabled one, out of sight and out of
+           the tab order, and Enter sends nothing. Where the moves are
+           folded, the one Move to ... button is the first, and what Enter
+           presses is what the person sees. */}}
+    <form class="move-form" method="post" action="{{.Self}}" hx-post="{{.Self}}" hx-push-url="false"><input type="hidden" name="rev" value="{{.Bead.Revision}}">{{template "csrf"}}{{if not .FoldMoves}}{{template "enter" ""}}{{end}}<input type="text" name="note" placeholder="Note with the move" aria-label="Note">{{if .FoldMoves}}<select name="to" aria-label="Stage">{{range .Moves}}<option value="{{.To}}">{{.Label}}</option>{{end}}</select><button type="submit">Move to ...</button>{{else}}{{range .Moves}}{{if .Outcome}}<button type="submit" name="outcome" value="{{.Outcome}}">{{.Label}}</button>{{else}}<button type="submit" name="to" value="{{.To}}">{{.Label}}</button>{{end}}{{end}}{{end}}</form>
   </section>
   {{- else if .Outcomes}}
   <section class="item">

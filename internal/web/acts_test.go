@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -341,6 +342,33 @@ func TestBeadAskVisibleWithBrokenFlow(t *testing.T) {
 	}
 }
 
+// moveEnter is the default button of the move form where each move has a
+// button of its own: disabled, so Enter in the note field sends nothing.
+const moveEnter = `<button class="wv-enter" type="submit" disabled tabindex="-1" aria-hidden="true"></button>`
+
+// moveFormOf is the move form of a bead's page, from its opening tag to its
+// closing one.
+func moveFormOf(t *testing.T, body string) string {
+	t.Helper()
+	for _, form := range formsOf(body) {
+		if strings.HasPrefix(form, `<form class="move-form"`) {
+			return form
+		}
+	}
+	t.Fatalf("the page has no move form:\n%s", body)
+	return ""
+}
+
+// assertMoveEnter fails the test where the first submit button of the page's
+// move form, the one Enter in the note field presses, is not moveEnter's.
+func assertMoveEnter(t *testing.T, body string) {
+	t.Helper()
+	form := moveFormOf(t, body)
+	if got, want := defaultButton(form), defaultButton(moveEnter); !maps.Equal(got, want) {
+		t.Errorf("the move form's first submit button is %v, want %v:\n%s", got, want, form)
+	}
+}
+
 // A bead in a stage that waits for the view's user sends on as `yardr
 // review` offers it, with a note. Otherwise the page names the outcomes
 // as commands, as today.
@@ -357,6 +385,7 @@ func TestBeadMoveButtons(t *testing.T) {
 		`<h3 class="label">send on as jo</h3>`,
 		`<form class="move-form" method="post" action="/beads/` + b.ID + `" hx-post="/beads/` + b.ID + `" hx-push-url="false">`,
 		`<input type="hidden" name="rev" value="` + moved.Revision + `">`,
+		moveEnter,
 		`<button type="submit" name="outcome" value="done">done: finish as merged (closes the bead)</button>`,
 		`<button type="submit" name="outcome" value="changes">changes: send back to new (note required)</button>`,
 	} {
@@ -364,6 +393,9 @@ func TestBeadMoveButtons(t *testing.T) {
 			t.Errorf("the page lacks %q:\n%s", want, r.body)
 		}
 	}
+	// The first move here is done, which closes the bead: Enter in the note
+	// field must not press it.
+	assertMoveEnter(t, r.body)
 	var got web.BeadPage
 	if r := f.get("/beads/"+b.ID, "Accept", "application/json"); json.Unmarshal([]byte(r.body), &got) != nil {
 		t.Fatal("the bead page is no JSON")
@@ -1102,6 +1134,14 @@ func TestBeadMoveFold(t *testing.T) {
 	if strings.Contains(r.body, `<button type="submit" name="to"`) {
 		t.Errorf("the folded page still lists buttons:\n%s", r.body)
 	}
+	// The one Move to ... button is what Enter in the note field presses, as
+	// the person sees: no disabled default button stands before it.
+	form := moveFormOf(t, r.body)
+	first := defaultButton(form)
+	_, disabled := first["disabled"]
+	if strings.Contains(form, "wv-enter") || first == nil || disabled {
+		t.Errorf("the folded form's first submit button is %v, want the enabled Move to ...:\n%s", first, form)
+	}
 	var folded web.BeadPage
 	if r := f.get("/beads/"+b.ID, "Accept", "application/json"); json.Unmarshal([]byte(r.body), &folded) != nil {
 		t.Fatal("the folded page is no JSON")
@@ -1127,4 +1167,6 @@ func TestBeadMoveFold(t *testing.T) {
 	if n := strings.Count(r6.body, `<button type="submit" name="to"`); n != 6 {
 		t.Errorf("six moves show %d buttons, want 6:\n%s", n, r6.body)
 	}
+	// Each has a button of its own, so the disabled one stands first.
+	assertMoveEnter(t, r6.body)
 }
