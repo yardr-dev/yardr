@@ -317,6 +317,7 @@ var Access = map[string]Class{
 	"Recall":               Read,
 	"RecallJournal":        Read,
 	"ExpireMemories":       Admin,
+	"ExpireGeneralCards":   Admin,
 
 	// Mail, users and their devices.
 	"Mail":             Agent,

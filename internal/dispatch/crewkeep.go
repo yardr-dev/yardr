@@ -259,3 +259,10 @@ func (d *Dispatcher) applyCrewMemory(key string, m crewMemory) {
 		delete(d.nudgeAt, key)
 	}
 }
+
+func (d *Dispatcher) reportCrew(name, msg string) {
+	if d.noted("crew member", name, msg) {
+		return
+	}
+	d.Log.Warn("crew", "crew", name, "problem", msg)
+}

@@ -291,6 +291,7 @@ type API interface {
 	Recall(ctx context.Context, scope, query string) ([]MemoryInfo, error)
 	RecallJournal(ctx context.Context, scope, query string) (*JournalRecall, error)
 	ExpireMemories(ctx context.Context) (int, error)
+	ExpireGeneralCards(ctx context.Context) (int, error)
 	SetIdentity(ctx context.Context, name, source string, id Identity, actor string) error
 	AddSubscription(ctx context.Context, name string, sub Subscription, actor string) error
 	AddSubscriptionKind(ctx context.Context, name, kind string, sub Subscription, actor string) error

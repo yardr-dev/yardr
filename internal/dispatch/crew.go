@@ -105,6 +105,9 @@ func (d *Dispatcher) crew(ctx context.Context, paused bool) error {
 	if _, err := d.Store.ExpireMemories(ctx); err != nil {
 		d.Log.Warn("expire memories", "err", err)
 	}
+	if _, err := d.Store.ExpireGeneralCards(ctx); err != nil {
+		d.Log.Warn("expire general cards", "err", err)
+	}
 	rs, err := d.Store.Crew(ctx)
 	if err != nil {
 		return err
@@ -982,13 +985,6 @@ func (d *Dispatcher) stopCrew(ctx context.Context, runner Runner, s *memberSessi
 	d.Log.Info("crew session stopped", "crew", s.member.Name, "session", s.label(), "reason", reason)
 	d.forgetContextNote(s.key())
 	return d.Store.CrewStoppedFor(ctx, s.member.Name, s.user, reason)
-}
-
-func (d *Dispatcher) reportCrew(name, msg string) {
-	if d.noted("crew member", name, msg) {
-		return
-	}
-	d.Log.Warn("crew", "crew", name, "problem", msg)
 }
 
 func durationOr(s string, def time.Duration) time.Duration {

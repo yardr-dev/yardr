@@ -705,6 +705,9 @@ func (c *Client) RecallJournal(ctx context.Context, scope, query string) (*store
 func (c *Client) ExpireMemories(ctx context.Context) (int, error) {
 	return callV[int](c, ctx, "ExpireMemories")
 }
+func (c *Client) ExpireGeneralCards(ctx context.Context) (int, error) {
+	return callV[int](c, ctx, "ExpireGeneralCards")
+}
 func (c *Client) SetIdentity(ctx context.Context, name, source string, id store.Identity, actor string) error {
 	return c.call(ctx, "SetIdentity", nil, name, source, id, actor)
 }

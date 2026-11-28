@@ -2,6 +2,7 @@ package store
 
 import (
 	"encoding/json"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -294,7 +295,8 @@ func TestGeneralApprovalCarriesOnce(t *testing.T) {
 }
 
 // Before its deadline a general approval is held to the fresh card;
-// past it nothing runs and the ask stays open.
+// past it nothing runs and the ask stays open until ExpireGeneralCards
+// takes it back, leaving cards still within their hour open.
 func TestGeneralExpiry(t *testing.T) {
 	// Sequential: the package's fake clock.
 	y := generalYard(t)
@@ -305,13 +307,94 @@ func TestGeneralExpiry(t *testing.T) {
 		t.Fatalf("before the deadline: %v", err)
 	}
 	seq2 := y.ask(t, generalAsk("bead", "create", "Late"), "yardmaster")
-	y.now = y.now.Add(2 * time.Hour)
+	aside := y.ask(t, generalAsk("bead", "create", "Aside"), "yardmaster")
+	if err := y.DeferAsk(y.ctx, y.bead, aside, "mckean"); err != nil {
+		t.Fatalf("put aside: %v", err)
+	}
+	plain := y.ask(t, Ask{Question: "Still waiting?", To: "mckean", Context: []string{"c"}}, "yardmaster")
+	deadline, err := time.Parse(time.RFC3339, y.asked(t, seq2).Ask.Run.Seen["general expires"])
+	if err != nil {
+		t.Fatalf("parse expiry: %v", err)
+	}
+	// Ask a third card two minutes later, then move to a minute after the
+	// first two ran out and a minute before this one does.
+	y.now = y.now.Add(2 * time.Minute)
+	still := y.ask(t, generalAsk("bead", "create", "Still"), "yardmaster")
+	y.now = deadline.Add(time.Minute)
 	if _, err := y.ApproveAsk(y.ctx, y.bead, seq2, "mckean", true, nil); err == nil ||
 		!strings.Contains(err.Error(), "has expired") || !strings.Contains(err.Error(), nothingRan) {
 		t.Errorf("past the deadline = %v, want the expiry with nothing ran", err)
 	}
 	if got := y.asked(t, seq2).State; got == AskAnswered {
 		t.Errorf("an expired approval answered the ask: %v", got)
+	}
+	n, err := y.ExpireGeneralCards(y.ctx)
+	if err != nil || n != 2 {
+		t.Fatalf("ExpireGeneralCards = %d, %v, want 2, nil", n, err)
+	}
+	if got := y.asked(t, still).State; got != AskOpen {
+		t.Errorf("card a minute before its deadline has state %v, want open", got)
+	}
+	wantWhy := fmt.Sprintf("It ran out at %s, an hour after it was asked: nothing ran. Ask again if it is still wanted.", deadline.Local().Format("15:04:05"))
+	for _, expired := range []uint64{seq2, aside} {
+		got := y.asked(t, expired)
+		if got.State != AskTakenBack || got.Current == nil || got.Current.Note.Author != "yard" || got.Current.Answer.Words != wantWhy {
+			t.Errorf("expired ask %d = state %v current %+v, want taken back by yard with %q", expired, got.State, got.Current, wantWhy)
+		}
+	}
+	open, err := y.UserOpenAsks(y.ctx, "mckean", "mckean")
+	if err != nil {
+		t.Fatalf("UserOpenAsks: %v", err)
+	}
+	if len(open.Open) != 2 || open.Open[0].Ask != plain || open.Open[1].Ask != still {
+		t.Errorf("UserOpenAsks = %+v, want asks %d and %d", open.Open, plain, still)
+	}
+	written, err := y.WriterAsks(y.ctx, "yardmaster")
+	if err != nil {
+		t.Fatalf("WriterAsks: %v", err)
+	}
+	if len(written) != 2 || written[0].Ask != plain || written[1].Ask != still {
+		t.Errorf("WriterAsks = %+v, want asks %d and %d", written, plain, still)
+	}
+	if _, err := y.ApproveAsk(y.ctx, y.bead, seq2, "mckean", true, nil); err == nil ||
+		!strings.Contains(err.Error(), "asked no more") {
+		t.Errorf("approving a taken-back general card = %v, want asked no more", err)
+	}
+	events, err := y.Events(y.ctx, y.bead, 100)
+	if err != nil {
+		t.Fatalf("Events: %v", err)
+	}
+	seq2Note := y.asked(t, seq2).Current.Note.Seq
+	answeredEvents := 0
+	for _, e := range events {
+		if e.Kind != "noted" {
+			continue
+		}
+		noteSeq, _ := e.Data["note"].(float64)
+		if uint64(noteSeq) != seq2Note {
+			continue
+		}
+		answeredEvents++
+		deliveries, _ := e.Data["deliveries"].(map[string]any)
+		if deliveries["yardmaster"] != ReasonAnswered {
+			t.Errorf("take-back event deliveries = %v, want yardmaster=%q", deliveries, ReasonAnswered)
+		}
+		if line, _ := e.Data["answer"].(string); !strings.Contains(line, wantWhy) {
+			t.Errorf("take-back event answer = %q, want %q", line, wantWhy)
+		}
+	}
+	if answeredEvents != 1 {
+		t.Errorf("got %d take-back events for ask %d, want 1", answeredEvents, seq2)
+	}
+	head, err := y.Head(y.ctx)
+	if err != nil {
+		t.Fatalf("Head: %v", err)
+	}
+	if n, err := y.ExpireGeneralCards(y.ctx); err != nil || n != 0 {
+		t.Errorf("second ExpireGeneralCards = %d, %v, want 0, nil", n, err)
+	}
+	if head2, err := y.Head(y.ctx); err != nil || head2 != head {
+		t.Errorf("second ExpireGeneralCards advanced head from %d to %d (err %v), want no write", head, head2, err)
 	}
 }
 

@@ -18,6 +18,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	bolt "go.etcd.io/bbolt"
 )
 
 // generalDescription is the general card's one help line, fixed words.
@@ -336,4 +338,81 @@ func (w *wtx) generalStale(seq uint64, was, _ AskRun) error {
 		return fmt.Errorf("ask %d was good until %s and that time has passed: the general card has expired. %s", seq, expiry.Local().Format("15:04:05"), nothingRan)
 	}
 	return nil
+}
+
+// ExpireGeneralCards takes back open and put-aside general run cards whose
+// deadline has passed and reports how many. It reads open beads once
+// (openBeads) and writes only for cards that are due.
+func (s *Store) ExpireGeneralCards(ctx context.Context) (int, error) {
+	type dueCard struct {
+		bead string
+		seq  uint64
+	}
+	var due []dueCard
+	at := now()
+	if err := s.read(func(tx *bolt.Tx) error {
+		rows, err := s.openBeads(tx)
+		if err != nil {
+			return err
+		}
+		for _, row := range rows {
+			notes, err := beadNotes(tx, row.UUID)
+			if err != nil {
+				return err
+			}
+			for _, r := range ResolveAsks(notes, at) {
+				if _, ok := expiredGeneralCard(r, at); ok {
+					due = append(due, dueCard{row.ID, r.Note.Seq})
+				}
+			}
+		}
+		return nil
+	}); err != nil {
+		return 0, err
+	}
+	ttl := generalTTL.String()
+	if generalTTL == time.Hour {
+		ttl = "an hour"
+	}
+	n := 0
+	for _, d := range due {
+		unlock := s.askLocks.lock(askLockKey(d.bead, d.seq))
+		took := false
+		err := s.write(func(w *wtx) error {
+			took = false
+			row, err := w.loadBead(d.bead)
+			if err != nil || row.Status == "closed" {
+				return err
+			}
+			notes, err := beadNotes(w.Tx, row.UUID)
+			if err != nil {
+				return err
+			}
+			at := now()
+			for _, r := range ResolveAsks(notes, at) {
+				if expiry, ok := expiredGeneralCard(r, at); r.Note.Seq == d.seq && ok {
+					err = w.yardTakesBack(row, d.seq, fmt.Sprintf("It ran out at %s, %s after it was asked: nothing ran. Ask again if it is still wanted.", expiry.Local().Format("15:04:05"), ttl))
+					took = err == nil
+					return err
+				}
+			}
+			return nil
+		})
+		unlock()
+		if err != nil {
+			return n, err
+		}
+		if took {
+			n++
+		}
+	}
+	return n, nil
+}
+
+func expiredGeneralCard(r ResolvedAsk, at time.Time) (time.Time, bool) {
+	if r.AskErr != nil || r.Ask.Run == nil || (r.State != AskOpen && r.State != AskAside) {
+		return time.Time{}, false
+	}
+	expiry, err := time.Parse(time.RFC3339, r.Ask.Run.Seen["general expires"])
+	return expiry, err == nil && !at.Before(expiry)
 }

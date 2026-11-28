@@ -290,7 +290,7 @@ lowering's cell keeps its form, `<lines> lines at <main commit>`.
 
 | package | ceiling | measured |
 |---|---:|---|
-| `internal/store` | 101,759 | 101,683 lines at d5418b316, +76 by yardr-pt4d |
+| `internal/store` | 101,839 | 101,759 lines at 78d687bb5, +80 by yardr-vapv |
 | `internal/dispatch` | 20,181 | 18,381 lines at 606fd3bf5 |
 | `internal/rpc` | 7,545 | 7,045 lines at 606fd3bf5 |
 | `internal/server` | 5,910 | 5,410 lines at 606fd3bf5 |
