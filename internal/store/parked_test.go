@@ -505,3 +505,160 @@ func TestWaitingReadsEachRepositoryOnce(t *testing.T) {
 		}
 	}
 }
+
+// BeadMoves reads one bead's moves for a person, serving a flow's first
+// stage where Waiting leaves it out, and returning nil where the bead has
+// no row for the person: non-member, hidden, open ask, held, closed,
+// missing, or stranded. It reads only that bead's depot repository and
+// keeps Waiting's inbox gate.
+func TestBeadMovesFirstStageAndFilters(t *testing.T) {
+	t.Parallel()
+	s, own, ctx := parkedYard(t)
+
+	// (a) First stage in a manual group: Waiting omits pk-backlog, BeadMoves
+	// gives its moves to a member, and MoveBead makes one.
+	if slices.Contains(waitingIDs(t, s, ctx, "ada"), "pk-backlog") {
+		t.Fatal("Waiting includes first-stage bead pk-backlog")
+	}
+	row, err := s.BeadMoves(ctx, "pk-backlog", "ada", "ada", "ada")
+	if err != nil {
+		t.Fatalf("BeadMoves(pk-backlog, ada): %v", err)
+	}
+	if row == nil || row.Bead != "pk-backlog" || row.Stage != "backlog" || row.Group != "people" {
+		t.Fatalf("BeadMoves(pk-backlog, ada) = %+v, want pk-backlog in backlog for people", row)
+	}
+	if want := []store.Move{
+		{Kind: store.MoveAdvance, Label: "Move to building", To: "building"},
+		{Kind: store.MoveAdvance, Label: "Move to siding", To: "siding"},
+	}; !slices.Equal(row.Actions, want) {
+		t.Errorf("pk-backlog moves = %+v, want %+v", row.Actions, want)
+	}
+
+	// (b) Non-member of the first stage's manual group: nil, and MoveBead refuses.
+	if got, err := s.BeadMoves(ctx, "pk-backlog", "eve", "eve", "eve"); err != nil || got != nil {
+		t.Errorf("BeadMoves(pk-backlog, eve) = %+v, %v; want nil, nil", got, err)
+	}
+	if _, err := s.MoveBead(ctx, "pk-backlog", "", "siding", "", row.Revision, "eve"); err == nil || !strings.Contains(err.Error(), "does not wait for eve") {
+		t.Errorf("MoveBead(pk-backlog, eve) = %v, want refusal", err)
+	}
+
+	// (d) Open ask to the person on the first-stage bead: nil for them, still
+	// offered to another member.
+	seq, err := s.AddAsk(ctx, "pk-backlog", store.Ask{
+		Question: "Send to siding?", To: "ada",
+		Context: []string{"ready to route."},
+		Options: []store.AskOption{{Label: "Yes", Consequence: "moves on"}},
+	}, "hal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.BeadMoves(ctx, "pk-backlog", "ada", "ada", "ada"); err != nil || got != nil {
+		t.Errorf("BeadMoves(pk-backlog, ada) with open ask = %+v, %v; want nil, nil", got, err)
+	}
+	if got, err := s.BeadMoves(ctx, "pk-backlog", "hal", "hal", "hal"); err != nil || got == nil {
+		t.Errorf("BeadMoves(pk-backlog, hal) with ask to ada = %+v, %v; want row", got, err)
+	}
+	if err := s.TakeBackAsk(ctx, "pk-backlog", seq, "not needed", "hal"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now ada moves pk-backlog using its fresh BeadMoves revision.
+	row, err = s.BeadMoves(ctx, "pk-backlog", "ada", "ada", "ada")
+	if err != nil || row == nil {
+		t.Fatalf("BeadMoves(pk-backlog, ada) after take-back = %+v, %v", row, err)
+	}
+	moved, err := s.MoveBead(ctx, "pk-backlog", "", "siding", "", row.Revision, "ada")
+	if err != nil {
+		t.Fatalf("MoveBead(pk-backlog, ada): %v", err)
+	}
+	if *moved != (store.MovedBead{Bead: "pk-backlog", Stage: "siding"}) {
+		t.Errorf("MoveBead answered %+v, want pk-backlog in siding", moved)
+	}
+
+	// (c) Hidden bead: answers nil, never an error naming it.
+	own.SetPolicy(policyFunc(func(ctx context.Context, tx *bolt.Tx, actor string, act store.Action, obj store.Object) error {
+		if act == store.ActSee && obj.Kind == store.KindBead && obj.Name == "pk-ready" && actor == "hal" {
+			return errors.New("hidden from hal")
+		}
+		return store.CorePolicy.May(ctx, tx, actor, act, obj)
+	}))
+	if got, err := s.BeadMoves(ctx, "pk-ready", "hal", "hal", "hal"); err != nil || got != nil {
+		t.Errorf("BeadMoves on hidden bead = %+v, %v; want nil, nil", got, err)
+	}
+	// Missing and closed beads answer nil too.
+	if got, err := s.BeadMoves(ctx, "pk-nope", "ada", "ada", "ada"); err != nil || got != nil {
+		t.Errorf("BeadMoves on missing bead = %+v, %v; want nil, nil", got, err)
+	}
+	if _, err := s.AdvanceNote(ctx, "pk-review", "merged", "", store.Expect{}, "ada"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.BeadMoves(ctx, "pk-review", "ada", "ada", "ada"); err != nil || got != nil {
+		t.Errorf("BeadMoves on closed bead = %+v, %v; want nil, nil", got, err)
+	}
+
+	// Gate matches Waiting: operator reads another's, non-operator refused,
+	// unknown user not found.
+	if got, err := s.BeadMoves(ctx, "pk-ready", "hal", "ada"); err != nil || got == nil {
+		t.Errorf("operator reading hal's BeadMoves = %+v, %v; want row", got, err)
+	}
+	if _, err := s.BeadMoves(ctx, "pk-ready", "ada", "hal"); err == nil || !strings.Contains(err.Error(), "ada's inbox") {
+		t.Errorf("hal reading ada's BeadMoves = %v, want refusal", err)
+	}
+	if _, err := s.BeadMoves(ctx, "pk-ready", "ghost", "ghost"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("BeadMoves for unknown user = %v, want not found", err)
+	}
+}
+
+// BeadMoves reads only the requested bead's depot repository (not other
+// depots'), and still returns nil for a stranded bead.
+func TestBeadMovesReadsOnlyBeadDepotAndSkipsStranded(t *testing.T) {
+	t.Parallel()
+	dirA := gitRepo(t, map[string]string{
+		".yardr/flows/default.flow": "backlog -> ready\nready -> old | merged\nold -> ready\nmerged terminal\n",
+	})
+	dirB := gitRepo(t, map[string]string{
+		".yardr/flows/default.flow": "backlog -> merged\nmerged terminal\n",
+	})
+	s, own := storetest.NewOwned(t)
+	ctx := context.Background()
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err := s.AddUser(ctx, "ada", "ada")
+	must(err)
+	must(s.SetSetting(ctx, store.OperatorSetting, "ada", "ada"))
+	must(s.PutDepot(ctx, store.Depot{Name: "alpha", Path: dirA, Base: "main"}, "ada"))
+	must(s.PutDepot(ctx, store.Depot{Name: "beta", Path: dirB, Base: "main"}, "ada"))
+	must(s.PutGroup(ctx, store.Group{Name: "people", Runner: "manual", Members: []string{"ada"}}, "ada"))
+	for _, stage := range []string{"backlog", "ready", "old"} {
+		_, err := s.AddRoute(ctx, store.Route{Stage: stage, Group: "people"}, "ada")
+		must(err)
+	}
+	_, err = s.CreateBead(ctx, store.NewBead{ID: "bm-a", Title: "Alpha first", Depot: "alpha", Stage: "backlog"}, "ada")
+	must(err)
+	_, err = s.CreateBead(ctx, store.NewBead{ID: "bm-b", Title: "Beta first", Depot: "beta", Stage: "backlog"}, "ada")
+	must(err)
+	_, err = s.CreateBead(ctx, store.NewBead{ID: "bm-old", Title: "Old", Depot: "alpha", Stage: "old"}, "ada")
+	must(err)
+
+	before := own.RepoReads()
+	row, err := s.BeadMoves(ctx, "bm-a", "ada", "ada", "ada")
+	must(err)
+	if row == nil || len(row.Actions) != 1 || row.Actions[0].To != "ready" {
+		t.Fatalf("BeadMoves(bm-a) = %+v, want move to ready", row)
+	}
+	if got := own.RepoReads() - before; got != 1 {
+		t.Errorf("BeadMoves read %d repositories, want 1 (only bm-a's depot)", got)
+	}
+
+	// Stranded bead still has no row.
+	commitFiles(t, dirA, map[string]string{
+		".yardr/flows/default.flow": "backlog -> ready\nready -> merged\nmerged terminal\n",
+	})
+	if got, err := s.BeadMoves(ctx, "bm-old", "ada", "ada", "ada"); err != nil || got != nil {
+		t.Errorf("BeadMoves on stranded bead = %+v, %v; want nil, nil", got, err)
+	}
+}

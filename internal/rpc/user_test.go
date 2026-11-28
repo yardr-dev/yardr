@@ -721,6 +721,9 @@ func TestUserCallsAreMadeAsTheUser(t *testing.T) {
 		{"Waiting", `{}`, `"bead":"yd-parked"`},
 		{"Waiting", `{"name":null,"actor":"","viewer":null}`, `"bead":"yd-parked"`},
 		{"Waiting", `{"name":"jo","actor":"jo","viewer":"jo"}`, `"bead":"yd-parked"`},
+		{"BeadMoves", `{"bead":"yd-parked"}`, `"bead":"yd-parked"`},
+		{"BeadMoves", `{"bead":"yd-parked","name":null,"actor":"","viewer":null}`, `"bead":"yd-parked"`},
+		{"BeadMoves", `{"bead":"yd-parked","name":"jo","actor":"jo","viewer":"jo"}`, `"bead":"yd-parked"`},
 		{"Bead", `{"bead":"yd-hidden"}`, `not found`},
 		{"UserNotifications", `{}`, `"notifications":`},
 		{"Conversation", `{"b":"yardmaster"}`, `"text":"for jo"`},
@@ -735,6 +738,9 @@ func TestUserCallsAreMadeAsTheUser(t *testing.T) {
 		{"Waiting", `{"name":"sam"}`, `this device calls as jo: \"name\" is jo or left out, not sam`},
 		{"Waiting", `{"name":"jo","actor":"sam"}`, `this device calls as jo: \"actor\" is jo or left out, not sam`},
 		{"Waiting", `{"name":"jo","viewer":"sam"}`, `this device calls as jo: \"viewer\" is jo or left out, not sam`},
+		{"BeadMoves", `{"bead":"yd-parked","name":"sam"}`, `this device calls as jo: \"name\" is jo or left out, not sam`},
+		{"BeadMoves", `{"bead":"yd-parked","name":"jo","actor":"sam"}`, `this device calls as jo: \"actor\" is jo or left out, not sam`},
+		{"BeadMoves", `{"bead":"yd-parked","name":"jo","viewer":"sam"}`, `this device calls as jo: \"viewer\" is jo or left out, not sam`},
 		{"MoveBead", `{"bead":"yd-parked","to":"draft","actor":"sam"}`, `this device calls as jo: \"actor\" is jo or left out, not sam`},
 		{"Flows", `{"viewer":"sam"}`, `this device calls as jo: \"viewer\" is jo or left out, not sam`},
 		{"UserNotifications", `{"name":"sam"}`, `this device calls as jo`},
@@ -816,6 +822,9 @@ func TestUserCallsAreMadeAsTheUser(t *testing.T) {
 	}
 	if got := call(t, h, token, "Waiting", `{}`); strings.Contains(got, "yd-hidden-parked") {
 		t.Errorf("Waiting shows a bead the device may not see: %s", got)
+	}
+	if got := call(t, h, token, "BeadMoves", `{"bead":"yd-hidden-parked"}`); strings.Contains(got, "yd-hidden-parked") || strings.Contains(got, `"error"`) {
+		t.Errorf("BeadMoves on a bead the device may not see = %s, want null with no error", got)
 	}
 	if got := call(t, h, token, "Arrivals", `{}`); strings.Contains(got, hidden.ID) {
 		t.Errorf("Arrivals shows a bead the device may not see: %s", got)

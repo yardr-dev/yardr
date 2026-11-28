@@ -269,6 +269,26 @@ func crewMember(prefix string) []field {
 	}
 }
 
+// A waiting row is the same in Waiting and alone in BeadMoves.
+func waitingRow(prefix string) []field {
+	return []field{
+		{prefix + "bead", "string", "the bead's handle"},
+		{prefix + "title", "string", "the bead's title"},
+		{prefix + "depot", "string?", "the depot it is worked in; absent where it has none"},
+		{prefix + "stage", "string", "where it stands"},
+		{prefix + "group", "string", "the manual group whose stage it is"},
+		{prefix + "since", "time", "when the bead last changed: about when it began to wait"},
+		{prefix + "revision", "string", "the bead's revision when the row was read: a move is checked against it, and one made from a row the bead has changed since is refused"},
+		{prefix + "actions", "array", "the moves offered to the person, in `yardr review`'s order; empty where `flow_error` stands"},
+		{prefix + "actions[].kind", "string", "`done`, which reports an outcome the flow names, or `advance`, which sends the bead to a stage by hand"},
+		{prefix + "actions[].label", "string", "the move in the yard's words, as `yardr review` prints it (`done: move to review`, `changes: send back to draft (note required)`): show it as it is"},
+		{prefix + "actions[].outcome", "string?", "the outcome a `done` move reports; absent on `advance`"},
+		{prefix + "actions[].to", "string", "the stage the move enters"},
+		{prefix + "actions[].note_required", "bool?", "`true` where the move needs a note saying what should change: a move back to an earlier stage, but for the return to a question's asker, whose answer is on the bead already; absent otherwise"},
+		{prefix + "actions[].terminal", "bool?", "`true` where entering the stage closes the bead; absent otherwise"},
+	}
+}
+
 var apiCalls = []apiCall{
 	{
 		method:   "Head",
@@ -529,35 +549,34 @@ var apiCalls = []apiCall{
 		says:     "The beads parked for the person, longest waiting first, each with the moves they may make of it: open beads in a stage a manual group works, the person one of its members where the group lists any, past the first stage of the flow that governs the bead, so that a backlog, where beads start, is never here. It is the part of `yardr review`'s queue that is the person's to move, with the same moves in the same words. Only the user reads their queue, and an operator any user's. A device's viewer is always its user.",
 		args:     []field{{"name", "string", "the user"}, {"actor", "string", "who reads: the user's name, or an operator's; left out, the user"}, {"viewer", "string", "who reads the queue: it holds no bead they may not see; a device's viewer is its user; left out, the yard itself"}},
 		requests: []string{`{"name":"jo","actor":"jo","viewer":"jo"}`},
-		fields: []field{
-			{"[].bead", "string", "the bead's handle"},
-			{"[].title", "string", "the bead's title"},
-			{"[].depot", "string?", "the depot it is worked in; absent where it has none"},
-			{"[].stage", "string", "where it stands"},
-			{"[].group", "string", "the manual group whose stage it is"},
-			{"[].since", "time", "when the bead last changed: about when it began to wait"},
-			{"[].revision", "string", "the bead's revision when the row was read: a move is checked against it, and one made from a row the bead has changed since is refused"},
-			{"[].actions", "array", "the moves offered to the person, in `yardr review`'s order; empty where `flow_error` stands"},
-			{"[].actions[].kind", "string", "`done`, which reports an outcome the flow names, or `advance`, which sends the bead to a stage by hand"},
-			{"[].actions[].label", "string", "the move in the yard's words, as `yardr review` prints it (`done: move to review`, `changes: send back to draft (note required)`): show it as it is"},
-			{"[].actions[].outcome", "string?", "the outcome a `done` move reports; absent on `advance`"},
-			{"[].actions[].to", "string", "the stage the move enters"},
-			{"[].actions[].note_required", "bool?", "`true` where the move needs a note saying what should change: a move back to an earlier stage, but for the return to a question's asker, whose answer is on the bead already; absent otherwise"},
-			{"[].actions[].terminal", "bool?", "`true` where entering the stage closes the bead; absent otherwise"},
-		},
+		fields:   waitingRow("[]."),
 		after: "A bead stands in one list only, and these are the cases that leave it out. While an open ask to the person stands on it, it is among their decisions ([`UserAsks`](#userasks)) and not here. In a group of several members, once the person has answered, put aside or declined an ask to them on it, it is another member's move now. An ask its asker took back is no answer of the person, and does not take the bead from their list. A held bead, and one in a stage its flow lacks, are faults to mend and not moves to make, and are never here, whatever stage they stand in: a bead that is both parked and held stands here when the hold is lifted and not before, though `yardr review` lists it with its hold marked.\n\n" +
 			"A row may carry two fields more, which the example does not show. `flow_error` says why the bead's flow does not resolve: `actions` is then empty, as no move exists until the flow is fixed, and the bead is shown all the same, so that it is not lost. `template_error` says why entering the stage put no ask for its people, where that ask would stand; the bead still moves by hand, and `actions` are its moves.\n\n" +
 			"Read it again on every event that carries a bead, `noted` among them, and on the events without one that move its inputs: `group_set`, `group_renamed` and `group_removed`, `route_added`, `route_set` and `route_removed`, `flow_set`, `flow_removed`, `flow_pointer_set` and `flow_pointer_cleared`, `depot_updated` and `depot_removed`, and `setting_changed` whose `key` is `operator`. A put-aside ask also comes back on its own after 24 hours, with no event, and takes its bead from this list with it: read again then, as for [`UserAsks`](#userasks).",
 	},
 	{
-		method: "MoveBead",
-		says:   "Makes one move [`Waiting`](#waiting) offers the person, with its note, from the revision its row was read at, and nothing else. Exactly one of `outcome` (a `done` action) and `to` (an `advance` action) names the move, as the row's action names it. The yard refuses, with nothing written, a stale revision, a move not among the ones the row offers the person, a note missing where the move needs one, and both or neither of `outcome` and `to`. The note goes with the move in the same write, so a refused move leaves none behind. The answer names the bead, the stage it entered, and whether it closed.",
+		method: "BeadMoves",
+		says:   "One bead's moves for the person: the same row [`Waiting`](#waiting) gives, with a flow's first stage served too. Answers `null` when the bead has no row for the person: closed, held, non-work, stranded in a stage its flow lacks, not in a manual stage of theirs, carrying an open ask to them, answered with another member left, missing, or hidden from the viewer. Only the user reads their own, and an operator any user's. A device's viewer is always its user.",
 		args: []field{
 			{"bead", "string", "the bead"},
-			{"outcome", "string", "the outcome a `done` move reports, as `actions[].outcome` of its `Waiting` row; left out on an advance move"},
-			{"to", "string", "the stage an `advance` move enters, as `actions[].to` of its `Waiting` row; left out on a done move"},
+			{"name", "string", "the user"},
+			{"actor", "string", "who reads: the user's name, or an operator's; left out, the user"},
+			{"viewer", "string", "who reads the bead: a bead they may not see answers `null`, never an error naming it; a device's viewer is its user; left out, the yard itself"},
+		},
+		requests: []string{`{"bead":"yd-notes","name":"jo","actor":"jo","viewer":"jo"}`},
+		fields:   waitingRow(""),
+		after: "Every rule of [`Waiting`](#waiting) holds here, except that a bead at its flow's first stage is served too where the person is a member of its stage's manual group (or the group lists none). So a bead detail view can offer a person the moves of a bead in `backlog` or `triage` without putting every first-stage bead into their `Waiting` list. A bead the viewer may not see, or one that does not exist, answers `null` rather than `not-found`.\n\n" +
+			"`flow_error` and `template_error` ride on the row as in [`Waiting`](#waiting). Read it again on the same events as [`Waiting`](#waiting) for this bead.",
+	},
+	{
+		method: "MoveBead",
+		says:   "Makes one move [`BeadMoves`](#beadmoves) offers the person, with its note, from the revision its row was read at, and nothing else. Exactly one of `outcome` (a `done` action) and `to` (an `advance` action) names the move, as the row's action names it. The yard refuses, with nothing written, a stale revision, a move not among the ones the row offers the person, a note missing where the move needs one, and both or neither of `outcome` and `to`. The note goes with the move in the same write, so a refused move leaves none behind. The answer names the bead, the stage it entered, and whether it closed.",
+		args: []field{
+			{"bead", "string", "the bead"},
+			{"outcome", "string", "the outcome a `done` move reports, as `actions[].outcome` of its `BeadMoves` or `Waiting` row; left out on an advance move"},
+			{"to", "string", "the stage an `advance` move enters, as `actions[].to` of its `BeadMoves` or `Waiting` row; left out on a done move"},
 			{"note", "string", "what goes with the move, in the same write; left out where the note line is empty. A move whose action says `note_required` is refused without words"},
-			{"revision", "string", "the bead's revision when its `Waiting` row was read, as `revision` of the row"},
+			{"revision", "string", "the bead's revision when its `BeadMoves` or `Waiting` row was read, as `revision` of the row"},
 			{"actor", "string", "who moves it: the user's name"},
 		},
 		requests: []string{`{"bead":"yd-notes","outcome":"done","note":"read on the train: the notes are good to publish","revision":"%s","actor":"jo"}`},
@@ -566,8 +585,8 @@ var apiCalls = []apiCall{
 			{"stage", "string", "the stage the move entered"},
 			{"closed", "bool?", "`true` where entering the stage closed the bead; absent otherwise"},
 		},
-		after: "[`Waiting`](#waiting) is the whole of what is offered, read for the person who moves the bead: a bead with no row in their queue offers no move here. So a held bead, and one in a stage its flow lacks, cannot be moved with this call, though the store refuses no move for a held bead by its own calls: release the hold, or mend the flow (`yardr review` offers a stranded bead its move to the first stage there), read `Waiting` again, and then move. A bead at its flow's first stage, one carrying an open ask to the person, and one the person has answered with another member left are not offered either: the first is shaped, the second is answered at its ask, and the third is the other member's to move. A row whose `flow_error` stands offers no move, and the refusal says why the flow does not resolve.\n\n" +
-			"Over the network `actor` is the device's user: left out it is filled in, and one naming anyone else, another member of the bead's stage group included, is refused with no call made and nothing written; on the socket it is the caller's word, as for [`AnswerAsk`](#answerask). Either way the offered moves are rebuilt for that actor, and inside the write the stage group's members are judged again, so a non-member's move is refused as not offered to them. The move is then an `advanced` event in the stream: read `Waiting` again on it. When the call ends without a reply (the yard went away), the move may have run: say \"the yard did not answer; read the bead again\", never that the bead moved, and read `Waiting` and [`Bead`](#bead) again; making the same move twice by hand is refused by the revision, not by remembering.",
+		after: "[`BeadMoves`](#beadmoves) is the whole of what is offered, read for the person who moves the bead: a bead with no row offers no move here. A bead at its flow's first stage is moved as any other where the person is a member of its stage's manual group; it is only left out of the [`Waiting`](#waiting) list. A held bead, and one in a stage its flow lacks, have no row and cannot be moved with this call, though the store refuses no move for a held bead by its own calls: release the hold, or mend the flow (`yardr review` offers a stranded bead its move to the first stage there), read `BeadMoves` again, and then move. One carrying an open ask to the person, and one the person has answered with another member left are not offered either: the first is answered at its ask, and the second is the other member's to move. A row whose `flow_error` stands offers no move, and the refusal says why the flow does not resolve.\n\n" +
+			"Over the network `actor` is the device's user: left out it is filled in, and one naming anyone else, another member of the bead's stage group included, is refused with no call made and nothing written; on the socket it is the caller's word, as for [`AnswerAsk`](#answerask). Either way the offered moves are rebuilt for that actor, and inside the write the stage group's members are judged again, so a non-member's move is refused as not offered to them. The move is then an `advanced` event in the stream: read `Waiting` or `BeadMoves` again on it. When the call ends without a reply (the yard went away), the move may have run: say \"the yard did not answer; read the bead again\", never that the bead moved, and read `Waiting`, `BeadMoves` and [`Bead`](#bead) again; making the same move twice by hand is refused by the revision, not by remembering.",
 	},
 	{
 		method:   "Bead",

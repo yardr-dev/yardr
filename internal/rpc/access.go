@@ -178,6 +178,7 @@ var Access = map[string]Class{
 	"UserOpenAsks":         Read,
 	"OpenAskBeads":         Read,
 	"Waiting":              Read,
+	"BeadMoves":            Read,
 	"MoveBead":             Admin,    // as AnswerAsk: a person or the crew, no bead's agent
 	"IdentityHeldPayloads": Operator, // the raw body is only for the person the card asks
 	"WriterAsks":           Read,

@@ -176,10 +176,11 @@ func TestMoveBeadRefusalsWriteNothing(t *testing.T) {
 	}
 }
 
-// MoveBead follows Waiting for what stands in the queue at all: the
-// backlog, a held bead, a stranded bead, an asked bead and one the actor
-// answered with another member left offer the actor no move, though
-// Done and AdvanceNote refuse none of them for the hold or the stage.
+// MoveBead follows BeadMoves for what is offered: a first-stage bead is
+// omitted from Waiting yet moves for a member of its manual group and not
+// for a non-member, while a held bead, a stranded bead, an asked bead and
+// one the actor answered with another member left offer the actor no move,
+// though Done and AdvanceNote refuse none of them for the hold or the stage.
 func TestMoveBeadFollowsWaiting(t *testing.T) {
 	t.Parallel()
 	s, _, ctx := parkedYard(t)
@@ -192,8 +193,16 @@ func TestMoveBeadFollowsWaiting(t *testing.T) {
 		return b.Revision
 	}
 
-	// The backlog is where beads start: shaped, not moved from the queue.
-	refusedMove(t, s, ctx, "pk-backlog", "", "siding", "", at("pk-backlog"), "ada", "bead pk-backlog does not wait for ada")
+	// The backlog is the flow's first stage: left out of Waiting, refused
+	// for eve (not in people), and offered and movable for ada.
+	refusedMove(t, s, ctx, "pk-backlog", "", "siding", "", at("pk-backlog"), "eve", "bead pk-backlog does not wait for eve")
+	moved, err := s.MoveBead(ctx, "pk-backlog", "", "siding", "", at("pk-backlog"), "ada")
+	if err != nil {
+		t.Fatalf("pk-backlog at first stage does not move for ada: %v", err)
+	}
+	if *moved != (store.MovedBead{Bead: "pk-backlog", Stage: "siding"}) {
+		t.Errorf("first-stage move answered %+v, want pk-backlog in siding", moved)
+	}
 
 	// A held bead stands nowhere in the queue until the hold is lifted,
 	// at whatever revision the hold left it.

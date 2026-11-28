@@ -97,6 +97,7 @@ type API interface {
 	// user. The flows view's lamps read it for the open beads drawn.
 	OpenAskBeads(ctx context.Context, name, actor string, ids []string) ([]string, error)
 	Waiting(ctx context.Context, name, actor string, viewer ...string) ([]WaitingBead, error)
+	BeadMoves(ctx context.Context, bead, name, actor string, viewer ...string) (*WaitingBead, error)
 	MoveBead(ctx context.Context, bead, outcome, to, note, revision, actor string) (*MovedBead, error)
 	IdentityHeldPayloads(ctx context.Context, bead string, ask uint64, actor string) ([]string, error)
 	WriterAsks(ctx context.Context, writer string, viewer ...string) ([]WriterAsk, error)

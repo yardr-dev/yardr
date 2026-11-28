@@ -7,7 +7,7 @@ package rpc
 // never derived from the tables' lengths, so an accidental addition fails
 // the pin.
 const (
-	wantCalls         = 41
+	wantCalls         = 42
 	wantOperatorCalls = 18
 	wantListenerOnly  = 1
 )

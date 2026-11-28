@@ -116,6 +116,151 @@ func (s *Store) waiting(ctx context.Context, name, actor, viewer string) ([]Wait
 	}
 }
 
+// BeadMoves reads one bead's moves for the person name: the same row Waiting
+// would give, with a flow's first stage served too. It answers nil where the
+// bead has no row for the person (closed, held, non-work, stranded, not in a
+// manual stage of theirs, carrying an open ask to them, answered with another
+// member left, missing, or hidden from viewer). Only the bead's own depot
+// repository is read, between store reads as Waiting does. The gate is the
+// same: only the user reads their own, and an operator any user's.
+func (s *Store) BeadMoves(ctx context.Context, bead, name, actor string, viewer ...string) (*WaitingBead, error) {
+	v := firstViewer(viewer)
+	repos := map[string]repoRead{}
+	for {
+		var row *WaitingBead
+		var need string
+		err := s.read(func(tx *bolt.Tx) error {
+			row, need = nil, ""
+			p, err := s.newParkedPass(ctx, tx, name, actor, v, repos, true)
+			if err != nil {
+				return err
+			}
+			b, err := loadBead(tx, bead)
+			if errors.Is(err, ErrNotFound) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			b.Train = trainOf(tx, b.UUID)
+			row, need, _, err = s.parkedBead(ctx, p, b)
+			return err
+		})
+		if err != nil || need == "" {
+			return row, err
+		}
+		rf, err := s.RepoFlows(ctx, need)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		repos[need] = repoRead{rf, err}
+	}
+}
+
+// parkedPass holds the store state read once for a Waiting or BeadMoves pass.
+type parkedPass struct {
+	tx       *bolt.Tx
+	name     string
+	viewer   string
+	operator string
+	routes   []Route
+	groups   map[string]Group
+	repos    map[string]repoRead
+	memo     flowMemo
+	at       time.Time
+	first    bool
+}
+
+func (s *Store) newParkedPass(ctx context.Context, tx *bolt.Tx, name, actor, viewer string, repos map[string]repoRead, first bool) (*parkedPass, error) {
+	if _, err := getUser(tx, name); err != nil {
+		return nil, err
+	}
+	if _, err := s.mayReadInbox(ctx, tx, name, actor, "read"); err != nil {
+		return nil, err
+	}
+	routes, err := sortedRoutes(tx)
+	if err != nil {
+		return nil, err
+	}
+	operator, err := operatorIn(tx)
+	if err != nil {
+		return nil, err
+	}
+	groups := map[string]Group{}
+	if err := each(tx, bGroups, "", func(_ []byte, g *Group) error {
+		groups[g.Name] = *g
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return &parkedPass{
+		tx: tx, name: name, viewer: viewer, operator: operator,
+		routes: routes, groups: groups, repos: repos, at: now(), first: first,
+	}, nil
+}
+
+// parkedBead builds the WaitingBead row for one bead under p, or nil where the
+// bead has no row for p.name. needRepo names a depot whose repository flows p
+// lacked; back is the earliest return of a put-aside ask on the bead.
+func (s *Store) parkedBead(ctx context.Context, p *parkedPass, b *beadRow) (row *WaitingBead, needRepo string, back time.Time, err error) {
+	if b.Status != "open" || NotWork[b.Type] || b.Hold {
+		return nil, "", time.Time{}, nil
+	}
+	g, ok := ManualGroup(p.routes, b.Bead, p.operator, p.groups)
+	if !ok || len(g.Members) > 0 && !slices.Contains(g.Members, p.name) {
+		return nil, "", time.Time{}, nil
+	}
+	if s.may(ctx, p.tx, p.viewer, ActSee, Object{Kind: KindBead, Name: b.ID}) != nil {
+		return nil, "", time.Time{}, nil
+	}
+	var repo *RepoFlows
+	if b.Depot != nil {
+		repo = p.repos[*b.Depot].flows
+	}
+	f, src, flowErr := p.memo.resolve(p.tx, b.Depot, b.Type, PinnedFlow(&b.Bead), repo)
+	if errors.Is(flowErr, errNeedRepo) && b.Depot != nil {
+		read, ok := p.repos[*b.Depot]
+		if !ok {
+			return nil, *b.Depot, time.Time{}, nil
+		}
+		// The repository could not be read: the flow is not known.
+		flowErr = read.err
+	}
+	if flowErr == nil && f != nil && (!slices.Contains(f.Stages, b.Stage) || !p.first && f.Stages[0] == b.Stage) {
+		// Stranded, which is a fault, or (unless first is true) at the flow's
+		// first stage, where its beads start.
+		return nil, "", time.Time{}, nil
+	}
+	notes, err := beadNotes(p.tx, b.UUID)
+	if err != nil {
+		return nil, "", time.Time{}, err
+	}
+	asked, tookPart, back := asksOf(notes, p.name, p.at)
+	if asked || PartIn(g, p.name, tookPart) {
+		return nil, "", back, nil
+	}
+	w := WaitingBead{Bead: b.ID, Title: b.Title, Stage: b.Stage, Group: g.Name,
+		Since: b.UpdatedAt, Revision: b.Revision, Actions: []Move{}}
+	if b.Depot != nil {
+		w.Depot = *b.Depot
+	}
+	if flowErr != nil {
+		w.FlowError = flowErr.Error()
+	} else {
+		next := &NextStages{Bead: b.ID, Stage: b.Stage, Stages: []string{}}
+		if f != nil {
+			if err := next.fill(p.tx, b, f, src, repo); err != nil {
+				return nil, "", back, err
+			}
+		}
+		w.TemplateError = next.TemplateError
+		if moves := MovesFor(&b.Bead, next, p.routes, p.operator); moves != nil {
+			w.Actions = moves
+		}
+	}
+	return &w, "", back, nil
+}
+
 // parked is one pass of Waiting over the repositories it has read so far.
 // missing names the depots whose repository the flows of some bead depend on
 // and that the pass lacked: the rows are then not final, and the caller reads
@@ -127,95 +272,31 @@ func (s *Store) parked(ctx context.Context, name, actor, viewer string, repos ma
 	var until time.Time
 	err := s.read(func(tx *bolt.Tx) error {
 		rows, missing, until = []WaitingBead{}, nil, time.Time{}
-		if _, err := getUser(tx, name); err != nil {
-			return err
-		}
-		if _, err := s.mayReadInbox(ctx, tx, name, actor, "read"); err != nil {
-			return err
-		}
-		routes, err := sortedRoutes(tx)
+		p, err := s.newParkedPass(ctx, tx, name, actor, viewer, repos, false)
 		if err != nil {
-			return err
-		}
-		operator, err := operatorIn(tx)
-		if err != nil {
-			return err
-		}
-		groups := map[string]Group{}
-		if err := each(tx, bGroups, "", func(_ []byte, g *Group) error {
-			groups[g.Name] = *g
-			return nil
-		}); err != nil {
 			return err
 		}
 		open, err := s.openBeads(tx)
 		if err != nil {
 			return err
 		}
-		memo, at := flowMemo{}, now()
 		for _, b := range open {
-			if NotWork[b.Type] || b.Hold {
-				continue
-			}
-			g, ok := ManualGroup(routes, b.Bead, operator, groups)
-			if !ok || len(g.Members) > 0 && !slices.Contains(g.Members, name) {
-				continue
-			}
-			if s.may(ctx, tx, viewer, ActSee, Object{Kind: KindBead, Name: b.ID}) != nil {
-				continue
-			}
-			var repo *RepoFlows
-			if b.Depot != nil {
-				repo = repos[*b.Depot].flows
-			}
-			f, src, flowErr := memo.resolve(tx, b.Depot, b.Type, PinnedFlow(&b.Bead), repo)
-			if errors.Is(flowErr, errNeedRepo) && b.Depot != nil {
-				read, ok := repos[*b.Depot]
-				if !ok {
-					if !slices.Contains(missing, *b.Depot) {
-						missing = append(missing, *b.Depot)
-					}
-					continue
-				}
-				// The repository could not be read: the flow is not known.
-				flowErr = read.err
-			}
-			if flowErr == nil && f != nil && (!slices.Contains(f.Stages, b.Stage) || f.Stages[0] == b.Stage) {
-				// Stranded, which is a fault, or at the flow's first stage,
-				// where its beads start.
-				continue
-			}
-			notes, err := beadNotes(tx, b.UUID)
+			row, need, back, err := s.parkedBead(ctx, p, b)
 			if err != nil {
 				return err
 			}
-			asked, tookPart, back := asksOf(notes, name, at)
 			if !back.IsZero() && (until.IsZero() || back.Before(until)) {
 				until = back
 			}
-			if asked || PartIn(g, name, tookPart) {
+			if need != "" {
+				if !slices.Contains(missing, need) {
+					missing = append(missing, need)
+				}
 				continue
 			}
-			w := WaitingBead{Bead: b.ID, Title: b.Title, Stage: b.Stage, Group: g.Name,
-				Since: b.UpdatedAt, Revision: b.Revision, Actions: []Move{}}
-			if b.Depot != nil {
-				w.Depot = *b.Depot
+			if row != nil {
+				rows = append(rows, *row)
 			}
-			if flowErr != nil {
-				w.FlowError = flowErr.Error()
-			} else {
-				next := &NextStages{Bead: b.ID, Stage: b.Stage, Stages: []string{}}
-				if f != nil {
-					if err := next.fill(tx, b, f, src, repo); err != nil {
-						return err
-					}
-				}
-				w.TemplateError = next.TemplateError
-				if moves := MovesFor(&b.Bead, next, routes, operator); moves != nil {
-					w.Actions = moves
-				}
-			}
-			rows = append(rows, w)
 		}
 		slices.SortStableFunc(rows, func(a, b WaitingBead) int {
 			if c := a.Since.Compare(b.Since); c != 0 {

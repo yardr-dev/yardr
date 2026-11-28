@@ -19,7 +19,8 @@ const ClientHeader = "X-Yardr-Client"
 // together. They are what a chat client needs, yardr chat among them: its
 // view (chat.Store) and the command that opens it; what a client that
 // shows a person's decisions needs (UserAsks, UserOpenAsks for the open
-// rows alone, Waiting for the beads parked in their stages, Bead and the
+// rows alone, Waiting for the beads parked in their stages, BeadMoves for one
+// bead's moves (including a flow's first stage), Bead and the
 // writes, MoveBead among them); what a
 // person's own client needs to file their work, to list it, to answer
 // their mail and to read one letter with its exchange, and to withdraw
@@ -66,6 +67,7 @@ var Calls = map[string][]string{
 	"UserAsks":             {"name", "actor", "viewer"},
 	"UserOpenAsks":         {"name", "actor", "viewer"},
 	"Waiting":              {"name", "actor", "viewer"},
+	"BeadMoves":            {"bead", "name", "actor", "viewer"},
 	"FileBead":             {"title", "body", "project", "actor"},
 	"OwnBeads":             {"user", "since", "actor"},
 	"WithdrawBead":         {"bead", "reason", "actor"},

@@ -214,6 +214,9 @@ func (c *Client) OpenAskBeads(ctx context.Context, name, actor string, ids []str
 func (c *Client) Waiting(ctx context.Context, name, actor string, viewer ...string) ([]store.WaitingBead, error) {
 	return callV[[]store.WaitingBead](c, ctx, "Waiting", name, actor, viewer)
 }
+func (c *Client) BeadMoves(ctx context.Context, bead, name, actor string, viewer ...string) (*store.WaitingBead, error) {
+	return callV[*store.WaitingBead](c, ctx, "BeadMoves", bead, name, actor, viewer)
+}
 func (c *Client) MoveBead(ctx context.Context, bead, outcome, to, note, revision, actor string) (*store.MovedBead, error) {
 	return callV[*store.MovedBead](c, ctx, "MoveBead", bead, outcome, to, note, revision, actor)
 }
