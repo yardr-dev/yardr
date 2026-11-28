@@ -79,6 +79,10 @@ type FlowGroup struct {
 type FlowRow struct {
 	Bead  string `json:"bead"`
 	Title string `json:"title"`
+	// Held is a bead on hold; Working one an agent's or a command's session
+	// has claimed. A manual group's claim is no work in progress, as on Card.
+	Held    bool `json:"held,omitempty"`
+	Working bool `json:"working"`
 }
 
 // FlowTerminal is a terminal group: the landing terminal's log, or every
@@ -139,8 +143,9 @@ func closeVerb(stage string) string {
 
 // flowPage regroups the overview and the closed read into one flow's list.
 // d is the depot's overview row, j its flow's index, open the yard's open
-// beads and all what ListBeads{All: true} read, both viewer-filtered.
-func flowPage(d *HomeDepot, j int, open []store.Bead, all []store.Bead, now time.Time) *FlowPage {
+// beads and all what ListBeads{All: true} read, both viewer-filtered, and
+// manual the session ids claimed by manual groups.
+func flowPage(d *HomeDepot, j int, open []store.Bead, all []store.Bead, now time.Time, manual map[string]bool) *FlowPage {
 	f := &d.Flows[j]
 	out := &FlowPage{Depot: d.Name, Flow: f.Name, Tag: depotTag(d),
 		Groups: []FlowGroup{}, Empty: []FlowGroup{},
@@ -190,7 +195,7 @@ func flowPage(d *HomeDepot, j int, open []store.Bead, all []store.Bead, now time
 			g.Note = "waits on shaping"
 		}
 		for _, b := range beads[:min(len(beads), flowRowsShown)] {
-			g.Rows = append(g.Rows, FlowRow{Bead: b.ID, Title: b.Title})
+			g.Rows = append(g.Rows, FlowRow{Bead: b.ID, Title: b.Title, Held: b.Hold, Working: working(&b, manual)})
 		}
 		if len(beads) > flowRowsShown {
 			g.More = len(beads) - flowRowsShown
@@ -297,5 +302,5 @@ func (s *Server) handleFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.respond(w, r, Page{Template: "flow", Kind: "flow", Title: flow,
-		Data: flowPage(d, j, ov.yard.beads, all, time.Now()), ov: ov, head: head, depot: name, flow: flow})
+		Data: flowPage(d, j, ov.yard.beads, all, time.Now(), manualClaims(ov.yard.sessions)), ov: ov, head: head, depot: name, flow: flow})
 }

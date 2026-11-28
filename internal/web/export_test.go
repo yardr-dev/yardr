@@ -104,8 +104,8 @@ func LandedSince(beads []store.Bead, d *HomeDepot, now time.Time) []store.Bead {
 
 // FlowList regroups the overview and the closed read into one flow's list:
 // d is the depot's overview row, j its flow's index.
-func FlowList(d *HomeDepot, j int, open []store.Bead, all []store.Bead, now time.Time) *FlowPage {
-	return flowPage(d, j, open, all, now)
+func FlowList(d *HomeDepot, j int, open []store.Bead, all []store.Bead, now time.Time, manual map[string]bool) *FlowPage {
+	return flowPage(d, j, open, all, now, manual)
 }
 
 // ProviderOf is the subscription a herdr group or crew member with cfg

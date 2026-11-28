@@ -26,11 +26,13 @@
   {{- /* The feed, newest first: the kept lines, or the full page behind
          ?all=1. What listens to the stream for its own fragments says
          hx-target="this": the shell's target is the stage, which an element
-         that swaps what the stream sends would otherwise inherit. On the
-         first page of home the shell's stream continues it after the page's
-         head: each kept event's entry goes on top. /line and an older page
-         are snapshots of it, /line read again whole. The empty sentence
-         stands last and shows only where it is first. */}}
+         that swaps what the stream sends would otherwise inherit. A link
+         inside the feed says the shell's target and swap again, because it
+         would otherwise inherit the feed's. On the first page of home the
+         shell's stream continues it after the page's head: each kept event's
+         entry goes on top. /line and an older page are snapshots of it, /line
+         read again whole. The empty sentence stands last and shows only where
+         it is first. */}}
   <section class="wv-block" aria-label="What happened">
     <h2 class="wv-sh"><span>What happened</span>{{if .MoreActivity}}<a class="wv-sh__count" href="/?all=1">All activity</a>{{end}}</h2>
     <ol class="wv-feed" id="feed"{{if .Follow}} sse-swap="message" hx-target="this" hx-swap="afterbegin"{{end}}>

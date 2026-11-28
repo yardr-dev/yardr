@@ -12,6 +12,7 @@ about: Usage limits of the subscriptions the agents' CLIs are logged in to (gith
 limits:
   command: [aiquokka, "{provider}", --json]
   kinds:              # harness kind -> the provider's own name for it
+    agy: agy
     claude: claude
     codex: codex
     grok: grok

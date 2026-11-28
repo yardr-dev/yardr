@@ -1576,7 +1576,7 @@ func TestSourceAddAKnownName(t *testing.T) {
 	out, err := run(t, a.sourceCmd(), "add", "aiquokka")
 	for _, want := range []string{
 		"source aiquokka saved: no call, its limits command alone",
-		"limits: its command says what the subscription of claude, codex, grok, kimi, muse still carries",
+		"limits: its command says what the subscription of agy, claude, codex, grok, kimi, muse still carries",
 		"next: yardr source check aiquokka",
 		"the commands' files are under " + filepath.Join(home, "sources", "aiquokka") + ", each mode 0700: aiquokka",
 	} {

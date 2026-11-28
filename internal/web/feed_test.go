@@ -360,7 +360,7 @@ func TestFeedHTML(t *testing.T) {
 		`<span class="wv-entry__what">moved from review to merged</span>`,
 		`<span class="wv-id">` + b.ID + `</span>`,
 		`<li class="wv-entry wv-entry--held" id="e`,
-		`<a class="wv-entry__title" href="/beads/` + b.ID + `">a door</a>`,
+		`<a class="wv-entry__title" href="/beads/` + b.ID + `" hx-target="#stage" hx-swap="innerHTML scroll:top">a door</a>`,
 		`<time class="wv-entry__at" datetime="`,
 	} {
 		if !strings.Contains(old, want) {
@@ -608,7 +608,7 @@ func TestEventsHTML(t *testing.T) {
 	if fr.id != head+1 || !strings.HasPrefix(hour, `<li class="wv-hour" data-hour="`) ||
 		!strings.HasPrefix(entryFrom, fmt.Sprintf(`<li class="wv-entry" id="e%d">`, fr.id)) ||
 		!strings.Contains(fr.data, `<span class="wv-entry__what">created</span>`) ||
-		!strings.Contains(fr.data, `<a class="wv-entry__title" href="/beads/`+b.ID+`">a door</a><span class="wv-id">`+b.ID+`</span>`) {
+		!strings.Contains(fr.data, `<a class="wv-entry__title" href="/beads/`+b.ID+`" hx-target="#stage" hx-swap="innerHTML scroll:top">a door</a><span class="wv-id">`+b.ID+`</span>`) {
 		t.Errorf("frame %d: %s", fr.id, fr.data)
 	}
 	// The fragment is the head of its hour and the page's own markup for the

@@ -23,11 +23,15 @@ func flowYard(t *testing.T) *fixture {
 }
 
 // stockFlow gives the flow page something to list: seven landed fresh,
-// eight closed from backlog, and six more beads in new past the cap of six.
+// eight closed from backlog, six more beads in new past the cap of six,
+// two held (from populate), bulk-1 claimed by an agent session, and one
+// claimed by a manual group's session.
 func stockFlow(t *testing.T) (*fixture, map[string]store.Bead) {
 	t.Helper()
 	ctx := context.Background()
 	f := flowYard(t)
+	must(t, f.st.PutGroup(ctx, store.Group{Name: "backlog", Runner: "manual"}, "me"))
+	must(t, f.st.PutGroup(ctx, store.Group{Name: "builders", Runner: "fake"}, "me"))
 	seven, err := f.st.CreateBead(ctx, store.NewBead{Title: "seven", Stage: "review", Depot: "line"}, "me")
 	must(t, err)
 	_, err = f.st.AdvanceNote(ctx, seven.ID, "merged", "assembly: merged 70dabcd", store.Expect{}, "assembly")
@@ -36,13 +40,22 @@ func stockFlow(t *testing.T) (*fixture, map[string]store.Bead) {
 	must(t, err)
 	_, err = f.st.CloseBead(ctx, eight.ID, "dropped", store.Expect{}, "me")
 	must(t, err)
+	var bulk1 string
 	for i := range 6 {
-		_, err := f.st.CreateBead(ctx, store.NewBead{Title: fmt.Sprintf("bulk-%d", i), Stage: "new", Depot: "line"}, "me")
+		b, err := f.st.CreateBead(ctx, store.NewBead{Title: fmt.Sprintf("bulk-%d", i), Stage: "new", Depot: "line"}, "me")
 		must(t, err)
+		if i == 1 {
+			bulk1 = b.ID
+		}
 	}
 	// byTitle maps the open beads alone; the closed ones join from the All
 	// read, as the page reads them.
 	bs := f.byTitle()
+	_, err = f.st.Claim(ctx, bs["one"].ID, "backlog", "backlog", "yard")
+	must(t, err)
+	_, err = f.st.Claim(ctx, bulk1, "builders", "new", "yard")
+	must(t, err)
+	bs = f.byTitle()
 	closed, err := f.st.ListBeads(ctx, store.BeadFilter{All: true})
 	must(t, err)
 	for _, b := range closed {
@@ -101,7 +114,7 @@ func testFlowListMerged(t *testing.T) {
 			Stage: "review", Status: "closed", Depot: &line, ClosedAt: closedAt(time.Duration(i+6) * time.Hour)})
 	}
 
-	got := web.FlowList(d, 0, open, all, now)
+	got := web.FlowList(d, 0, open, all, now, nil)
 	if got.Depot != "line" || got.Flow != "code" || got.Tag != "repo@52e22d5" {
 		t.Fatalf("page %+v, want line/code at repo@52e22d5", got)
 	}
@@ -184,7 +197,7 @@ func testFlowListDone(t *testing.T) {
 		{ID: "line-o1", Title: "older", Stage: "done", Status: "closed", Depot: &line, ClosedAt: closedAt(30 * time.Hour)},
 	}
 
-	got := web.FlowList(d, 0, open, all, now)
+	got := web.FlowList(d, 0, open, all, now, nil)
 	if got.Tag != "" {
 		t.Errorf("tag %q, want none for a dir depot's flow", got.Tag)
 	}
@@ -230,7 +243,7 @@ func testFlowListLive(t *testing.T) {
 		{ID: "line-x1", Title: "stuck", Stage: "merged", Status: "closed", Depot: &line, ClosedAt: closedAt(2 * time.Hour)},
 	}
 
-	got := web.FlowList(d, 0, open, all, now)
+	got := web.FlowList(d, 0, open, all, now, nil)
 	if len(got.Groups) != 2 || got.Groups[0].Next != "merged" || got.Groups[1].Stage != "merged" || got.Groups[1].Next != "live" {
 		t.Fatalf("groups %+v, want backlog to merged to live", got.Groups)
 	}
@@ -269,7 +282,7 @@ func testFlowListNoLanding(t *testing.T) {
 		{ID: "line-c1", Title: "caught", Type: "bug", Stage: "fixed", Status: "closed", Depot: &line, ClosedAt: closedAt(time.Hour)},
 	}
 
-	got := web.FlowList(d, 0, open, all, now)
+	got := web.FlowList(d, 0, open, all, now, nil)
 	if len(got.Groups) != 1 || got.Groups[0].Stage != "triage" || got.Groups[0].Count != 1 || got.Groups[0].Next != "fixed" {
 		t.Fatalf("groups %+v, want triage alone pointing at fixed", got.Groups)
 	}
@@ -304,12 +317,35 @@ func TestFlowJSON(t *testing.T) {
 		t.Errorf("backlog %+v, want one's and two's rows pointing at new", backlog)
 	}
 	for _, r := range backlog.Rows {
-		if r.Bead != bs["one"].ID && r.Bead != bs["two"].ID {
+		switch r.Bead {
+		case bs["one"].ID:
+			if r.Held || r.Working {
+				t.Errorf("manual-claimed row %+v, want held=false working=false", r)
+			}
+		case bs["two"].ID:
+			if !r.Held || r.Working {
+				t.Errorf("held row %+v, want held=true working=false", r)
+			}
+		default:
 			t.Errorf("backlog row %+v, want one's or two's bead", r)
 		}
 	}
 	if new.Count != 7 || new.Next != "review" || len(new.Rows) != 6 || new.More != 1 {
 		t.Errorf("new %+v, want 7 beads with 6 rows and 1 more", new)
+	}
+	sawWorking := false
+	for _, r := range new.Rows {
+		if r.Bead == bs["bulk-1"].ID {
+			sawWorking = true
+			if r.Held || !r.Working {
+				t.Errorf("working row %+v, want held=false working=true", r)
+			}
+		} else if r.Held || r.Working {
+			t.Errorf("idle row %+v, want held=false working=false", r)
+		}
+	}
+	if !sawWorking {
+		t.Errorf("new rows %+v lack agent-claimed bulk-1", new.Rows)
 	}
 	if new.MoreLink != "/beads?depot=line&stage=new" {
 		t.Errorf("new more link %q, want the filtered bead list", new.MoreLink)
@@ -362,6 +398,12 @@ func TestFlowHTML(t *testing.T) {
 		`<a class="wv-back" href="/depots/line">` + chevron + `line</a><h1 class="wv-title">code</h1>` +
 			`<p class="wv-meta">flow of line<span class="wv-sep">·</span>9 open</p>`,
 		`<h2 class="wv-group__head"><span>backlog</span><span class="wv-group__count">2</span><span class="wv-group__note">waits on shaping</span></h2>`,
+		`<a class="wv-srow" href="/beads/` + bs["two"].ID + `"><span class="wv-dot wv-dot--fault"></span>` +
+			`<span class="wv-srow__name">two</span><span class="wv-srow__end"><span>→ new</span></span></a>`,
+		`<a class="wv-srow" href="/beads/` + bs["one"].ID + `"><span class="wv-dot wv-dot--idle"></span>` +
+			`<span class="wv-srow__name">one</span><span class="wv-srow__end"><span>→ new</span></span></a>`,
+		`<a class="wv-srow" href="/beads/` + bs["bulk-1"].ID + `"><span class="wv-dot wv-dot--run"></span>` +
+			`<span class="wv-srow__name">bulk-1</span><span class="wv-srow__end"><span>→ review</span></span></a>`,
 		`<a class="wv-srow" href="/beads/` + bs["bulk-0"].ID + `"><span class="wv-dot wv-dot--idle"></span>` +
 			`<span class="wv-srow__name">bulk-0</span><span class="wv-srow__end"><span>→ review</span></span></a>`,
 		`<a class="wv-more" href="/beads?depot=line&amp;stage=new">Show 1 more</a>`,
@@ -385,6 +427,9 @@ func TestFlowHTML(t *testing.T) {
 	newGroup = newGroup[:strings.Index(newGroup, `</section>`)]
 	if n := strings.Count(newGroup, `<a class="wv-srow" href="/beads/`); n != 6 {
 		t.Errorf("new names %d rows, want 6: %s", n, newGroup)
+	}
+	if runs, faults, idles := strings.Count(newGroup, `wv-dot--run`), strings.Count(newGroup, `wv-dot--fault`), strings.Count(newGroup, `wv-dot--idle`); runs != 1 || faults != 0 || idles != 5 {
+		t.Errorf("new dots: %d run, %d fault, %d idle; want 1, 0, 5: %s", runs, faults, idles, newGroup)
 	}
 	if strings.Contains(s, "/beads/"+bs["three"].ID) {
 		t.Errorf("three's row stands past the cap")

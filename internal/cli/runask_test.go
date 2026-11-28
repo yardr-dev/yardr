@@ -2298,7 +2298,7 @@ func TestBeadAskRunSourceAdd(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"its limits command [aiquokka, {provider}, --json] says what the subscription of claude as claude, codex as codex, grok as grok, kimi as kimi, muse as muse still carries.",
+		"its limits command [aiquokka, {provider}, --json] says what the subscription of agy as agy, claude as claude, codex as codex, grok as grok, kimi as kimi, muse as muse still carries.",
 		"command file aiquokka: [aiquokka, {provider}, --json] (limits.command",
 	} {
 		if !strings.Contains(shown, want) {

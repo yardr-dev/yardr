@@ -52,7 +52,7 @@ func TestKnownSources(t *testing.T) {
 	}
 }
 
-// aiquokka's source says the limits of five kinds by one command, the
+// aiquokka's source says the limits of six kinds by one command, the
 // program of which is a file beside the declaration: a shell script that
 // runs the aiquokka found on PATH, so that the binary is the person's to
 // install and nothing of it is carried here.
@@ -69,7 +69,7 @@ func TestKnownAiquokka(t *testing.T) {
 	if d.Limits == nil || len(d.Calls) != 0 || d.Credential != nil {
 		t.Fatalf("declaration = %+v, want the limits command alone", d)
 	}
-	wantKinds := map[string]string{"claude": "claude", "codex": "codex", "grok": "grok", "kimi": "kimi", "muse": "muse"}
+	wantKinds := map[string]string{"agy": "agy", "claude": "claude", "codex": "codex", "grok": "grok", "kimi": "kimi", "muse": "muse"}
 	if !reflect.DeepEqual(d.Limits.Kinds, wantKinds) {
 		t.Errorf("kinds = %v, want %v", d.Limits.Kinds, wantKinds)
 	}

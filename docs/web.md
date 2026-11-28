@@ -1680,7 +1680,7 @@ by the flow's row, which stands marked on the page.
   "depot": "yardr", "flow": "default", "tag": "repo@52e22d5",
   "groups": [
     {"stage": "backlog", "count": 49, "next": "shape", "note": "waits on shaping",
-     "rows": [{"bead": "yardr-3k9q", "title": "read the canvas whole"}],
+     "rows": [{"bead": "yardr-3k9q", "title": "read the canvas whole", "working": false}],
      "more": 43, "more_link": "/beads?depot=yardr&stage=backlog"}
   ],
   "empty": [
@@ -1713,6 +1713,8 @@ by the flow's row, which stands marked on the page.
   change, terminal beads by their close — and `more` with `more_link`
   carries the rest to the filtered bead list (`all=1` for the terminal
   groups).
+- An open row's `held` and `working` are what the bead list's card says
+  ([Beads](#beads)).
 - A terminal row's `verb` is how it reads its close: `landed` in the
   landing log, its real close stage under closed — `landed` for `merged`
   and `live`, `done` for `done`, `closed` anywhere else — with how long
@@ -1722,7 +1724,8 @@ The page is the fifth stage kind (`data-kind="flow"`, `templates/flow.html`):
 a back link to the depot, the flow's name as the title, and `flow of <depot> ·
 <tag> · N open` under it. A group has its head (the stage, its count, its note
 at the right), its rows and, past six, `Show N more` to the filtered bead
-list. A row of an open stage is a ring, the bead's title and `→ <next stage>`,
+list. A row of an open stage is a dot (red when held, green when worked, else a
+ring), the bead's title and `→ <next stage>`,
 and opens the bead's page, which stands in Decide, so the rows of a group are
 a block whose links all leave the mode and swap the whole list. The empty
 stages stand in one fold, its line saying how many and which, and each one's

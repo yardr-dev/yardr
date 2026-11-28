@@ -49,9 +49,25 @@ type feedEntry struct{ seq, tone, what, bead, title, note string }
 var (
 	entryToneRE  = regexp.MustCompile(`^(?: wv-entry--([a-z]+))?" id="e(\d+)">`)
 	entryWhatRE  = regexp.MustCompile(`<span class="wv-entry__what">(.*?)</span>`)
-	entryTitleRE = regexp.MustCompile(`<a class="wv-entry__title" href="/beads/([^"]*)">(.*?)</a>`)
+	entryTitleRE = regexp.MustCompile(`<a class="wv-entry__title" href="/beads/([^"]*)"[^>]*>(.*?)</a>`)
 	entryNoteRE  = regexp.MustCompile(`<p class="wv-entry__note">(.*?)</p>`)
+	anchorRE     = regexp.MustCompile(`<a\b[^>]*>`)
 )
+
+// assertFeedLinksTargetStage holds every link inside a followed feed or its
+// entry fragments to the shell's target and swap, so none inherits the feed's.
+func assertFeedLinksTargetStage(t *testing.T, markup string) {
+	t.Helper()
+	links := anchorRE.FindAllString(markup, -1)
+	if len(links) == 0 {
+		t.Fatalf("found no <a> link in %q", markup)
+	}
+	for _, a := range links {
+		if !strings.Contains(a, `hx-target="#stage"`) || !strings.Contains(a, `hx-swap="innerHTML scroll:top"`) {
+			t.Errorf("feed link %s lacks shell target and swap", a)
+		}
+	}
+}
 
 // feedEntries are the entries of the feed of a page, newest first.
 func feedEntries(t *testing.T, text string) []feedEntry {
@@ -218,11 +234,18 @@ func TestHomeFeedKeeps(t *testing.T) {
 	if n := len(entries); n != 10 {
 		t.Errorf("the feed shows %d entries, want the 10 kept", n)
 	}
-	// The stream the page hangs its feed on carries the kept entries.
-	if body := f.get("/").body; !strings.Contains(squash(body), `sse-connect="/events?after=`) ||
+	// The stream the page hangs its feed on carries the kept entries, and every
+	// link inside the followed feed restates the shell's target and swap so it
+	// does not inherit the feed's.
+	body := f.get("/").body
+	if !strings.Contains(squash(body), `sse-connect="/events?after=`) ||
 		!strings.Contains(squash(body), `&amp;format=home`) {
 		t.Error("the page's stream is not the home one")
 	}
+	if !strings.Contains(squash(body), `<ol class="wv-feed" id="feed" sse-swap="message" hx-target="this" hx-swap="afterbegin">`) {
+		t.Error("the overview's feed is not followed")
+	}
+	assertFeedLinksTargetStage(t, feedSection(t, body))
 
 	// The JSON keeps every event, kept or not.
 	h := homeJSON(t, f, "/")
@@ -424,6 +447,8 @@ func TestHomeStream(t *testing.T) {
 	hour := `<li class="wv-hour" data-hour="`
 	if fr := s.next(t); !strings.HasPrefix(fr.data, hour) || !strings.Contains(fr.data, `<span class="wv-entry__what">noted</span>`) {
 		t.Errorf("the note came as %q, want its hour's head and its fragment", fr.data)
+	} else {
+		assertFeedLinksTargetStage(t, fr.data)
 	}
 	if fr := s.next(t); fr.data != "" {
 		t.Errorf("the creation came as %q, want its id alone", fr.data)

@@ -294,7 +294,7 @@ lowering's cell keeps its form, `<lines> lines at <main commit>`.
 | `internal/dispatch` | 20,181 | 18,381 lines at 606fd3bf5 |
 | `internal/rpc` | 7,545 | 7,045 lines at 606fd3bf5 |
 | `internal/server` | 5,910 | 5,410 lines at 606fd3bf5 |
-| `internal/runner` | 8,679 | 8,179 lines at 606fd3bf5 |
+| `internal/runner` | 2,092 | 2,092 lines at d5418b316 |
 | `internal/hooks` | 4,264 | 3,764 lines at 606fd3bf5 |
 | `internal/yards` | 1,749 | 1,249 lines at 606fd3bf5 |
 | `internal/notify` | 889 | 389 lines at 606fd3bf5 |

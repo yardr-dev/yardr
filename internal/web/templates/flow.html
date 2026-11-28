@@ -26,7 +26,7 @@
     <ol hx-select-oob="#rail:outerHTML,#drawer:outerHTML,#list:outerHTML">
       {{- range .Rows}}
       <li><a class="wv-srow" href="/beads/{{.Bead}}">
-        <span class="wv-dot wv-dot--idle"></span>
+        <span class="wv-dot {{if .Held}}wv-dot--fault{{else if .Working}}wv-dot--run{{else}}wv-dot--idle{{end}}"></span>
         <span class="wv-srow__name">{{.Title}}</span>
         <span class="wv-srow__end">{{if $next}}<span>→ {{$next}}</span>{{end}}</span>
       </a></li>

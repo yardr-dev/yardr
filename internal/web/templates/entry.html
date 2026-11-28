@@ -11,7 +11,7 @@
 <li class="wv-entry{{with .Tone}} wv-entry--{{.}}{{end}}" id="e{{.Seq}}">
   <time class="wv-entry__at" datetime="{{.At.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{.Clock}}">{{.Minute}}</time>
   <div class="wv-entry__body">
-    <p><span class="wv-entry__what">{{.Text}}</span>{{if .Bead}}<a class="wv-entry__title" href="/beads/{{.Bead}}">{{if .Title}}{{.Title}}{{else}}{{.Bead}}{{end}}</a>{{if .Title}}<span class="wv-id">{{.Bead}}</span>{{end}}{{end}}</p>
+    <p><span class="wv-entry__what">{{.Text}}</span>{{if .Bead}}<a class="wv-entry__title" href="/beads/{{.Bead}}" hx-target="#stage" hx-swap="innerHTML scroll:top">{{if .Title}}{{.Title}}{{else}}{{.Bead}}{{end}}</a>{{if .Title}}<span class="wv-id">{{.Bead}}</span>{{end}}{{end}}</p>
     {{- if and .Note (ne .Tone "landed")}}
     <p class="wv-entry__note">{{noteLetters .Note}}</p>
     {{- end}}

@@ -97,7 +97,7 @@ credential (`credential.url: true`,
 names no base ([An integration pack](#an-integration-pack-kind-source)).
 
 One source is no pack: `aiquokka`, which says what the subscriptions of
-claude, codex, grok, kimi and muse still carry, so a route's condition can
+agy, claude, codex, grok, kimi and muse still carry, so a route's condition can
 gate builders on token use. A pack may not bring a `limits` key (below), so
 there is no `yardr pack apply aiquokka`. yardr carries the source itself,
 apart from the packs, and the operator adds it by its name with `yardr source
