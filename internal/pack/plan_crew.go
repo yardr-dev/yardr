@@ -72,12 +72,12 @@ func (b *planner) crew() error {
 		op := &CrewOp{Pack: pr.Name, CrewMember: name, On: wantOn}
 		o := Object{Kind: "crew", Name: name, CrewMember: op}
 		var changes []Diff
+		moved := false
 		if exists {
 			op.On = slices.Clone(old.On)
 			if op.On == nil {
 				op.On = []string{}
 			}
-			moved := false
 			if pr.Name == "yardmaster" {
 				// The yardmaster's prompt is the yard's own file, which no pack
 				// sets: a pack's role for it is refused above. The one move an
