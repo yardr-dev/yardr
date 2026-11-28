@@ -75,9 +75,9 @@ func refusedSince(t *testing.T, a *app, before string, args []string, want ...st
 	return after
 }
 
-// A group's role switches to the depot's own and back to the pack's: the
-// command prints the line depot sources then shows, says when the pack's
-// record would undo it, and a second time changes nothing.
+// A group's role switches to the depot's own and back to the pack's. The
+// command prints the line depot sources then shows and says that later
+// imports leave the prompt as set.
 func TestDepotSourceRoleOfAGroup(t *testing.T) {
 	t.Parallel()
 	a, home, sha := packedYard(t)
@@ -90,7 +90,7 @@ func TestDepotSourceRoleOfAGroup(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := sourceLines(t, out); got[0] != depots || len(got) != 2 ||
-		got[1] != "note: the import of pack starter chose the pack's roles: the next yardr pack apply sets its role on web-builders again unless given --depot-roles" {
+		got[1] != "note: pack starter uses its recorded role choice for new groups only; this prompt stays as set on later imports" {
 		t.Errorf("to the depot's:\n%s", out)
 	}
 	if got := sourcesLine(t, a, "role web-builders"); got != depots {
@@ -154,8 +154,8 @@ func TestDepotSourceRoleOfACrew(t *testing.T) {
 	refused(t, a, []string{"web", "role", "boss", "pack"}, "installed a role yardmaster.md")
 }
 
-// Under an import given --depot-roles, a group switched to the pack's role is
-// told that the next import switches it back.
+// Under an import given --depot-roles, switching a group to the pack's role
+// leaves it there on a later import.
 func TestDepotSourceRoleAgainstTheRecord(t *testing.T) {
 	t.Parallel()
 	a, _, _ := sourcesYard(t)
@@ -164,8 +164,14 @@ func TestDepotSourceRoleAgainstTheRecord(t *testing.T) {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	out, err := run(t, a.depotSourceCmd(), "web", "role", "web-reviewers", "pack")
-	if err != nil || !strings.HasPrefix(sourceLines(t, out)[0], "role web-reviewers pack starter ") || !strings.Contains(out, "unless given --pack-roles") {
+	if err != nil || !strings.HasPrefix(sourceLines(t, out)[0], "role web-reviewers pack starter ") || !strings.Contains(out, "new groups only") {
 		t.Errorf("%v\n%s", err, out)
+	}
+	if out, err = run(t, a.packCmd(), append([]string{"apply", "../../packs/starter", "--depot", "web", "--yes"}, starterFlags...)...); err != nil {
+		t.Fatalf("re-apply: %v\n%s", err, out)
+	}
+	if g, _ := a.st.GetGroup(context.Background(), "web-reviewers"); g.Config["prompt"] != filepath.Join(config.At(home).PackRoles("starter"), "reviewer.md") {
+		t.Errorf("the re-apply changed the switched prompt: %+v", g.Config)
 	}
 	if out, err = run(t, a.depotSourceCmd(), "web", "role", "web-reviewers", "depot"); err != nil || strings.Contains(out, "note:") {
 		t.Errorf("back to what the record chose: %v\n%s", err, out)

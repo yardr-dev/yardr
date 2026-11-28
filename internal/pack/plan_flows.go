@@ -241,7 +241,7 @@ func (b *planner) routes(flows []Flow) error {
 				// of the depot standing and reports it as differs.
 				var old []store.Route
 				for _, r := range have {
-					if r.Stage == s.Name && r.Depot != nil && *r.Depot == b.o.Depot && !r.ByBead() && deref(r.Type) == f.Type {
+					if r.Stage == s.Name && r.Depot != nil && *r.Depot == b.o.Depot && packRouteScope(r, operator) && deref(r.Type) == f.Type {
 						old = append(old, r)
 					}
 				}
@@ -306,11 +306,11 @@ func (b *planner) routes(flows []Flow) error {
 				}
 			}
 			// The depot's routes for the stage (and type), routes by label,
-			// bead priority or named originator aside: those say something
-			// the pack does not.
+			// bead priority or an originator other than the operator aside:
+			// those say something the pack does not.
 			var old []store.Route
 			for _, r := range have {
-				if r.Stage == s.Name && r.Depot != nil && *r.Depot == b.o.Depot && !r.ByBead() && deref(r.Type) == f.Type {
+				if r.Stage == s.Name && r.Depot != nil && *r.Depot == b.o.Depot && packRouteScope(r, operator) && deref(r.Type) == f.Type {
 					old = append(old, r)
 				}
 			}
@@ -321,6 +321,10 @@ func (b *planner) routes(flows []Flow) error {
 				// id, which says nothing of which one the pack names.
 				if i := slices.IndexFunc(old, func(r store.Route) bool { return r.Group != op.Group }); i >= 0 {
 					changes = append(changes, Diff{"group", old[i].Group, op.Group})
+				}
+				wantOriginator := plannedOriginator(op.Originator, operator)
+				if i := slices.IndexFunc(old, func(r store.Route) bool { return routeOriginator(r, operator) != wantOriginator }); i >= 0 {
+					changes = append(changes, Diff{"originator", originatorName(routeOriginator(old[i], operator), operator), originatorName(wantOriginator, operator)})
 				}
 				if len(old) > 1 {
 					changes = append(changes, Diff{"routes", fmt.Sprintf("%d for this stage", len(old)), "1"})
@@ -334,6 +338,48 @@ func (b *planner) routes(flows []Flow) error {
 		}
 	}
 	return nil
+}
+
+// packRouteScope reports whether a route's keys are ones a line can compare:
+// no bead labels or priority, and the operator, any originator or no explicit
+// originator. A route for another named person is left to that person.
+func packRouteScope(r store.Route, operator string) bool {
+	if len(r.Labels()) > 0 || r.BeadPriority != nil {
+		return false
+	}
+	if r.Originator == nil || *r.Originator == "" || *r.Originator == store.OriginatorAny {
+		return true
+	}
+	return *r.Originator == operator
+}
+
+// routeOriginator is the originator key a route states: an empty or absent
+// name is the operator, while any is every originator.
+func routeOriginator(r store.Route, operator string) string {
+	if r.Originator == nil || *r.Originator == "" {
+		return operator
+	}
+	return *r.Originator
+}
+
+// plannedOriginator resolves RouteOp's empty originator to the operator,
+// matching the route the store writes for a pack's operator-only stage.
+func plannedOriginator(originator, operator string) string {
+	if originator == "" {
+		return operator
+	}
+	return originator
+}
+
+// originatorName is the route key as a plan explains it.
+func originatorName(originator, operator string) string {
+	if originator == store.OriginatorAny {
+		return "any"
+	}
+	if originator == operator {
+		return "operator"
+	}
+	return originator
 }
 
 // plainRouteForStage reports whether r has no quota chain or bead filter

@@ -175,7 +175,7 @@ func (b *planner) crew() error {
 			}
 			want = append(want, store.Subscription{Source: s.Name, Scope: s.Scope})
 		}
-		hears := false
+		restartNeeded := moved
 		for _, w := range want {
 			so := Object{Kind: "subscription", Name: name + " " + w.String(), Action: Create, Subscription: &SubscriptionOp{CrewMember: name, Add: &w}}
 			if j := slices.IndexFunc(old.Subscriptions, func(s store.Subscription) bool { return reflect.DeepEqual(s.Where, w.Where) && s.Source == w.Source }); j >= 0 {
@@ -183,10 +183,10 @@ func (b *planner) crew() error {
 				// subscription already, whatever its scope is now.
 				so.Action = Unchanged
 			}
-			hears = hears || so.Action == Create
+			restartNeeded = restartNeeded || so.Action == Create
 			subs = append(subs, so)
 		}
-		if old.Live() && hears {
+		if old.Live() && restartNeeded {
 			op.Restart = true
 			b.plan.Notes = append(b.plan.Notes, fmt.Sprintf("crew member %s is running and its role or what it hears changes: the import does not restart it, so restart it afterwards (yardr crew restart %s)", name, name))
 		}

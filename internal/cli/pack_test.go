@@ -1138,7 +1138,7 @@ func TestPackApplyRolesChoice(t *testing.T) {
 func TestPackRolesWarnsOnItsErrorStream(t *testing.T) {
 	t.Parallel()
 	a := packApp(t)
-	want := "--pack-roles: the pack's roles are the default now; the flag is only needed to undo an earlier --depot-roles\n"
+	want := "--pack-roles: the pack's roles are the default for new groups; new crew members always use them. The flag is only needed to undo an earlier --depot-roles default\n"
 	for _, asJSON := range []bool{false, true} {
 		a.json = asJSON
 		var errs bytes.Buffer

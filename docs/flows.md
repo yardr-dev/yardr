@@ -128,7 +128,8 @@ changes nothing for that bead. The edit applies once it has been reviewed
 and landed on the base. That review applies to a depot that keeps its flow
 in its repository; a depot set up by `yardr depot init` follows a pack's flow in
 the store ([below](#named-flows-and-pointers)), which is reviewed where the
-pack is kept and changes when the operator applies the pack again
+pack is kept. Re-applying a pack leaves an existing stored flow as it is;
+use `yardr flow set` to change it
 ([configuration.md](configuration.md#why-the-repo-holds-what-the-work-is)). yardr resolves the base on every check and re-reads
 the files when its commit moves (it caches them by commit). A depot without a
 path, or whose base does not exist in its checkout (`git rev-parse --verify

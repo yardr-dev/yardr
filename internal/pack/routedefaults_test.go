@@ -164,10 +164,10 @@ func TestPackWritesOwnRouteWhereItsBindingDiffersFromTheDefault(t *testing.T) {
 	}
 }
 
-// A default restricted to the operator does not work a people stage for
-// every originator. The pack writes its any-originator route and leaves the
-// narrower default alone.
-func TestPackDoesNotLeavePeopleStageToOperatorOnlyDefault(t *testing.T) {
+// An operator-only route does not stand for a people stage's all-originator
+// route. A default stays beside the pack's route; an own route is reported as
+// differs and stays in place.
+func TestPackTreatsOperatorOnlyRouteAsNarrowerThanPeopleStage(t *testing.T) {
 	st, o := yard(t)
 	mustGroup(t, st, store.Group{Name: "people", Runner: "manual"})
 	operator := "me"
@@ -199,11 +199,37 @@ func TestPackDoesNotLeavePeopleStageToOperatorOnlyDefault(t *testing.T) {
 	if r := store.MatchRoute(routes, bead, "me", nil); r == nil || r.Depot == nil || r.Group != "people" {
 		t.Errorf("a non-operator bead in decide took %+v, want the pack's own people route", r)
 	}
+	t.Run("own route with the same group", func(t *testing.T) {
+		st, o := yard(t)
+		mustGroup(t, st, store.Group{Name: "web-people", Runner: "manual"})
+		operator, depot := "me", "web"
+		old := mustDefaultRoute(t, st, store.Route{Stage: "decide", Depot: &depot, Group: "web-people", Originator: &operator})
+		plan := build(t, st, load(t, writePack(t, smallFiles(small))), o)
+		route := find(t, plan, "route", "depot web stage decide -> web-people")
+		want := []pack.Diff{{Field: "originator", Old: "operator", New: "any"}}
+		if route.Action != pack.Differs || !slices.Equal(route.Changes, want) {
+			t.Fatalf("route = %+v, want differs by originator: %v", route, want)
+		}
+		apply(t, st, plan, nil)
+		routes, err := st.Routes(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var stage []store.Route
+		for _, r := range routes {
+			if r.Stage == "decide" && r.Depot != nil && *r.Depot == depot {
+				stage = append(stage, r)
+			}
+		}
+		if len(stage) != 1 || stage[0].ID != old.ID {
+			t.Fatalf("decide routes = %+v, want the existing route %s alone", stage, old.ID)
+		}
+	})
 }
 
 // A stage whose effective winner carries a quota chain is left to that
 // chain, of either scope: the pack writes no route over a condition it
-// cannot say, and the chain route is listed as not in the pack.
+// cannot say, and no route object is planned for the chain.
 func TestPackLeavesAQuotaWinnerToItsChain(t *testing.T) {
 	for _, own := range []bool{false, true} {
 		name := "yard default"

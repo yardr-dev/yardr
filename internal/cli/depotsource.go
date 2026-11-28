@@ -53,8 +53,8 @@ has no such file on its base, no pack is imported into the depot or none has
 the role or a flow. A flow change is refused as yardr depot flow is, naming
 the beads, while an open bead sits in a stage the new flow lacks.
 
-A pack's record still says whose roles its import chose, so the next yardr
-pack apply sets them again; the output says when that undoes the switch.`,
+The pack's recorded role choice is the default for new groups only; new crew
+members use the pack's copied role. Later imports leave this prompt as set.`,
 		Example: `  yardr depot source web role web-builders depot
   yardr depot source web role yardmaster pack
   yardr depot source web flow depot
@@ -246,13 +246,14 @@ func switchRole(ctx context.Context, st store.API, depotName, name, to, home, ac
 	} else if err := st.PutGroup(ctx, *group, actor); err != nil {
 		return nil, err
 	}
-	// An import repeats the choice its record holds, for every role at once.
+	// The recorded role choice initializes new groups only; later imports
+	// leave this prompt as set.
 	for _, p := range copies {
 		switch {
 		case to == sourceDepot && !p.DepotRoles:
-			res.Notes = append(res.Notes, fmt.Sprintf("the import of pack %s chose the pack's roles: the next yardr pack apply sets its role on %s again unless given --depot-roles", p.Pack, name))
-		case to == sourcePack && p.DepotRoles && member == nil:
-			res.Notes = append(res.Notes, fmt.Sprintf("the import of pack %s was given --depot-roles: the next yardr pack apply sets the depot's role on %s again unless given --pack-roles", p.Pack, name))
+			res.Notes = append(res.Notes, fmt.Sprintf("pack %s uses its recorded role choice for new groups only; this prompt stays as set on later imports", p.Pack))
+		case to == sourcePack && p.DepotRoles:
+			res.Notes = append(res.Notes, fmt.Sprintf("pack %s uses its recorded role choice for new groups only; this prompt stays as set on later imports", p.Pack))
 		}
 	}
 	if lines, err = depotSources(ctx, st, depotName, home); err != nil {

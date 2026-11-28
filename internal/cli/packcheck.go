@@ -93,9 +93,11 @@ so what a plan still asks can be read before applying or asking. Nothing
 is asked in a terminal, and nothing is written or granted: a value pack
 apply would refuse is refused here the same way.
 
-The pack's role is set on every agent group and crew member it names, also
-where the depot has its own .yardr/roles/<name>.md: the plan names that file
-as shadowed. --depot-roles keeps the depot's own role instead.
+New groups use the pack's role, also where the depot has its own
+.yardr/roles/<name>.md: the plan names that file as shadowed. New crew members
+use the pack's copied role too. --depot-roles chooses the depot's role for
+new groups instead.
+Existing groups and crew members keep their current prompts.
 
 --group <pack's group>=<yard's group> has a group the yard has take a group
 of the pack, instead of a <depot>-<group> of the depot's own: the plan says

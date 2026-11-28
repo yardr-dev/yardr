@@ -518,7 +518,7 @@ neither to the store nor under the home:
 | it says | meaning |
 |---|---|
 | `create` | the yard has no object of that name; for a hook map, the import writes an `as` or map field or adds a table line |
-| `change`, then `field: old -> new` per field | it has one that differs in what the pack carries |
+| `change`, then `field: old -> new` per field | the import writes the value shown on an existing object, as for a replaced file, a moved yardmaster prompt, or a connector declaration |
 | `unchanged` | it has one and nothing would change |
 | `differs` | the yard has its own version of this file, flow, pointer, group, route, crew member or hook line and an import leaves it alone; `--replace <file>` overwrites a differing role, script or frame under `~/.yardr/packs/<pack>/` ([A line copies once](#yardr-pack-apply)) |
 | `no longer in it` | for a pack of kind `source`, an earlier import brought this source and the pack has dropped it since: left alone unless the import is told to prune ([Pruning](#pruning)) |
@@ -604,18 +604,19 @@ flow files, they are not read while the depot's pointer is at the pack's
 flow.
 
 **Role prompts.** A pack's role files are installed under
-`~/.yardr/packs/<pack>/…`. Crew members use the pack's copied role, except
-when `--depot-roles` keeps a depot role. For an agent group without a depot
-role choice, an import sets the pack's prompt on a new group or when the
-group's prompt already points at that copy. If an existing group of the same
-kind points elsewhere, the import keeps its prompt and says so under `kept`;
-this covers a group another pack made and one whose prompt was set by hand.
-The `--depot-roles` and `--pack-roles` choices below govern groups whose depot
-has its own role. Re-applying a pack leaves an existing role file alone when
-it differs (`differs`); `--replace roles/<name>` overwrites it with the
-pack's copy so a group using that copy reads the replaced text. The depot's
-own role file stays where it is and is read by nothing unless
-`--depot-roles` is chosen.
+`~/.yardr/packs/<pack>/…`. New groups and crew members use the pack's copied
+role. `--depot-roles` chooses the depot's role for a new group when that role
+exists. Existing groups and crew members keep their current prompt. A prompt
+that differs from the selected role may be reported as `differs`, but an
+import does not switch an existing member between depot and pack roles. This
+includes a group another pack made and one whose prompt was set by hand. The
+`--depot-roles` and `--pack-roles` choices below set the default for new
+groups; they do not switch existing ones. Re-applying a pack
+leaves an existing role file alone when it differs (`differs`);
+`--replace roles/<name>` overwrites it with the pack's copy so a group or
+crew member using that copy reads the replaced text. The depot's own role
+file stays where it is and is read by nothing unless `--depot-roles` is
+chosen for a new group.
 
 When the pack's role is applied, the plan names the copied file under the
 group:
@@ -626,14 +627,11 @@ group:
                      prompt: roles/builder.md -> ~/.yardr/packs/starter/roles/builder.md
 ```
 
-`--depot-roles` is the opposite choice. A group whose depot has its own role
-keeps its current prompt. A new group gets `roles/<name>.md`, which yardr
-resolves to the depot's file; an existing group whose prompt already uses the
-pack's copy gets the same depot role. A different current prompt stays as it
-is. The plan says `kept: prompt roles/builder.md: the depot has its own
-.yardr/roles/builder.md`. A crew member that has a prompt of its own keeps it
-the same way. Groups and crew members whose role the depot lacks get the
-pack's copy, and every copy is installed all the same.
+`--depot-roles` is the opposite choice for a new group. It gets
+`roles/<name>.md`, which yardr resolves to the depot's file when that file
+exists; otherwise it gets the pack's copy. New crew members always use the
+pack's copy. Existing groups and crew members keep their current prompt. The
+pack's copy is installed either way.
 
 `yardr depot sources <depot>` shows the outcome for a depot as it is now: one line
 per flow, stage file and role, with where it comes from and the depot's file
@@ -645,12 +643,13 @@ or to the pack's copy, prints the line as `depot sources` then has it, and
 refuses when the depot has no such role or no pack of the depot installed one
 ([configuration.md](configuration.md#switching-one-of-them)).
 
-The record remembers which of the two was chosen (`roles` in `yardr pack
-list`), and an import without the flag repeats it, for every role: one
-switched the other way by `yardr depot source` is set back, and that command
-says so when it applies. `--pack-roles` chooses
-the pack's roles again after an import with `--depot-roles`; it is the default
-otherwise, and says so in one line.
+The record remembers the default choice (`roles` in `yardr pack list`), and an
+import without a flag reuses it for new groups. New crew members always use
+the pack's copied role. A prompt
+changed later with `yardr depot source` stays as the yard set it on the next
+import. `--pack-roles` changes the default back to the pack's roles after an
+import with `--depot-roles`; it is the default otherwise, and says so in one
+line. It does not rewrite existing prompts.
 
 **Groups.** An agent or script group is the depot's, named `<depot>-<group>`
 (`yardr-builders`); a people group keeps its name and is the yard's, shared
@@ -687,7 +686,7 @@ says nothing when the `cmd` has the pack's value already:
 ```
 groups
   unchanged        web-assembly
-                     kept: cmd /Users/me/.yardr/packs/starter/scripts/merge-local: the pack's env YARDR_LAND=squash is set on a new group only
+                     kept: cmd ~/.yardr/packs/starter/scripts/merge-local: the pack's env YARDR_LAND=squash is set on a new group only
 ```
 
 A yard opts in with `yardr group set <group> 'cmd=YARDR_LAND=squash <the rest
@@ -718,7 +717,7 @@ in a line, and it stays a line:
 ```
 groups
   takes            yardr-builders (the yard's, for the pack's builders: nothing of it would be changed)
-                     kept: prompt /Users/me/.yardr/packs/starter/roles/builder.md: the group is the yard's, and the pack's role roles/builder.md is not set on it
+                     kept: prompt ~/.yardr/packs/starter/roles/builder.md: the group is the yard's, and the pack's role roles/builder.md is not set on it
                      kept: limit 4: the group is the yard's, and the pack's limit 3 is not set on it
 ```
 
@@ -758,12 +757,15 @@ init` writes) is governed by the pack's flow once the import has pointed it
 there, and its `type/<type>.flow` files stop governing too. The files stay
 and govern again when the pointer is cleared (`yardr depot flow <depot>
 --clear`). `yardr depot sources <depot>` names each of them, and the stage files
-beside them, as shadowed. `yardr depot source <depot> flow [--type <type>]
-depot|pack` moves the depot between the two: `depot` clears the pointer, `pack`
-points it at the pack's flow again, and either way the flow switches whole,
-its stage files with it. The plan says which flow would govern the depot's beads and each
-type's afterwards, and which does now. A type pointer the pack has no flow
-for is left alone.
+beside them, as shadowed. An import creates a missing flow and pointer; an
+existing flow or pointer stays as it is and is reported as `differs` when it
+does not match the pack. To switch the depot by hand,
+`yardr depot source <depot> flow [--type <type>] depot|pack` clears the
+pointer or points it at the pack's flow, and either way the flow switches
+whole, its stage files with it. A later import leaves that pointer in place.
+The plan says which flow would govern the depot's beads and each type's
+afterwards, and which does now. Existing type pointers stay even when the
+pack has no flow for that type.
 
 The store refuses a pointer or a flow that would leave an open bead in a
 stage its new flow lacks ([flows.md](flows.md#named-flows-and-pointers)).
@@ -779,21 +781,18 @@ stage for the group the pack binds, the plan writes no route and says
 `stage <stage> of flow <flow>: worked by yard default <id> to <group>; no
 route written`: a fresh depot inherits the yard's defaults for the stages
 every depot shares, and re-applying a pack resurrects no copy a migration
-removed. Where the winner leads elsewhere, or no route wins, the plan
-writes the depot's own route `depot, stage -> group` (with the type, for
-a type's flow) as it always has, and that own route sets the default aside
-for this depot alone. A route the depot has for the stage is that route:
-unchanged when it leads to the same group, else replaced. `yardr route
-add` mints a new id per call, so a replacement is an add and a delete of
-every route the depot had for the stage; two routes for one depot and
-stage never remain. A stage with no group clears the matching depot,
-stage and type routes, so its beads wait for a hand. Routes that ask something of the single
-bead (a label, a bead priority or a named originator), routes for stages
-the pack lacks, and a stage whose effective winner carries a quota
-condition or further groups, are left alone, of either scope, each listed
-as not in the pack with its scope; a pack writes no route over a condition
-it cannot say. An import never writes or removes a yard default: where
-fitting the pack would have to change or remove one — a stage the pack
+removed. Where the winner leads elsewhere, or no route wins, and the pack
+names a group, the plan creates the depot's own route `depot, stage -> group`
+(with the type, for a type's flow) only if that route is missing. Existing
+routes for the stage stay as the yard has them; one that differs by group or
+by the pack's operator-versus-all-originators scope is reported as `differs`.
+A stage with no group adds no route and leaves any existing depot route in
+place, reported as `differs`. Routes that ask something of the single bead
+(a label, a bead priority or an originator other than the operator), routes
+for stages the pack lacks, and a stage whose effective winner carries a
+quota condition or further groups are left alone, of either scope; a pack
+writes no route over a condition it cannot say. An import never writes or
+removes a yard default: where fitting the pack would have to change or remove one — a stage the pack
 routes to nobody that a default works — the plan is refused and says so,
 for a hand to remove the default. Export follows the same effective
 winner: a stage worked plainly through a yard default is exported with
@@ -802,20 +801,20 @@ that default's group, the route itself not left out.
 **Crew members.** A crew member of the pack is taken by a crew member of the yard:
 `--crew yardmaster=boss`. Without the flag it is the yard's crew member
 of the same name, else whoever took it at the last import, else a question.
-The pack sets three things and nothing
-else (identity, `env_file`, args, model, directory and rotation are the
-yard's):
+A new crew member gets the pack's prompt and event kinds. An existing crew
+member keeps its current prompt and event kinds; differences are reported as
+`differs` and are not written. The import also adds each pack subscription
+that has no existing match by source and filters. A matching subscription
+stays as it is, including its scope, and other subscriptions are left alone
+([subscriptions.md](subscriptions.md)):
 
 | pack | crew member |
 |---|---|
-| `role` | its `prompt`, the copied file |
-| `hears.events` | its `--on` kinds: the list is replaced, so a pack carries every kind its crew member should hear. `attention` is the class of kinds that need someone, as the yardr that runs has it ([subscriptions.md](subscriptions.md#the-class-attention)), and the starter pack names it in place of a list. A crew member with a list of kinds from an earlier import gets `attention` in its place at the next one, shown in the plan as a change of `on` |
-| `hears.stages` | one subscription per stage: `yardr all depot=<depot> stage=<stage>` |
-| `hears.done` | `yardr all depot=<depot> state=done` |
-| `subscribe.<source>: <scope>` | `<source> <scope>`; a subscription to the source without filters has its scope changed |
-
-Its other subscriptions are left alone
-([subscriptions.md](subscriptions.md)).
+| `role` | its `prompt`, the copied file, on a new crew member |
+| `hears.events` | its `--on` kinds on a new member. `attention` is the class of kinds that need someone, as the yardr that runs has it ([subscriptions.md](subscriptions.md#the-class-attention)); the starter pack names it in place of a list |
+| `hears.stages` | one subscription per stage: `yardr all depot=<depot> stage=<stage>`, added if no subscription matches |
+| `hears.done` | `yardr all depot=<depot> state=done`, added if no subscription matches |
+| `subscribe.<source>: <scope>` | `<source> <scope>`, added if no subscription matches by source and filters; an existing match keeps its scope |
 
 **Opening threads.** `open_threads` is the one key of a crew member the pack
 does not set: it asks. Speaking first in a source is the operator's to grant
@@ -1129,10 +1128,11 @@ line.
 
 It makes the plan `pack check` shows, prints it with what the flags answer
 filled in, asks for what the pack cannot say, and creates what the yard
-lacks. An existing file, flow, flow pointer, group, route, crew member or hook
-line that differs from the pack is reported as `differs` and left as the yard
-has it ([A line copies once](#yardr-pack-apply)); nothing is added a second
-time. With `--sha256
+lacks. Existing files, flows, pointers, groups, routes, crew prompts and
+event kinds that differ from the pack are reported as `differs` and left as
+the yard has them. Existing subscriptions that match by source and filters
+keep their scope; missing subscriptions and hook fields or table lines are
+added ([A line copies once](#yardr-pack-apply)). With `--sha256
 <digest>` it first refuses, writing nothing, any pack but the one with that
 digest ([Pinning a pack](#naming-a-pack)); a script that applies a pack from
 a URL with `--yes` gives the digest it read in `pack check`.
@@ -1423,20 +1423,20 @@ no group would be given a runner the store refuses. A failure there changes
 nothing. The store has no transaction over several objects, so a write that
 fails after that stops the import where it is: the objects written before it
 stay, no record is written, and since everything is matched by name,
-applying again finishes the import and repeats nothing. A route is added
-before the ones it replaces are deleted, so a stage is never left without a
-route; if a delete fails, the next import finds two routes for the stage and
-replaces both by one.
+applying again finishes the import and repeats nothing. A pack import does
+not replace or delete an existing route: it creates a missing route and
+leaves existing routes in place, reporting differences in the plan.
 
 **Refused** while open beads sit in a stage the pack's flow lacks: the plan
 is printed, the message names the beads, nothing is changed, and the exit
 code is 1. Advance or pin them, then apply again.
 
-**Running crew members are not restarted.** A crew member that is running and
-whose role, `--on` kinds or subscriptions the import changes keeps its
-session; the plan notes it and the output names it with the command
-(`yardr crew restart <name>`). The new role is read when its next
-session starts.
+**Running crew members are not restarted.** When an import adds a missing
+subscription or moves the yardmaster from a pack role to its local role, the
+plan names the restart command (`yardr crew restart <name>`). Other existing
+prompt and event-kind differences are only reported as `differs`; they are
+not written. Replacing a role file does not restart a running member either,
+so restart it manually if its next session should read the replaced text.
 
 ### The record
 
@@ -1446,7 +1446,7 @@ next import that changes something:
 ```
 $ yardr pack list
 starter in depot web  2026-10-03 18:40 by mckean
-  source     /Users/me/yardr/packs/starter at 8562e43c1f0a
+  source     ~/yardr/packs/starter at 8562e43c1f0a
   flow       default (stored as starter.default)
   roles      the pack's
   groups     assembly -> web-assembly, backlog -> backlog, builders -> web-builders, decisions -> decisions, reviewers -> web-reviewers, security-reviewers -> web-security-reviewers
@@ -1917,7 +1917,7 @@ BEAD
   `merge-local`, and the import installs these copies, which are the same
   text. It does not point the three groups at them: a group another pack
   made keeps its prompt (the assembly its cmd), and `pack check` says so
-  under `kept` ([Role prompts](#how-a-pack-maps-to-the-yard)).
+  as `differs` ([Role prompts](#how-a-pack-maps-to-the-yard)).
 - **A depot with groups or roles of its own names them**: `--group
   builders=<group> --group reviewers=<group> --group assembly=<group>`.
   Those groups take the pack's as they are, and nothing of them is changed
@@ -2065,9 +2065,11 @@ with `--sha256`, or an earlier import's record, any
 flag of `pack apply` but the depot and the mappings of a depot pack's
 first install and `--replace <file>` over differing files under the line's
 directory, and a plan that asks, is refused to a terminal, where
-`yardr pack check <name>` shows the plan. An existing file, flow or pointer
-that differs from the pack stays as the yard has it under any approval that
-replaces nothing, and the card lists it as differing. With `--replace
+`yardr pack check <name>` shows the plan. Existing files, flows, pointers,
+groups, routes, crew settings, subscriptions and hook fields that differ from
+the pack stay as the yard has them under any approval that replaces nothing,
+and the card lists them as `differs`. Missing hook fields and table lines are
+added. With `--replace
 <file>` (a role copy, script or page frame under `~/.yardr/packs/<pack>/`,
 such as `scripts/merge-local`; repeatable, and bare or with a depot), the
 card overwrites that copy with the pack's bytes instead: it shows each
@@ -2117,9 +2119,10 @@ mappings and no other flag, and both refuse a plan that still asks after the
 mappings, whole and with nothing written. No card or other road answers a
 plan's questions for a delegated apply; a pack whose plan asks stays the
 operator's, in a terminal, until its questions are settled in the pack. Nor
-does it replace: an existing file, flow or pointer that differs stays as the
-yard has it, and `--replace` is refused for any name, with nothing written
-and no record. Replacing a file of a line is the operator's, in a terminal
+does it replace: existing files, flows, pointers, groups, routes, crew
+settings, subscriptions and hook fields that differ stay as the yard has
+them, and `--replace` is refused for any name, with nothing written and no
+record. Missing hook fields and table lines are added. Replacing a file of a line is the operator's, in a terminal
 or on a pack apply card. The
 card's bounds do not bind this road: a pack past 40 lines or 1 MiB applies,
 up to what the run's record can hold. Before the first object the yard
@@ -2208,12 +2211,12 @@ holding source -> the lines said):
   "pack": "starter", "dir": "/…/packs/starter", "digest": "9f2c…", "programs": ["scripts/merge-local"], "kind": "git", "depot": "yardr",
   "flow": "default", "depot_roles": false, "groups": {"builders": "yardr-builders"}, "crew": {"yardmaster": "boss"},
   "fill": {"operator": "Jo", "yardmaster": "boss"},
-  "home": "/Users/me/.yardr",
-  "install": "/Users/me/.yardr/packs/starter", "stage_files": "/Users/me/.yardr/flows",
+  "home": "~/.yardr",
+  "install": "~/.yardr/packs/starter", "stage_files": "~/.yardr/flows",
   "objects": [
     {"kind": "group", "name": "yardr-builders", "action": "change", "shadows": [".yardr/roles/builder.md"],
-     "changes": [{"field": "prompt", "old": "roles/builder.md", "new": "/Users/me/.yardr/packs/starter/roles/builder.md"}],
-     "group": {"name": "yardr-builders", "runner": "herdr", "config": {"kind": "claude", "prompt": "/Users/me/…"}, "limit": 5}}
+     "changes": [{"field": "prompt", "old": "roles/builder.md", "new": "~/.yardr/packs/starter/roles/builder.md"}],
+     "group": {"name": "yardr-builders", "runner": "herdr", "config": {"kind": "claude", "prompt": "~/.yardr/…"}, "limit": 5}}
   ],
   "questions": [{"id": "group.web-builders.kind", "object": "group web-builders", "field": "kind", "ask": "…", "default": "claude"}],
   "governs": [{"flow": "starter.default", "source": "store", "now": "default (repo@77a3a8f)", "in_pack": true}],
@@ -2260,8 +2263,8 @@ prune removes), under its kind:
 | `group` | the whole group as it would be stored, what the yard keeps included |
 | `flow` | the whole flow, its stages in order |
 | `pointer` | `depot`, `type`, `flow` |
-| `route` | `stage`, `depot`, `type`, `group`, and `delete`: route ids removed by the object; a line import leaves existing routes standing and has no deletes |
-| `crew` | `pack` (its name in the pack), `crew` (in the yard), `prompt`, `on`, and `restart` when a live member gets a new subscription |
+| `route` | `stage`, `depot`, `type`, `group`, `originator`; an empty group says the pack has no route, and existing routes are never removed |
+| `crew` | `pack` (its name in the pack), `crew` (in the yard), `prompt`, `on`, and `restart` when a live member's prompt moves or it gets a new subscription |
 | `subscription` | `crew` and `add`; a line import leaves an existing subscription as it is, regardless of scope |
 | `map` | `hook`, `source`, `as`, `map`, `says` and `makes`: the pack's values, set or added only where the hook lacks them. A map object is present when the import writes fields or lines or reports a differing `as` or map; `maps` has every source |
 | `source` | `name`, `from` (the declaration's file in the pack) and `declaration`, its text: what is added; `decl_dir` (the declaration's directory in the pack) and `commands`, each command's `key`, `program` and the `sha256` of the pack's file, when it brings command files. `declared` has, per source, `file`, `base`, `calls`, `commands`, `action` and `needs` |

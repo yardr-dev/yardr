@@ -64,9 +64,10 @@ type PackImport struct {
 	// appends it past its budget; a record written before the field reads
 	// back with it empty, which is the truth about that import.
 	Section string `json:"section,omitempty"`
-	// DepotRoles says the import was told to leave a group or crew member its
-	// depot's own role (--depot-roles); otherwise the pack's roles were set, the
-	// default. The next import repeats the choice unless told anew.
+	// DepotRoles says the import chose the depot's own role for new groups
+	// where one exists (--depot-roles); otherwise the pack's role is the
+	// default. Later imports use the recorded choice for new groups; existing
+	// prompts stay as they are, and a new crew member uses the pack's role.
 	DepotRoles bool      `json:"depot_roles,omitempty"`
 	At         time.Time `json:"at"`
 	By         string    `json:"by"`

@@ -690,18 +690,27 @@ func TestYardmasterPromptMigratesToTheLocalRole(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := st.PutCrew(ctx, store.CrewMember{Name: "yardmaster", Runner: "herdr",
-		Config: map[string]any{"kind": "claude", "prompt": role}, On: []string{"held"}}, "me"); err != nil {
+		Config: map[string]any{"kind": "claude", "prompt": role}, On: []string{"held"}, Subscriptions: []store.Subscription{
+			{Source: store.SourceYardr, Scope: store.ScopeAll, Where: map[string]string{"depot": "web", "stage": "decide"}},
+			{Source: store.SourceYardr, Scope: store.ScopeAll, Where: map[string]string{"depot": "web", "state": store.StateDone}},
+		}}, "me"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CrewStarted(ctx, "yardmaster", map[string]any{"pane": "p1"}); err != nil {
 		t.Fatal(err)
 	}
 	plan = build(t, st, loadSmall(t), o)
 	m = find(t, plan, "crew", "yardmaster")
-	if m.CrewMember.Prompt != local || m.CrewMember.SeedFrom != "" {
+	if m.CrewMember.Prompt != local || m.CrewMember.SeedFrom != "" || !m.CrewMember.Restart {
 		t.Fatalf("with a local file: yardmaster = %+v", m)
 	}
 	if want := "the yardmaster's prompt moves to " + local + ", which is already there and is kept as it is"; !slices.Contains(plan.Notes, want) {
 		t.Fatalf("notes = %v, want %q", plan.Notes, want)
 	}
-	apply(t, st, plan, nil)
+	res := apply(t, st, plan, nil)
+	if !slices.Equal(res.Restart, []string{"yardmaster"}) {
+		t.Fatalf("restart after moving to the existing local role = %v, want yardmaster", res.Restart)
+	}
 	if b, _ := os.ReadFile(local); string(b) != "already the yard's own\n" || roleOf(t, st) != local {
 		t.Fatalf("the existing local role was touched: %q, prompt %q", b, roleOf(t, st))
 	}
@@ -969,7 +978,7 @@ func TestYardSetUpByHand(t *testing.T) {
 	if g := find(t, plan, "group", "backlog"); g.Action != pack.Unchanged || g.Group.Limit != 50 || !reflect.DeepEqual(g.Group.Members, []string{"ann", "boss"}) {
 		t.Fatalf("backlog = %+v %+v", g, g.Group)
 	}
-	if rt := find(t, plan, "route", "depot web stage new -> web-builders"); rt.Action != pack.Unchanged || len(rt.Route.Delete) != 0 {
+	if rt := find(t, plan, "route", "depot web stage new -> web-builders"); rt.Action != pack.Unchanged {
 		t.Fatalf("route new = %+v %+v", rt, rt.Route)
 	}
 	res := find(t, plan, "crew", "boss")
@@ -1100,7 +1109,7 @@ func TestTypeFileIsGovernedOnceAfterImport(t *testing.T) {
 
 // Existing depot routes that differ from the pack's group (or have more than
 // one route for the stage) are reported as differs and never deleted.
-func TestRoutesAreReplacedNotAdded(t *testing.T) {
+func TestDifferingRoutesStayInsteadOfBeingReplaced(t *testing.T) {
 	st, o := yard(t)
 	apply(t, st, build(t, st, load(t, starter), o), answers)
 	depot := "web"
@@ -1115,9 +1124,6 @@ func TestRoutesAreReplacedNotAdded(t *testing.T) {
 		t.Fatalf("differs = %v, want %v", got, want)
 	}
 	rt := find(t, plan, "route", "depot web stage new -> web-builders")
-	if len(rt.Route.Delete) != 0 {
-		t.Fatalf("route = %+v, want no delete", rt.Route)
-	}
 	if want := []pack.Diff{{Field: "group", Old: "others", New: "web-builders"}, {Field: "routes", Old: "2 for this stage", New: "1"}}; !reflect.DeepEqual(rt.Changes, want) {
 		t.Fatalf("changes = %v", rt.Changes)
 	}
@@ -1137,8 +1143,8 @@ func TestRoutesAreReplacedNotAdded(t *testing.T) {
 }
 
 // A stage with no group leaves any existing depot route standing and reports
-// it as differs with no delete.
-func TestStageWithoutGroupRemovesExistingRoute(t *testing.T) {
+// it as differs.
+func TestStageWithoutGroupLeavesExistingRoute(t *testing.T) {
 	st, o := yard(t)
 	if err := st.PutGroup(ctx, store.Group{Name: "old", Runner: "manual"}, "me"); err != nil {
 		t.Fatal(err)
@@ -1159,7 +1165,7 @@ func TestStageWithoutGroupRemovesExistingRoute(t *testing.T) {
 		t.Fatalf("differs = %v, want %q", got, "route "+want)
 	}
 	route := find(t, plan, "route", want)
-	if route.Route.Group != "" || len(route.Route.Delete) != 0 || route.Changes[0].New != "(no route)" {
+	if route.Route.Group != "" || route.Changes[0].New != "(no route)" {
 		t.Fatalf("route operation = %+v", route)
 	}
 	apply(t, st, plan, nil)

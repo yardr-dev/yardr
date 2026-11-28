@@ -25,9 +25,8 @@ const (
 	// Differs is an object of a line that the yard already has and that reads
 	// otherwise than the line says: an import writes nothing for it.
 	Differs = "differs"
-	// Dropped is an object that came from this pack in an earlier import
-	// and is no longer in it: an import reports it, and removes it only
-	// when told to prune.
+	// Dropped is a declared source that a connector pack brought in an earlier
+	// import and no longer carries: an import removes it only when told to prune.
 	Dropped = "dropped"
 	// Takes is a group of the yard that takes one of the pack's
 	// (Options.Groups): the pack's routes lead to it, and an import changes
@@ -56,9 +55,11 @@ type Options struct {
 	// that binds as another (Group.BindsAs) is asked about, as any new agent
 	// group is, instead of taking the other's agent, model and arguments.
 	Bound []string
-	// DepotRoles leaves a group or crew member its depot's own role where the depot
-	// has one of that name; PackRoles sets the pack's role everywhere, which
-	// is the default. With neither, the choice is the last import's.
+	// DepotRoles gives a new group its depot's own role where the depot has
+	// one of that name; a new crew member uses the pack's role. PackRoles
+	// chooses the pack's role for new groups, which is the default. Existing
+	// prompts are left as they are. With neither flag, the choice is the last
+	// import's.
 	DepotRoles bool
 	PackRoles  bool
 	// Operator is who the pack's roles and stage files name where they say
@@ -261,20 +262,17 @@ type FileOp struct {
 	Stage  string `json:"stage,omitempty"`
 }
 
-// RouteOp is the route state a depot's stage (and type) would have. The store
-// mints an id per added route, so a route that changes is added anew and
-// the ones it stands in for, listed under Delete, are removed. An empty
-// Group with Delete means the pack leaves that stage without a route.
-// Originator is any for a stage whose group starts no agents, so it takes
-// every originator's beads; "" for an agent stage, which takes the
-// operator's alone.
+// RouteOp is the route state a depot's stage (and type) would have. An empty
+// Group means the pack leaves that stage without a route; a route already
+// there stays and is reported as differs. Originator is any for a stage
+// whose group starts no agents, so it takes every originator's beads; "" for
+// an agent stage, which takes the operator's alone.
 type RouteOp struct {
-	Stage      string   `json:"stage"`
-	Depot      string   `json:"depot"`
-	Type       string   `json:"type,omitempty"`
-	Group      string   `json:"group"`
-	Originator string   `json:"originator,omitempty"`
-	Delete     []string `json:"delete,omitempty"`
+	Stage      string `json:"stage"`
+	Depot      string `json:"depot"`
+	Type       string `json:"type,omitempty"`
+	Group      string `json:"group"`
+	Originator string `json:"originator,omitempty"`
 }
 
 // CrewOp is what the pack sets on a crew member: its role and the event

@@ -399,7 +399,7 @@ pack imported into the depot, and prints the line as it is afterwards:
 $ yardr depot source yardr role yardr-reviewers depot
 KIND  NAME             SOURCE
 role  yardr-reviewers  depot (.yardr/roles/reviewer.md@add63e5)  pack starter has a copy
-note: the import of pack starter chose the pack's roles: the next yardr pack apply sets its role on yardr-reviewers again unless given --depot-roles
+note: pack starter uses its recorded role choice for new groups only; this prompt stays as set on later imports
 
 $ yardr depot source yardr flow depot
 KIND   NAME    SOURCE
@@ -439,17 +439,17 @@ the flow switched whole: its stage files are the ones above now
 - Switching to where the object already comes from says `unchanged`.
   `--json` prints `{"depot", "changed", "lines", "notes"}`, the lines as
   `depot sources --json` has them.
-- The pack's record still holds the import's choice of roles
-  ([packs.md](packs.md#how-a-pack-maps-to-the-yard)), so the next `yardr
-  pack apply` sets every role by it again. The output has a note when that
-  undoes the switch; give that import `--depot-roles` or `--pack-roles` to
-  make the choice the record's. An import also points the depot at the pack's
-  flow again.
+- The pack's record holds the default role choice for new groups
+  ([packs.md](packs.md#how-a-pack-maps-to-the-yard)); new crew members always
+  use the pack's copied role. Later imports leave existing prompts as set. An
+  existing flow pointer also stays in place on
+  later imports.
 - There is nothing to switch about rules: the file is additive, and removing
   it is deleting it.
 
 `yardr depot flow` points a depot at any named flow, not only a pack's, and
-`yardr pack apply --depot-roles` or `--pack-roles` chooses every role at once.
+`yardr pack apply --depot-roles` or `--pack-roles` sets the default role for
+new groups. New crew members always use the pack's copied role.
 
 ## Repo config comes from the base branch
 
@@ -1441,13 +1441,15 @@ test command is not set, before a yes in the terminal or `--yes`. A second
 run changes nothing and keeps the test command the depot has. To apply the
 pack again after it changed, use `yardr pack apply`, which never sets one.
 
-A depot that already has `.yardr/roles/` keeps the files, and the pack's
-roles win: the plan names each one a group or crew member would have read as
-`shadows .yardr/roles/<name>.md` before anything is written, and
-`yardr depot sources <depot>` shows it afterwards. `--depot-roles` keeps the
-depot's own instead. A depot that already has `.yardr/flows/` keeps those
-files too, shadowed by the pointer to the pack's flow; `yardr depot source
-<depot> flow depot` makes the depot's flow govern again
+A depot that already has `.yardr/roles/` keeps the files. A new group or
+crew member uses a pack role by default, and the plan names a depot role it
+shadows as `shadows .yardr/roles/<name>.md`; `--depot-roles` gives a new
+group the depot's own role instead. New crew members always use the pack's
+copied role. Existing groups and crew members keep their current prompts.
+`yardr depot sources <depot>` shows the result. A depot that already has
+`.yardr/flows/` keeps those files too,
+shadowed by a new pointer to the pack's flow; `yardr depot source <depot>
+flow depot` makes the depot's flow govern again
 ([switching](#switching-one-of-them)).
 
 A dir depot gets no guess ([dir-depots.md](dir-depots.md#1-register-the-folder-and-set-it-up)):
@@ -1464,9 +1466,9 @@ $ yardr depot init web --yes \
 …the plan, then:
 applied pack starter to depot web: 23 created, 0 changed, 2 unchanged
 
-test: depot web is tested with go vet ./... && go test ./... (a guess from /Users/jo/src/web: check it with yardr depot show web)
+test: depot web is tested with go vet ./... && go test ./... (a guess from ~/src/web: check it with yardr depot show web)
 To change it:
-  yardr depot add web /Users/jo/src/web --base main --test '<command>'
+  yardr depot add web ~/src/web --base main --test '<command>'
 ```
 
 The two unchanged are the yardmaster and its role, which `yardr init` made.
@@ -1870,9 +1872,9 @@ pack apply`.
   `prompt` is looked up. `.shipped.json` in it is no longer read.
 - **Roles installed from a pack** (`~/.yardr/packs/<pack>/`) are files, not
   code: a build with a newer `starter` does not touch them. `yardr pack
-  apply starter --depot <depot>` brings them to the build's, showing each as
-  `change content: sha256 … -> …` first, and refuses to overwrite one edited
-  by hand without `--yes`.
+  apply starter --depot <depot>` leaves a differing role file as it is and
+  reports `differs`; the operator can overwrite it with
+  `--replace roles/<name>`. `--yes` does not replace differing files.
 - **Moving an existing depot to a pack** is `yardr depot init <depot>`, when
   you want it: `yardr pack check <pack> --depot <depot>` prints the plan and
   writes nothing. Read it first. The import gives the depot groups of its

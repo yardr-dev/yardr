@@ -13,7 +13,8 @@ import (
 // depotRole names the depot's own role file that stands in for the pack's role
 // rel (roles/builder.md -> .yardr/roles/builder.md), or "" when the depot has
 // none or the pack's file is no role by yardr's naming (roles/<name>.md).
-// The pack's role is set over it unless the import keeps the depot's roles.
+// A new group gets the pack's role unless the import chooses the depot's
+// role; a new crew member always gets the pack's role.
 // The depot's roles are read together on the first asked for, instead of
 // starting git per role.
 func (b *planner) depotRole(rel string) (string, error) {

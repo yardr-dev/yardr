@@ -636,17 +636,6 @@ func write(ctx context.Context, st store.API, p *Plan, obj *Object, o ApplyOptio
 	case "pointer":
 		return st.SetFlowPointer(ctx, obj.Pointer.Depot, obj.Pointer.Type, obj.Pointer.Flow, o.Actor)
 	case "route":
-		// The old routes first: the new route takes the same beads as
-		// one of them, which the store refuses as a tie while both
-		// stand, so a replacement deletes
-		// before it adds. A stage is without a route only between the
-		// two calls of one import; should the add then fail, the next
-		// import sees no route for the stage and writes one.
-		for _, id := range obj.Route.Delete {
-			if err := st.DeleteRoute(ctx, id, o.Actor); err != nil {
-				return err
-			}
-		}
 		if obj.Route.Group != "" {
 			r := store.Route{Stage: obj.Route.Stage, Depot: &obj.Route.Depot, Group: obj.Route.Group}
 			if obj.Route.Type != "" {

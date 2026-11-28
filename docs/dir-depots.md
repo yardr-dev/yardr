@@ -61,8 +61,8 @@ that stays yours to set. The roles are written for a directory: no branches, no
 commits, name your files by path.
 
 - Both groups are agents. For a person as the reviewer, point the route at a
-  manual group afterwards (step 2); the next `yardr pack apply dir --depot
-  invoices` would set it back.
+  manual group afterwards (step 2); later `yardr pack apply dir --depot
+  invoices` leaves that route in place and reports it as `differs`.
 - A new group works one bead at a time, which keeps one worker in the folder.
   The pack gives no limit, so one you set later stays through the next
   import. Raise it only when beads touch separate files.

@@ -928,7 +928,7 @@ func packDelegated(ctx context.Context, tx *bolt.Tx, actor string, act Action, o
 		return false
 	}
 	// Only an object the import creates or changes opens a write: a
-	// name the plan lists unchanged, dropped or not in the pack stands
+	// name the plan lists unchanged, differs, dropped or takes stands
 	// in the record for its audit and opens nothing.
 	has := func(kind, name string) bool { return packObject(rec, kind, name) != nil }
 	grant := func(prefix string) bool {

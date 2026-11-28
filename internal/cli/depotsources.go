@@ -97,7 +97,8 @@ whether the copy was edited or the repository changed since.
 
 This view changes nothing. yardr depot source switches one flow or role
 between the depot's and the pack's; yardr depot flow points the depot at any flow,
-and yardr pack apply --depot-roles or --pack-roles chooses every role at once.
+and yardr pack apply --depot-roles or --pack-roles chooses the default role for
+new groups.
 Rules are not switched: writing the file adopts it, deleting it removes it.`,
 		Example: `  yardr depot sources yard
   yardr depot sources yard --json`,

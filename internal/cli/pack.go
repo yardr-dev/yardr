@@ -37,7 +37,7 @@ func (f *packFlags) register(c *cobra.Command, verb string) {
 	c.Flags().StringVar(&f.opts.Depot, "depot", "", "the depot the pack "+verb+" imported into (not for a pack of kind source, which is imported into the yard)")
 	c.Flags().StringVar(&f.auth, "auth", "", "for a pack at a URL: send the header in <home>/packs/<name>.auth with every GET; the record keeps the name, never the value")
 	f.registerShape(c)
-	c.Flags().BoolVar(&f.opts.PackRoles, "pack-roles", false, "set the pack's roles everywhere: the default now, needed only to undo an earlier --depot-roles")
+	c.Flags().BoolVar(&f.opts.PackRoles, "pack-roles", false, "choose the pack's role for new groups, overriding an earlier --depot-roles default")
 	c.MarkFlagsMutuallyExclusive("depot-roles", "pack-roles")
 	// No MarkFlagRequired: the pack is read first, and a pack of kind
 	// source refuses --depot, a pack that names a depot's own requires it,
@@ -78,7 +78,7 @@ func (f *packFlags) registerShape(c *cobra.Command) {
 	c.Flags().StringVar(&f.opts.Flow, "flow", "", "the pack's flow the depot follows (default: the one it was given by the last import, else the pack's first flow without a type)")
 	c.Flags().StringArrayVar(&f.crew, "crew", nil, "<pack's name>=<yard's crew member>: which crew member takes a crew member of the pack (repeatable; default: as at the last import)")
 	c.Flags().StringArrayVar(&f.groups, "group", nil, "<pack's group>=<yard's group>: a group the yard has takes a group of the pack as it is, and no <depot>-<group> is made; an agent group for an agent group, people for people (repeatable; default: as at the last import)")
-	c.Flags().BoolVar(&f.opts.DepotRoles, "depot-roles", false, "leave a group or crew member its depot's own .yardr/roles/<name>.md where the depot has one, instead of setting the pack's role (default: as at the last import, else the pack's)")
+	c.Flags().BoolVar(&f.opts.DepotRoles, "depot-roles", false, "choose the depot's .yardr/roles/<name>.md for new groups where it exists (default: as at the last import, else the pack's role)")
 }
 
 // answerFlags are the flags that answer what an import's plan asks: pack
@@ -355,7 +355,7 @@ func fromEmbedded(source string) bool {
 func (a *app) packOptions(warn io.Writer, ctx context.Context, f *packFlags) (store.API, *config.Config, error) {
 	if f.opts.PackRoles {
 		// To the error stream: --json's output stays the plan alone.
-		fmt.Fprintln(warn, "--pack-roles: the pack's roles are the default now; the flag is only needed to undo an earlier --depot-roles")
+		fmt.Fprintln(warn, "--pack-roles: the pack's roles are the default for new groups; new crew members always use them. The flag is only needed to undo an earlier --depot-roles default")
 	}
 	f.opts.Crew = map[string]string{}
 	for _, kv := range f.crew {
@@ -422,16 +422,13 @@ agent, model, arguments and members; a crew member's identity and directory).
 Applying the same pack again changes nothing and logs one pack_unchanged
 event.
 
-The pack's roles win: a group or crew member gets the pack's copied role also
-where the depot has its own .yardr/roles/<name>.md, which the plan names as
-shadowed. --depot-roles keeps the depot's own role instead; the import records
-the choice and the next one repeats it. Applying a line writes only what the
-yard lacks of its flows, stage files, role files, scripts, page frame and flow
-pointers: what already matches is unchanged, what reads otherwise is differs
-and left as the yard has it, and nothing is removed. --replace <file> sets the
-original's version of a differing file under <home>/packs/<pack>/ (a role's
-copy, a script or the page frame; repeatable); a stage file is changed with
-yardr flow set-stage and a flow with yardr flow set.
+New groups use the pack's role, unless --depot-roles selects the depot's
+.yardr/roles/<name>.md. New crew members use the pack's role; existing prompts
+stay. Applying a line writes only what the yard lacks of its flows, stage
+files, roles, scripts, frame and pointers: matches are unchanged, differences
+stay, and nothing is removed. --replace <file> sets the pack's version of a
+differing role, script or frame under <home>/packs/<pack>/; edit stage files
+with yardr flow set-stage and flows with yardr flow set.
 
 What it asks, and the flag that answers instead:
   whether a group the yard has takes a group of   --group <pack's>=<yard's>
