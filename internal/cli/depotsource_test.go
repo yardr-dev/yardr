@@ -158,7 +158,7 @@ func TestDepotSourceRoleOfACrew(t *testing.T) {
 // leaves it there on a later import.
 func TestDepotSourceRoleAgainstTheRecord(t *testing.T) {
 	t.Parallel()
-	a, _, _ := sourcesYard(t)
+	a, home, _ := sourcesYard(t)
 	requireNonInteractive(t)
 	if out, err := run(t, a.packCmd(), append([]string{"apply", "../../packs/starter", "--depot", "web", "--yes", "--depot-roles"}, starterFlags...)...); err != nil {
 		t.Fatalf("%v\n%s", err, out)
