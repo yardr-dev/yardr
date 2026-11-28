@@ -1,15 +1,24 @@
 # Packs
 
-A pack is one yard's way of working as a directory: the flows a bead passes
-through and what each of their stages is for, the groups that work the
-stages, the role prompts and scripts those groups run, and what an always-on
-crew member hears. A yard imports a
-pack into a depot; the pack names no agent product, model, argument, depot,
-person, secret or identity, which are the yard's and stay in it.
+A pack is a directory a yard imports (`pack.yaml` and the files it names,
+through `yardr pack`). Every pack is one of three things:
 
-`yardr pack check` reads a pack and shows what importing it would change;
-`yardr pack apply` imports it; `yardr pack list` shows what the yard
-imported; `yardr pack export` writes a depot's way of working out as a pack
+- A **line**: a way of working for a depot — the flows a bead passes through
+  and what each of their stages is for, the groups that work the stages, the
+  role prompts and scripts those groups run, and what an always-on crew member
+  hears. Written to a folder it is still a line, and copied into a depot it is
+  that depot's line; the folder names no agent product, model, argument, depot,
+  person, secret or identity, which are the yard's and are given at apply.
+- A **connector** (`kind: source`): a service the yard calls or hears,
+  imported into the yard itself and into no depot. The record it declares
+  stays a `source`. The yard as an MCP server for a person's own client
+  (`yardr mcp`) is the yard's MCP, never a connector.
+- A **frame alone** (`pageframe`): a page frame and nothing else.
+
+The commands (`yardr pack`) and `pack.yaml` keep the word `pack` for all
+three. `yardr pack check` reads a pack and shows what importing it would
+change; `yardr pack apply` imports it; `yardr pack list` shows what the yard
+imported; `yardr pack export` writes a depot's line out as a pack
 ([below](#yardr-pack-export)). `yardr depot init` sets a new depot up from the yard's
 [default pack](#the-default-pack). A pack is a directory on this
 machine, one yardr carries in its binary, or the pack's directory on a web
@@ -17,7 +26,7 @@ server, fetched when the command runs. What a pack built outside this
 repository may rely on, key by key and variable by variable, and what is
 yardr's own, is [pack-api.md](pack-api.md).
 
-The pack yardr ships is [`packs/starter`](../packs/starter): a flow from
+The line yardr ships as its default is [`packs/starter`](../packs/starter): a flow from
 backlog to merged with its stage files, the roles of a builder, a reviewer,
 a security reviewer and the yardmaster, and the reference assembly, as one
 pack. It is in the
@@ -26,50 +35,50 @@ binary, so `starter` names it with no checkout at hand
 names none.
 
 It is written for a git depot. For a depot that is a plain directory yardr
-carries a second pack, [`packs/dir`](../packs/dir), named `dir`: two flows
+carries a second line, [`packs/dir`](../packs/dir), named `dir`: two flows
 (the depot's, and its trains') with their stage files, a builders and a reviewers group whose
 roles are written for a directory, the starter's two people groups for
 `backlog` and `decide`, no group that lands anything and no crew
 ([dir-depots.md](dir-depots.md#1-register-the-folder-and-set-it-up)).
 
-A third, [`packs/contributors`](../packs/contributors), named
+A third line, [`packs/contributors`](../packs/contributors), named
 `contributors`, is for what comes to a git depot's repository from outside:
 an issue or a pull request someone opens there is a bead, a maintainer looks
 first, and a pull request is reviewed by an agent that only reads. It is
-imported beside the pack the depot follows
+imported beside the line the depot follows
 ([The contributors pack](#the-contributors-pack)).
 
-Beside the depot's pack too, [`packs/design`](../packs/design), named
+Beside the depot's line too, [`packs/design`](../packs/design), named
 `design`, is the lane a question of direction takes in a git depot: a bead
 of type `design` is a document an agent drafts, another argues against and
 a person decides on, before anything is built
 ([The design pack](#the-design-pack)).
 
-[`packs/ci-red`](../packs/ci-red), named `ci-red`, turns a failed CI run
+[`packs/ci-red`](../packs/ci-red), named `ci-red`, is a line that turns a failed CI run
 on a git depot's base into one task bead: a run that fails on the base
 branch for no pull request makes the bead, a second failed run while it is
 open finds it and makes none, and the run after its close makes the next.
-It carries no flow, only the line that makes the bead, which is held to
-the flow the depot follows, and is imported beside the pack the depot
+It carries no flow, only the rule that makes the bead, which is held to
+the flow the depot follows, and is imported beside the line the depot
 follows.
 
-A sixth, [`packs/linear`](../packs/linear), named `linear`, is for no
-depot: it is Linear itself as an integration, imported into the yard. It
+[`packs/linear`](../packs/linear), named `linear`, is a connector, for no
+depot: it is Linear itself, imported into the yard. It
 declares the source `linear`, with the commands that verify and
 read Linear's webhooks and that reply, open a thread and set a status in
 one ([An integration pack](#an-integration-pack-kind-source)).
 
-A seventh, [`packs/github`](../packs/github), named `github`, is for no
-depot either: it is GitHub itself as an integration, imported into the
+[`packs/github`](../packs/github), named `github`, is a connector, for no
+depot either: it is GitHub itself, imported into the
 yard. It declares the source `github`, with the commands that verify and
 read GitHub's webhooks and that reply, open a thread and set a status in
 one, and that read a pull request and its CI back
 ([An integration pack](#an-integration-pack-kind-source)).
 
-Two more, [`packs/telegram`](../packs/telegram) and
+Two more connectors, [`packs/telegram`](../packs/telegram) and
 [`packs/pushover`](../packs/pushover), named `telegram` and `pushover`,
-are for no depot either: each is one service as an integration, a
-declaration with the `notify` key that tells a user outside the yard.
+are for no depot either: each declares one service with the `notify` key
+that tells a user outside the yard.
 Pushover has one command, which sends the picture a tell carries;
 telegram also hears the operator's chat back, with a `hook` key, `thread`
 commands and a `hear` key. One apply and
@@ -79,14 +88,14 @@ source key telegram` and `yardr user key <user> telegram`. (An apply
 with files you keep yourself still does it in one: `--source-env
 telegram=<file> --notify <user>=telegram,<file>`.)
 
-One more, [`packs/slack`](../packs/slack), named `slack`, is for no
-depot either: it is Slack itself as an integration, imported into the
+One more connector, [`packs/slack`](../packs/slack), named `slack`, is for no
+depot either: it is Slack itself, imported into the
 yard. It declares the source `slack`, with the commands that verify and
 read the Events API deliveries the setup subscribes to and that answer
 in their threads, and the app manifest the operator creates the Slack
 app from ([An integration pack](#an-integration-pack-kind-source)).
 
-One more, [`packs/webhook`](../packs/webhook), named `webhook`, is for no
+One more connector, [`packs/webhook`](../packs/webhook), named `webhook`, is for no
 depot either, and for no one service. It is any service that POSTs to a URL
 or takes one, which covers Zapier, Make and n8n in both directions. It
 declares the source `webhook`, with a `hook` key that hears any POST at a
@@ -108,8 +117,8 @@ approve on its card. Where `aiquokka` is on PATH and the yard declares no such s
 condition, are in
 [integrations.md](integrations.md#say-what-a-subscription-still-carries).
 
-One more, [`packs/cloudflare`](../packs/cloudflare), named `cloudflare`,
-is for no depot either: it is Cloudflare itself as an integration, imported
+One more connector, [`packs/cloudflare`](../packs/cloudflare), named `cloudflare`,
+is for no depot either: it is Cloudflare itself, imported
 into the yard. It declares the source `cloudflare`, whose read calls list
 the user's account, its zones, its Workers scripts and its Email Routing
 rules and addresses as wrangler reads them, and whose update calls upload
@@ -122,38 +131,38 @@ deployed to the site's project on the user's own Void platform, and the bead
 closes when the site is live. It is imported instead of the starter, with
 setup notes for the person whose website it is.
 
-One pack is neither: [`packs/pageframe`](../packs/pageframe), named
-`pageframe`, is for no depot's work and no integration. It carries one page
-frame (`frame: frames/page.html`, [API 4](pack-api.md#api-4)), the HTML file a
-page is made inside, and nothing beside it. Its colours and type are the yardr
-design system's, its column is 1120 px and fluid below that, and the comment
-that opens the frame names the classes it styles: tiles, tables, charts and
-tabs among them. A fragment is dressed in the frame that applies to a depot
-with `yardr bead note --page`, and `yardr page show` prints that frame
+One pack is neither a line nor a connector: [`packs/pageframe`](../packs/pageframe),
+named `pageframe`, is a frame alone, for no depot's work and no service. It
+carries one page frame (`frame: frames/page.html`, [API 4](pack-api.md#api-4)),
+the HTML file a page is made inside, and nothing beside it. Its colours and type
+are the yardr design system's, its column is 1120 px and fluid below that, and
+the comment that opens the frame names the classes it styles: tiles, tables,
+charts and tabs among them. A fragment is dressed in the frame that applies to a
+depot with `yardr bead note --page`, and `yardr page show` prints that frame
 ([users.md](users.md#a-page-in-a-note)).
 
-| pack | for | flows | a depot's default |
-|---|---|---|---|
-| `starter` | a git depot's own work | `default`, and `train` for trains | of a git depot |
-| `dir` | a dir depot's own work | `default`, and `train` for trains | of a dir depot |
-| `contributors` | issues and pull requests from outside, in a git depot | `issue` and `pr`, each for its type | of none: `yardr pack apply contributors --depot <depot>` |
-| `design` | designs in a git depot: a document drafted, critiqued and decided before anything is built | `design`, for its type | of none: `yardr pack apply design --depot <depot>` |
-| `ci-red` | a failed CI run on a git depot's base, as one task bead | none: held to the depot's flow | of none: `yardr pack apply ci-red --depot <depot>` |
-| `website` | a git depot's website, deployed to its own Void platform after landing | `default`, past the deploy to `live` | of none: `yardr pack apply website --depot <depot>` |
-| `linear` | Linear itself, in the yard | none: `kind: source` | of none: `yardr pack apply linear` |
-| `github` | GitHub itself, in the yard | none: `kind: source` | of none: `yardr pack apply github` |
-| `google-mail` | Gmail itself, in the yard: mail read, drafts written, nothing sent | none: `kind: source` | of none: `yardr pack apply google-mail` |
-| `google-drive` | Drive itself, in the yard: files listed and read, folders and empty Docs and Slides made | none: `kind: source` | of none: `yardr pack apply google-drive` |
-| `google-docs` | Docs and Slides in the yard: documents and decks read and appended to, documents replaced in place, given a picture, and laid out with a table and styled text | none: `kind: source` | of none: `yardr pack apply google-docs` |
-| `google-calendar` | Calendar itself, in the yard: events listed, read, created and edited without invitations | none: `kind: source` | of none: `yardr pack apply google-calendar` |
-| `telegram` | telling a user through Telegram, and hearing the operator's chat back, in the yard | none: `kind: source` | of none: `yardr pack apply telegram` |
-| `pushover` | telling a user through Pushover, in the yard | none: `kind: source` | of none: `yardr pack apply pushover` |
-| `slack` | mentions and direct messages in a Slack workspace, answered in their threads, in the yard | none: `kind: source` | of none: `yardr pack apply slack` |
-| `posthog` | PostHog itself, in the yard: HogQL queries, error tracking issues, session recordings and Replay Vision observations read, a new error issue heard | none: `kind: source` | of none: `yardr pack apply posthog` |
-| `webhook` | any service that POSTs to a URL or takes one (Zapier, Make, n8n), in the yard: its POSTs heard, a JSON object sent to its URL | none: `kind: source` | of none: `yardr pack apply webhook` |
-| `routine` | a person's routine told beside their phone, in the yard: the URL it is told at, given as their own credential | none: `kind: source` | of none: `yardr pack apply routine` |
-| `cloudflare` | Cloudflare itself, in the yard: accounts, zones, Workers scripts and Email Routing rules and addresses read; Workers uploaded, secrets put and rules made or edited, each on its own card | none: `kind: source` | of none: `yardr pack apply cloudflare` |
-| `pageframe` | the page frame yardr carries: one HTML file with the design system's colours and type, a title block, tiles, tables, charts and tabs | none: a frame and nothing else | of none: it brings no flow, group or source |
+| what | pack | for | flows | a depot's default |
+|---|---|---|---|---|
+| line | `starter` | a git depot's own work | `default`, and `train` for trains | of a git depot |
+| line | `dir` | a dir depot's own work | `default`, and `train` for trains | of a dir depot |
+| line | `contributors` | issues and pull requests from outside, in a git depot | `issue` and `pr`, each for its type | of none: `yardr pack apply contributors --depot <depot>` |
+| line | `design` | designs in a git depot: a document drafted, critiqued and decided before anything is built | `design`, for its type | of none: `yardr pack apply design --depot <depot>` |
+| line | `ci-red` | a failed CI run on a git depot's base, as one task bead | none: held to the depot's flow | of none: `yardr pack apply ci-red --depot <depot>` |
+| line | `website` | a git depot's website, deployed to its own Void platform after landing | `default`, past the deploy to `live` | of none: `yardr pack apply website --depot <depot>` |
+| connector | `linear` | Linear itself, in the yard | none: `kind: source` | of none: `yardr pack apply linear` |
+| connector | `github` | GitHub itself, in the yard | none: `kind: source` | of none: `yardr pack apply github` |
+| connector | `google-mail` | Gmail itself, in the yard: mail read, drafts written, nothing sent | none: `kind: source` | of none: `yardr pack apply google-mail` |
+| connector | `google-drive` | Drive itself, in the yard: files listed and read, folders and empty Docs and Slides made | none: `kind: source` | of none: `yardr pack apply google-drive` |
+| connector | `google-docs` | Docs and Slides in the yard: documents and decks read and appended to, documents replaced in place, given a picture, and laid out with a table and styled text | none: `kind: source` | of none: `yardr pack apply google-docs` |
+| connector | `google-calendar` | Calendar itself, in the yard: events listed, read, created and edited without invitations | none: `kind: source` | of none: `yardr pack apply google-calendar` |
+| connector | `telegram` | telling a user through Telegram, and hearing the operator's chat back, in the yard | none: `kind: source` | of none: `yardr pack apply telegram` |
+| connector | `pushover` | telling a user through Pushover, in the yard | none: `kind: source` | of none: `yardr pack apply pushover` |
+| connector | `slack` | mentions and direct messages in a Slack workspace, answered in their threads, in the yard | none: `kind: source` | of none: `yardr pack apply slack` |
+| connector | `posthog` | PostHog itself, in the yard: HogQL queries, error tracking issues, session recordings and Replay Vision observations read, a new error issue heard | none: `kind: source` | of none: `yardr pack apply posthog` |
+| connector | `webhook` | any service that POSTs to a URL or takes one (Zapier, Make, n8n), in the yard: its POSTs heard, a JSON object sent to its URL | none: `kind: source` | of none: `yardr pack apply webhook` |
+| connector | `routine` | a person's routine told beside their phone, in the yard: the URL it is told at, given as their own credential | none: `kind: source` | of none: `yardr pack apply routine` |
+| connector | `cloudflare` | Cloudflare itself, in the yard: accounts, zones, Workers scripts and Email Routing rules and addresses read; Workers uploaded, secrets put and rules made or edited, each on its own card | none: `kind: source` | of none: `yardr pack apply cloudflare` |
+| frame alone | `pageframe` | the page frame yardr carries: one HTML file with the design system's colours and type, a title block, tiles, tables, charts and tabs | none: a frame and nothing else | of none: it brings no flow, group or source |
 
 ```
 packs/starter/
@@ -212,7 +221,7 @@ sources:
 | `author` | optional, for a pack of any kind ([`api: 5`](pack-api.md#api-5)): who published the pack, a name as its publisher writes it (`author: Ada Lovelace`): one line of printable characters that is not blank, kept as written. `pack show <pack>` prints it beside the pack's name, marked as the pack's own words, which yardr does not check |
 | `id` | optional, for a pack of any kind ([`api: 5`](pack-api.md#api-5)): the address the pack is published at, an https URL with a host (`id: https://packs.example.com/acme-flow`), in ASCII with no space, and with no user, password, query or fragment, kept as written. `pack show <pack>` prints it beside the author. It is a name and nothing more: no registry stands behind it, two packs may say one, and nothing checks that the pack is served there |
 | `api` | optional: the pack API the pack is written for, a whole number, 1 or more, and **1 when the key is absent**, so every pack written before the key is a pack of API 1. A pack above the highest API this yardr reads is refused before any other key is read, with the cause (`upgrade yardr`) instead of an unknown key. The number rises on every addition to what is stable, and [pack-api.md](pack-api.md#the-api-number) lists what each number added |
-| `kind` | optional: the kind of depot the pack is for, `git` (a repository: beads are built on branches and landed on a base) or `dir` (a plain directory: nothing is committed and nothing merges), or `source`: the pack is an integration, imported into the yard itself and into no depot ([An integration pack](#an-integration-pack-kind-source)). `yardr depot init` refuses the pack for a depot of the other kind ([below](#yardr-depot-init)). A pack without the key fits either depot |
+| `kind` | optional: the kind of depot the line is for, `git` (a repository: beads are built on branches and landed on a base) or `dir` (a plain directory: nothing is committed and nothing merges), or `source`: the pack is a connector, imported into the yard itself and into no depot ([An integration pack](#an-integration-pack-kind-source)). `yardr depot init` refuses the pack for a depot of the other kind ([below](#yardr-depot-init)). A pack without the key fits either depot |
 | `setup` | optional, for a pack of any kind: the pack's setup notes, its author's words about what a setup takes — where in the service a webhook is made and which events it needs, what an identity wants, how to test. A file of the pack, markdown (`setup: SETUP.md`), at most 64 KB, with something in it. `pack check` prints it after the plan, `pack apply` after what it did (or names `pack show <pack>` when nothing changed), `pack show <pack>` prints it later, and a crew member's prime names it by that command, so the one who helps with a setup reads it first. The notes are marked as the pack's, not checked by yardr. Text only: the pack still carries no secret, sets no identity and grants nothing |
 | `frame` | optional, for a pack of any kind but `source` ([`api: 4`](pack-api.md#api-4)): the pack's page frame, one HTML file of the pack that pages made under it are made in (`frame: frames/page.html`). A path as a role's is, to a regular file with something in it and at most 256 KiB, that is no other file of the pack. It is read as a browser reads HTML, and it has one `<title>` element in its head, one `<!--yardr:title-->` where the page's title block stands in its body (where text can stand, in an `<h1>` for one), and one `<!--yardr:content-->` where the page's content stands (where a heading, tiles and a table can: not in a paragraph, a button, a link, a heading, a list or the rows and cells of a table). Each marker is a comment of its own: the same bytes in a tag or an attribute, in a longer comment, or in the text of a `<script>`, `<style>`, `<textarea>`, `<title>`, `<iframe>`, `<xmp>`, `<noembed>`, `<noframes>`, `<noscript>` or `<plaintext>` are none, and the pack is refused for them. Nor may a marker stand in the head, after the body, or inside an `<svg>`, a `<math>` or a `<template>`, and a frame nests no more than 512 elements deep. The import copies the frame as it stands to `<home>/packs/<pack>/<its path>`, at mode 0644: nothing is filled in it, and it is no program, since only a reader's browser runs its script. The digest pins it, and `pack check` names it on a line of its own ([below](#yardr-pack-check)) |
 | `flows.<flow>.stages` | the flow's stages, **in file order**: the first is where a bead starts |
@@ -2007,8 +2016,8 @@ BEAD
 
 ## An integration pack (kind: source)
 
-A pack of kind `source` is an integration: a service outside the yard that
-yardr has no Go for, as one pack. It has a name, the kind, setup notes and
+A pack of kind `source` is a connector: a service outside the yard that
+yardr has no Go for, packaged as one pack. It has a name, the kind, setup notes and
 sources, each with a declaration and nothing else; it has no flows, groups
 or crew, and is imported into the yard itself, with no `--depot`:
 

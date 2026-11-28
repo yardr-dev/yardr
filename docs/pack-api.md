@@ -1,9 +1,13 @@
 # The pack API: what a pack may say, run and hear
 
-A pack is a directory the yard imports ([packs.md](packs.md)). The packs in
-yardr's binary change with it. A pack built elsewhere, read from a directory
-or a URL, has to keep working when the Go inside yardr changes, and this page
-is the promise that lets it. It does for a pack author what
+A pack is a directory the yard imports ([packs.md](packs.md)): a **line**
+(a way of working for a depot), a **connector** (`kind: source`, a service
+the yard calls or hears), or a **frame alone** (`pageframe`, a page frame
+and nothing else). The commands (`yardr pack`) and `pack.yaml` keep the word
+`pack` for all three, and the record a connector declares stays a `source`.
+The packs in yardr's binary change with it. A pack built elsewhere, read from
+a directory or a URL, has to keep working when the Go inside yardr changes,
+and this page is the promise that lets it. It does for a pack author what
 [api.md](api.md) does for the author of a chat window: it lists what is
 stable, says that later builds only add to that list, and gives the list a
 number, so that a pack can say which list it is written for.
@@ -367,12 +371,12 @@ yardr's own quiet run.
 
 ## What a pack gives agents
 
-A pack of kind `source` declares a service. Its `calls` are HTTPS requests
-the yard makes with the credential, its commands are programs of the pack,
-and its `hook.verify` is data the yard checks. A pack for a depot asks for
-calls for its groups and crew members, and a pack of kind `source` suggests
-presets. Nothing is granted until the operator grants it, at an ask or with
-`yardr source grant`.
+A connector (a pack of kind `source`) declares a service. Its `calls` are
+HTTPS requests the yard makes with the credential, its commands are programs
+of the pack, and its `hook.verify` is data the yard checks. A line (a pack
+for a depot) asks for calls for its groups and crew members, and a connector
+suggests presets. Nothing is granted until the operator grants it, at an ask
+or with `yardr source grant`.
 
 | seam | | |
 |---|---|---|
