@@ -147,7 +147,8 @@ func TestPackImportHeldHoldsEveryField(t *testing.T) {
 func TestPackObjectHeldHoldsEveryField(t *testing.T) {
 	t.Parallel()
 	group := PackObject{Kind: "group", Name: "builders", Binds: "reviewers"}
-	rec := &Delegation{ID: 7, Import: &PackImport{Objects: []PackObject{group}}}
+	src := PackObject{Kind: "source", Name: "linear", SHA256: "abc"}
+	rec := &Delegation{ID: 7, Import: &PackImport{Objects: []PackObject{group, src}}}
 	if err := packObjectHeld(rec, "starter", group); err != nil {
 		t.Fatalf("the held object itself: %v", err)
 	}
@@ -166,6 +167,9 @@ func TestPackObjectHeldHoldsEveryField(t *testing.T) {
 			t.Fatalf("PackObject.%s is a %s: add a sample of it to this test", field.Name, field.Type)
 		}
 		forged := group
+		if field.Name == "SHA256" {
+			forged = src
+		}
 		if err := json.Unmarshal([]byte(sample), reflect.ValueOf(&forged).Elem().Field(i).Addr().Interface()); err != nil {
 			t.Fatal(err)
 		}
@@ -192,7 +196,7 @@ func TestPackObjectHeldHoldsEveryField(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	if emptied.Says[0].Where == nil || subbed.Subscription.Where == nil || rec.Import.Objects[1].Says[0].Where != nil || rec.Import.Objects[2].Subscription.Where != nil {
+	if emptied.Says[0].Where == nil || subbed.Subscription.Where == nil || rec.Import.Objects[2].Says[0].Where != nil || rec.Import.Objects[3].Subscription.Where != nil {
 		t.Error("the comparison changed an object it was given")
 	}
 

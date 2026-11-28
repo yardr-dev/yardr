@@ -254,7 +254,7 @@ var delegatedFlagRows = []delegatedFlagRow{
 	{"source-base", []string{"--source-base", "telegram=eu"}, ""},
 	{"notify", []string{"--notify", "jo=telegram"}, ""},
 	{"yes", []string{"--yes"}, ""},
-	{"take", []string{"--take", "flow/telegram.default"}, ""},
+	{"replace", []string{"--replace", "scripts/merge-local"}, ""},
 	{"sha256", []string{"--sha256", strings.Repeat("a", 64)}, ""},
 	{"prune", []string{"--prune"}, ""},
 }
@@ -393,9 +393,9 @@ func TestDelegatedPackApplyFromTheCLI(t *testing.T) {
 	// the step that reads it answers, and names one it refuses. A long flag
 	// typed with one dash, as -take, is read as shorthands, which none has.
 	embedded := map[string]string{
-		"pack apply nosuchpack":                           "embeds no pack of that name",
-		"pack apply " + t.TempDir():                       "applies a pack yardr embeds",
-		"pack apply telegram -take flow/telegram.default": "unknown shorthand flag: 't' in -take",
+		"pack apply nosuchpack":                            "embeds no pack of that name",
+		"pack apply " + t.TempDir():                        "applies a pack yardr embeds",
+		"pack apply telegram -replace scripts/merge-local": "unknown shorthand flag: 'r' in -replace",
 	}
 	for _, f := range delegatedFlagRows {
 		embedded["pack apply telegram "+strings.Join(f.words, " ")] = f.says()

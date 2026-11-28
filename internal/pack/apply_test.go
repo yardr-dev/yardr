@@ -424,15 +424,10 @@ func TestDroppedObjectsAreReportedAndPrunedOnlyWhenAsked(t *testing.T) {
 		"stage=review stage=review-security type=train\"", "stage=review type=train\"")
 
 	plan := build(t, st, load(t, dir), o)
-	// The stage's file goes with it: named by where it is in the home, since
-	// the pack has no path for it any more.
-	gone := []string{"file flows/starter.default/review-security.md", "file roles/review-security.md", "group web-security-reviewers",
+	gone := []string{"group web-security-reviewers",
 		"route depot web stage review-security -> web-security-reviewers"}
 	if got := actions(plan, pack.Dropped); !slices.Equal(slices.Sorted(slices.Values(got)), gone) {
 		t.Fatalf("dropped = %v, want %v", got, gone)
-	}
-	if got := actions(plan, pack.NotInPack); !slices.Equal(got, []string{"group web-extra"}) {
-		t.Fatalf("not in the pack = %v", got)
 	}
 
 	res := apply(t, st, plan, nil)
@@ -466,9 +461,10 @@ func TestDroppedObjectsAreReportedAndPrunedOnlyWhenAsked(t *testing.T) {
 	if _, err := st.GetGroup(ctx, "web-security-reviewers"); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("web-security-reviewers after --prune: %v", err)
 	}
+	// Files are never pruned.
 	for _, f := range []string{role, stage} {
-		if _, err := os.Stat(f); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("%s after --prune: %v", f, err)
+		if _, err := os.Stat(f); err != nil {
+			t.Fatalf("%s was removed: %v", f, err)
 		}
 	}
 	// The stages the pack still has keep their files.
@@ -562,33 +558,6 @@ func TestApplyRefusesStrandedBeadsChangingNothing(t *testing.T) {
 	if _, serr := os.Stat(plan.Install); len(groups) != 0 || len(recs) != 0 || !errors.Is(serr, os.ErrNotExist) {
 		t.Fatalf("a refused import left groups %v, records %v, files %v", groups, recs, serr)
 	}
-	t.Run("take cannot strand an open bead", func(t *testing.T) {
-		st, o := yard(t)
-		dir := copyStarter(t)
-		apply(t, st, build(t, st, load(t, dir), o), answers)
-		yardEdit(t, st, "starter.default", func(f *store.Flow) {
-			f.Stages = append(f.Stages, "triage")
-			f.Transitions["triage"] = []string{"new"}
-		})
-		b, err := st.CreateBead(ctx, store.NewBead{Title: "stray", Depot: "web", Stage: "triage"}, "me")
-		if err != nil {
-			t.Fatal(err)
-		}
-		plan := build(t, st, load(t, dir), o)
-		if got := actions(plan, pack.Kept); !slices.Equal(got, []string{"flow starter.default"}) {
-			t.Fatalf("kept = %v", got)
-		}
-		before := head(t, st)
-		_, err = pack.Apply(ctx, st, plan, pack.ApplyOptions{
-			Answers: answered(t, plan, nil), Actor: "me", Take: []string{"flow/starter.default"},
-		})
-		if err == nil || !strings.Contains(err.Error(), b.ID+" (triage)") {
-			t.Fatalf("taking the flow under an open bead: %v", err)
-		}
-		if got := storedDigest(t, st, "starter.default"); got == recordedFlow(t, st, "starter.default") || len(kinds(t, st, before)) != 0 {
-			t.Fatalf("a refused take changed the flow or logged events: digest %s, events %v", got, kinds(t, st, before))
-		}
-	})
 }
 
 // A question without an answer, an answer that cannot be used, and a pack
@@ -883,100 +852,8 @@ func TestDepotRolesKeepsTheDepotsOwnAndIsRemembered(t *testing.T) {
 	}
 }
 
-// An installed script edited by hand is not overwritten silently: the plan
-// marks it, and the import refuses it, naming the file and where the edit
-// belongs, unless told to overwrite. A copy that differs only because the
-// pack moved on is no edit. (A role or a stage file the yard changed is kept
-// instead of refused: keep_test.go.)
-func TestHandEditedInstalledFileIsRefused(t *testing.T) {
-	st, o := yard(t)
-	dir := copyStarter(t)
-	apply(t, st, build(t, st, load(t, dir), o), nil)
-	to := filepath.Join(config.At(o.Home).Pack("starter"), "scripts", "merge-local")
-	from := filepath.Join(dir, "scripts", "merge-local")
-
-	// The pack changes, the copy is as installed: an ordinary change.
-	if err := os.WriteFile(from, []byte("#!/bin/sh\n# the pack's, second edition\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	plan := build(t, st, load(t, dir), o)
-	if f := find(t, plan, "file", "scripts/merge-local"); f.Action != pack.Change || f.Edited || len(plan.EditedFiles()) != 0 {
-		t.Fatalf("merge-local after a change of the pack = %+v", f)
-	}
-	apply(t, st, plan, nil)
-
-	if err := os.WriteFile(to, []byte("#!/bin/sh\n# edited in the yard\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	plan = build(t, st, load(t, dir), o)
-	if f := find(t, plan, "file", "scripts/merge-local"); f.Action != pack.Change || !f.Edited || len(f.Keeps) != 0 {
-		t.Fatalf("merge-local after a hand edit = %+v", f)
-	}
-	before := head(t, st)
-	_, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Actor: "me"})
-	if err == nil || !strings.Contains(err.Error(), "nothing was changed") || !strings.Contains(err.Error(), to+" was edited by hand") ||
-		!strings.Contains(err.Error(), "the edit belongs in the pack's source ("+from+")") {
-		t.Fatalf("applying over a hand edit: %v", err)
-	}
-	if text, _ := os.ReadFile(to); string(text) != "#!/bin/sh\n# edited in the yard\n" || len(kinds(t, st, before)) != 0 {
-		t.Fatalf("the refused import wrote: %q, events %v", text, kinds(t, st, before))
-	}
-
-	res, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Actor: "me", Overwrite: true})
-	if err != nil || res.Changed != 1 || len(res.Kept) != 0 {
-		t.Fatalf("told to overwrite: %+v, %v", res, err)
-	}
-	if text, _ := os.ReadFile(to); string(text) != "#!/bin/sh\n# the pack's, second edition\n" {
-		t.Fatalf("after the overwrite: %q", text)
-	}
-	if got := actions(build(t, st, load(t, dir), o), pack.Change); len(got) != 0 {
-		t.Fatalf("an import after the overwrite would change %v", got)
-	}
-}
-
-// A hand-edited file the pack has dropped is protected from --prune too.
-func TestHandEditedDroppedFileIsRefusedByPrune(t *testing.T) {
-	st, o := yard(t)
-	dir := copyStarter(t)
-	apply(t, st, build(t, st, load(t, dir), o), nil)
-
-	to := filepath.Join(config.At(o.Home).PackRoles("starter"), "builder.md")
-	from := filepath.Join(dir, "roles", "builder.md")
-	if err := os.WriteFile(to, []byte("edited in the yard\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	manifest := filepath.Join(dir, "pack.yaml")
-	data, err := os.ReadFile(manifest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	data = []byte(strings.Replace(string(data), "builders:  { agent: roles/builder.md", "builders:  { agent: roles/reviewer.md", 1))
-	if err := os.WriteFile(manifest, data, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	plan := build(t, st, load(t, dir), o)
-	f := find(t, plan, "file", "roles/builder.md")
-	if f.Action != pack.Dropped || !f.Edited || !strings.Contains(strings.Join(plan.EditedFiles(), " "), "the edit belongs in the pack's source ("+from+")") {
-		t.Fatalf("dropped README.md = %+v; edits %v", f, plan.EditedFiles())
-	}
-	if _, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Actor: "me", Prune: true}); err == nil || !strings.Contains(err.Error(), to+" was edited by hand") {
-		t.Fatalf("pruning the edited file: %v", err)
-	}
-	if text, err := os.ReadFile(to); err != nil || string(text) != "edited in the yard\n" {
-		t.Fatalf("the refused prune changed the copy: %q, %v", text, err)
-	}
-	if _, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Actor: "me", Prune: true, Overwrite: true}); err != nil {
-		t.Fatalf("pruning with overwrite consent: %v", err)
-	}
-	if _, err := os.Stat(to); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("the explicitly pruned copy remains: %v", err)
-	}
-	t.Run("edited dropped flow", testEditedFlowThePackDroppedStopsThePrune)
-}
-
 // Of several flows a depot could follow, the plan asks which; the import
-// remembers the answer, so the next one need not be told, and a flow the
-// depot is moved off is then reported as dropped.
+// remembers the answer, so the next one need not be told.
 func TestFlowChoiceIsAskedAndRemembered(t *testing.T) {
 	st, o := yard(t)
 	dir := copyStarter(t)
@@ -1005,76 +882,17 @@ func TestFlowChoiceIsAskedAndRemembered(t *testing.T) {
 
 	o.Flow = "default"
 	plan = build(t, st, load(t, dir), o)
-	// The short flow goes, and with it the train's typed copies for the
-	// stages default brings plain routes for: the plain covers them now
-	// (yardr-3jst).
-	wantDropped := []string{"flow starter.short", "route depot web stage backlog type train -> backlog", "route depot web stage review type train -> web-reviewers", "route depot web stage review-security type train -> web-security-reviewers", "route depot web stage approved type train -> web-assembly", "route depot web stage decide type train -> decisions"}
+	// Existing pointer is not overwritten, and starter.short is not dropped.
+	if ptr := find(t, plan, "pointer", "depot web -> starter.short"); ptr.Action != pack.Differs {
+		t.Fatalf("pointer = %+v, want differs", ptr)
+	}
+	wantDropped := []string{"route depot web stage backlog type train -> backlog", "route depot web stage review type train -> web-reviewers", "route depot web stage review-security type train -> web-security-reviewers", "route depot web stage approved type train -> web-assembly", "route depot web stage decide type train -> decisions"}
 	if got := actions(plan, pack.Dropped); !slices.Equal(got, wantDropped) {
 		t.Fatalf("dropped = %v", got)
 	}
-	// As the import left it, the dropped flow is nobody's edit, and a prune
-	// goes through; keep_test.go has the one the yard changed.
-	if f := find(t, plan, "flow", "starter.short"); f.Edited || len(plan.EditedFiles()) != 0 {
-		t.Fatalf("the flow the import left = %+v, edits %v", f, plan.EditedFiles())
-	}
-	res, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Answers: pack.Answers(answers), Prune: true, Actor: "me"})
-	if err != nil || !slices.Equal(slices.Sorted(slices.Values(res.Pruned)), slices.Sorted(slices.Values(wantDropped))) {
-		t.Fatalf("res = %+v, %v", res, err)
-	}
-	if _, err := st.GetFlow(ctx, "starter.short"); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("starter.short after the prune: %v", err)
-	}
-}
-
-// Pruning a pack's dropped type-flow pointer must not silently send its
-// open beads to the depot's default flow when that flow lacks their stage.
-func TestPruneHoldsTypePointerThatWouldStrandBeads(t *testing.T) {
-	st, o := yard(t)
-	dir := copyStarter(t)
-	text, err := os.ReadFile(filepath.Join(dir, "pack.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Add a type flow whose stage does not exist in the default flow. The
-	// stage map is for tasks, which would follow that flow: it goes.
-	text = []byte(strings.Replace(string(text), "      task: { new: started, review: review, review-security: review, merged: done }", "      bug: { new: started }", 1))
-	withType := strings.Replace(string(text), "groups:\n", "  task-flow:\n    type: task\n    stages:\n      triage: { group: builders, outcomes: { done: merged } }\n      merged: { end: true }\ngroups:\n", 1)
-	if withType == string(text) {
-		t.Fatal("pack.yaml has no groups section")
-	}
-	if err := os.WriteFile(filepath.Join(dir, "pack.yaml"), []byte(withType), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	apply(t, st, build(t, st, load(t, dir), o), answers)
-	b, err := st.CreateBead(ctx, store.NewBead{Title: "in triage", Depot: "web", Type: "task", Stage: "triage"}, "me")
-	if err != nil {
-		t.Fatal(err)
-	}
-	text = []byte(strings.Replace(string(withType), "  task-flow:\n    type: task\n    stages:\n      triage: { group: builders, outcomes: { done: merged } }\n      merged: { end: true }\n", "", 1))
-	if err := os.WriteFile(filepath.Join(dir, "pack.yaml"), text, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	plan := build(t, st, load(t, dir), o)
-	var dropped pack.Object
-	for _, obj := range plan.Objects {
-		if obj.Kind == "pointer" && obj.Action == pack.Dropped && obj.Pointer != nil && obj.Pointer.Type == "task" {
-			dropped = obj
-			break
-		}
-	}
-	if dropped.Held == "" || !strings.Contains(dropped.Held, b.ID+" (triage)") {
-		t.Fatalf("type pointer = %+v, want held with the stranded bead", dropped)
-	}
-	res, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Answers: pack.Answers(answers), Prune: true, Actor: "me"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !slices.Contains(res.Left, "pointer depot web type task -> starter.task-flow") {
-		t.Fatalf("prune result = %+v", res)
-	}
-	ptrs, err := st.FlowPointers(ctx)
-	if err != nil || !slices.Contains(ptrs, store.FlowPointer{Depot: "web", Type: "task", Flow: "starter.task-flow"}) {
-		t.Fatalf("type flow pointer after prune = %v, %v", ptrs, err)
+	apply(t, st, plan, answers)
+	if _, err := st.GetFlow(ctx, "starter.short"); err != nil {
+		t.Fatalf("starter.short was removed: %v", err)
 	}
 }
 
@@ -1190,16 +1008,18 @@ func TestStageFilesGoWhereTheYardReadsThem(t *testing.T) {
 		t.Fatalf("the yard reads %+v, %v for stage new", sf, err)
 	}
 	if rec := record(t, st); !slices.ContainsFunc(rec.Objects, func(po store.PackObject) bool {
-		return po.Kind == "file" && po.Name == to && po.SHA256 == f.File.SHA256
+		return po.Kind == "file" && po.Name == to && po.SHA256 == ""
 	}) {
 		t.Fatalf("the record lacks %s: %+v", to, rec.Objects)
 	}
+	_ = f
 	plan = build(t, st, load(t, dir), o)
 	if got := len(actions(plan, pack.Unchanged)); got != len(plan.Objects) {
 		t.Fatalf("a second import would create %v, change %v", actions(plan, pack.Create), actions(plan, pack.Change))
 	}
 
-	// A stage file written by hand beside them is the yard's.
+	// A stage file written by hand beside them is left alone, and an edited
+	// stage file reports differs and is never overwritten by apply.
 	own := filepath.Join(o.Home, "flows", "starter.default", "notes.md")
 	if err := os.WriteFile(own, []byte("ours\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -1208,118 +1028,30 @@ func TestStageFilesGoWhereTheYardReadsThem(t *testing.T) {
 		t.Fatal(err)
 	}
 	plan = build(t, st, load(t, dir), o)
-	if got := actions(plan, pack.NotInPack); !slices.Equal(got, []string{"file flows/starter.default/notes.md"}) {
-		t.Fatalf("not in the pack = %v", got)
+	if f := find(t, plan, "file", "flows/default/new.md"); f.Action != pack.Differs {
+		t.Fatalf("new.md after a hand edit = %+v, want differs", f)
 	}
-	// A stage file the yard changed is the yard's: the import leaves it and
-	// says so, --yes (Overwrite) does not take the pack's, and --take does,
-	// by the name the plan prints.
-	if f := find(t, plan, "file", "flows/default/new.md"); f.Action != pack.Kept || f.Edited || len(f.Keeps) != 1 || !strings.Contains(f.Keeps[0], "--take file/flows/default/new.md") || len(plan.EditedFiles()) != 0 {
-		t.Fatalf("new.md after a hand edit = %+v", f)
+	res, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Actor: "me"})
+	if err != nil || res.Wrote() || res.Differs != 1 {
+		t.Fatalf("applying over a differing stage file: %+v, %v", res, err)
 	}
-	for _, o := range []pack.ApplyOptions{{Actor: "me", Prune: true}, {Actor: "me", Prune: true, Overwrite: true}} {
-		res, err := pack.Apply(ctx, st, plan, o)
-		if err != nil || res.Changed != 0 || len(res.Kept) != 1 || !strings.HasPrefix(res.Kept[0], "file flows/default/new.md: ") {
-			t.Fatalf("applying over a hand edit with %+v: %+v, %v", o, res, err)
-		}
-		if text, _ := os.ReadFile(to); string(text) != "edited in the yard\n" {
-			t.Fatalf("applying with %+v took the pack's stage file: %q", o, text)
-		}
-	}
-	// Nothing was written above, so nothing was kept.
-	if got := stageHistory(t, o.Home); got != nil {
-		t.Fatalf("an import that wrote no stage file made the stage history %v", got)
-	}
-	res, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Actor: "me", Prune: true, Take: []string{"file/flows/default/new.md"}})
-	if err != nil || res.Changed != 1 || len(res.Kept) != 0 {
-		t.Fatalf("taking it: %+v, %v", res, err)
-	}
-	if text, _ := os.ReadFile(to); string(text) != string(want) {
-		t.Fatalf("after the take: %q", text)
+	if text, _ := os.ReadFile(to); string(text) != "edited in the yard\n" {
+		t.Fatalf("apply touched the stage file: %q", text)
 	}
 	if text, _ := os.ReadFile(own); string(text) != "ours\n" {
-		t.Fatalf("the import touched a stage file it did not bring: %q", text)
+		t.Fatalf("apply touched a stage file it did not bring: %q", text)
 	}
-	// The yard's text it overwrote is kept, whole, under its digest.
-	const edited = "edited in the yard\n"
-	if got, held := stageHistory(t, o.Home), map[string]string{sumOf(edited): edited}; !reflect.DeepEqual(got, held) {
-		t.Fatalf("the stage history after the take holds %v, want %v", got, held)
+	// --replace refuses stage files.
+	if _, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Actor: "me", Replace: []string{"flows/default/new.md"}}); err == nil || !strings.Contains(err.Error(), "stage files are changed with yardr flow set-stage") {
+		t.Fatalf("replacing a stage file: %v, want refusal", err)
 	}
-
-	// A write of the text that stands, here for its mode, has nothing to keep.
-	if err := os.Chmod(to, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	plan = build(t, st, load(t, dir), o)
-	if f := find(t, plan, "file", "flows/default/new.md"); f.Action != pack.Change || len(f.Changes) != 1 || f.Changes[0].Field != "mode" {
-		t.Fatalf("new.md after a chmod = %+v", f)
-	}
-	if res := apply(t, st, plan, nil); res.Changed != 1 {
-		t.Fatalf("applying over a chmod: %+v", res)
-	}
-	if got := stageHistory(t, o.Home); len(got) != 1 {
-		t.Fatalf("a write of the text that stands made the stage history %v, want nothing new", got)
-	}
-
-	// The pack's own change, taken or not, goes over the text the last import
-	// wrote, and that is kept the same way.
-	const moved = "the pack's, next edition\n"
-	if err := os.WriteFile(filepath.Join(dir, "flows", "default", "new.md"), []byte(moved), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	plan = build(t, st, load(t, dir), o)
-	if f := find(t, plan, "file", "flows/default/new.md"); f.Action != pack.Change {
-		t.Fatalf("new.md after the pack moved = %+v, want a change", f)
-	}
-	apply(t, st, plan, nil)
-	if text, _ := os.ReadFile(to); string(text) != moved {
-		t.Fatalf("after the pack moved: %q", text)
-	}
-	if got, held := stageHistory(t, o.Home), map[string]string{sumOf(edited): edited, sumOf(string(want)): string(want)}; !reflect.DeepEqual(got, held) {
-		t.Fatalf("the stage history after the pack moved holds %v, want %v", got, held)
-	}
-
-	// A link where the stage file stands is refused, and nothing is written:
-	// the link, what it names, the history and the yard's record stay as they
-	// were, though the import is told to take the pack's text.
-	linked := filepath.Join(t.TempDir(), "linked.md")
-	if err := os.WriteFile(linked, []byte("linked\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Remove(to); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(linked, to); err != nil {
-		t.Fatal(err)
-	}
-	plan = build(t, st, load(t, dir), o)
-	if f := find(t, plan, "file", "flows/default/new.md"); f.Action != pack.Kept {
-		t.Fatalf("new.md as a link to another text = %+v, want it kept", f)
-	}
-	before := head(t, st)
-	_, err = pack.Apply(ctx, st, plan, pack.ApplyOptions{Actor: "me", Take: []string{"file/flows/default/new.md"}})
-	if err == nil || !strings.Contains(err.Error(), "keep the text it replaces") || !strings.Contains(err.Error(), "is a symbolic link") {
-		t.Fatalf("taking a stage file that is a link: %v, want it refused", err)
-	}
-	if info, err := os.Lstat(to); err != nil || info.Mode()&os.ModeSymlink == 0 {
-		t.Errorf("the stage file after the refused take is %v, %v, want the link", info, err)
-	}
-	if text, _ := os.ReadFile(linked); string(text) != "linked\n" {
-		t.Errorf("the file the link names holds %q after the refused take", text)
-	}
-	if got := stageHistory(t, o.Home); len(got) != 2 {
-		t.Errorf("the refused take left the stage history %v, want the two it had", got)
-	}
-	if got := kinds(t, st, before); len(got) != 0 {
-		t.Errorf("the refused take wrote %v", got)
-	}
-	t.Run("nested stage name", nestedStageFileIsKept)
+	_ = want
+	t.Run("nested stage name", nestedStageFileDiffers)
 }
 
-// nestedStageFileIsKept is the nested-stage step of
-// TestStageFilesGoWhereTheYardReadsThem: its file is a directory deeper, and
-// the plan's object says which file is a stage's, which the path cannot.
-func nestedStageFileIsKept(t *testing.T) {
+// nestedStageFileDiffers checks that a nested stage file installs under the
+// flow's directory, reports differs once edited, and is refused by --replace.
+func nestedStageFileDiffers(t *testing.T) {
 	t.Helper()
 	const nested = `name: nest
 flows:
@@ -1343,32 +1075,14 @@ groups:
 	}
 	plan := build(t, st, load(t, dir), o)
 	f := find(t, plan, "file", "flows/default/qa/smoke.md")
-	if f.Action != pack.Kept || f.File.Flow != "nest.default" || f.File.Stage != "qa/smoke" || !f.File.StageFile() {
-		t.Fatalf("the nested stage's file = %+v, file %+v, want it kept, the file of qa/smoke in nest.default", f, f.File)
+	if f.Action != pack.Differs || f.File.Flow != "nest.default" || f.File.Stage != "qa/smoke" || !f.File.StageFile() {
+		t.Fatalf("the nested stage's file = %+v, file %+v, want differs", f, f.File)
 	}
-	res, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Actor: "me", Take: []string{"file/flows/default/qa/smoke.md"}})
-	if err != nil || res.Changed != 1 {
-		t.Fatalf("taking it: %+v, %v", res, err)
+	if res := apply(t, st, plan, nil); res.Wrote() || res.Differs != 1 {
+		t.Fatalf("applying over differing nested stage file: %+v", res)
 	}
-	if text, _ := os.ReadFile(to); string(text) != "smoke\n" {
-		t.Fatalf("after the take: %q", text)
-	}
-	if got, held := stageHistory(t, o.Home), map[string]string{sumOf("edited\n"): "edited\n"}; !reflect.DeepEqual(got, held) {
-		t.Fatalf("the stage history after the take holds %v, want %v", got, held)
-	}
-
-	// The yard changes it again and the pack moves: the plan's line says the
-	// take keeps the yard's change in the stage history, as it does of a stage
-	// file by whatever name, which the plan's object says and the path cannot.
-	if err := os.WriteFile(to, []byte("edited again\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "flows", "default", "qa", "smoke.md"), []byte("smoke, moved\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	f = find(t, build(t, st, load(t, dir), o), "file", "flows/default/qa/smoke.md")
-	if f.Action != pack.Kept || len(f.Keeps) != 1 || !strings.Contains(f.Keeps[0], "DIVERGED") || !strings.Contains(f.Keeps[0], "keeps the yard's change in the stage history") || strings.Contains(f.Keeps[0], "drops") {
-		t.Fatalf("the nested stage's file after the yard and the pack changed it = %+v, want it kept, DIVERGED, with its change kept in the stage history", f)
+	if text, _ := os.ReadFile(to); string(text) != "edited\n" {
+		t.Fatalf("apply touched nested stage file: %q", text)
 	}
 }
 
@@ -1422,121 +1136,6 @@ func TestPackGroupWithoutLimitStartsWithTheDefaultOfItsKind(t *testing.T) {
 	}
 }
 
-// A stage that keeps its place in the pack and loses its file has the copy
-// reported, and removed by a prune. The prune removes a file only where an
-// import puts one: a record naming a file elsewhere removes nothing.
-func TestPruneRemovesAStageFileThePackDropped(t *testing.T) {
-	st, o := yard(t)
-	dir := copyStarter(t)
-	apply(t, st, build(t, st, load(t, dir), o), answers)
-	edit(t, dir, "file: flows/default/decide.md,   ", "")
-	to := filepath.Join(o.Home, "flows", "starter.default", "decide.md")
-
-	plan := build(t, st, load(t, dir), o)
-	if got := actions(plan, pack.Dropped); !slices.Equal(got, []string{"file flows/starter.default/decide.md"}) {
-		t.Fatalf("dropped = %v", got)
-	}
-	if res := apply(t, st, plan, nil); len(res.Pruned) != 0 || !slices.Equal(res.Left, []string{"file flows/starter.default/decide.md"}) {
-		t.Fatalf("without --prune: %+v", res)
-	}
-	if _, err := os.Stat(to); err != nil {
-		t.Fatal(err)
-	}
-	plan = build(t, st, load(t, dir), o)
-	res, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Prune: true, Actor: "me"})
-	if err != nil || !slices.Equal(res.Pruned, []string{"file flows/starter.default/decide.md"}) {
-		t.Fatalf("with --prune: %+v, %v", res, err)
-	}
-	if _, err := os.Stat(to); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("decide.md after --prune: %v", err)
-	}
-
-	for path, want := range map[string]bool{
-		filepath.Join(config.At(o.Home).PackRoles("starter"), "builder.md"): true,
-		filepath.Join(o.Home, "flows", "starter.default", "new.md"):         true,
-		// Another pack's flow, a flow made by hand, a role of the home, a
-		// directory below a flow's, and no markdown.
-		filepath.Join(o.Home, "flows", "other.default", "new.md"):        false,
-		filepath.Join(o.Home, "flows", "default", "new.md"):              false,
-		filepath.Join(o.Home, "roles", "builder.md"):                     false,
-		filepath.Join(o.Home, "flows", "starter.default", "x", "new.md"): false,
-		filepath.Join(o.Home, "flows", "starter.default", "new.txt"):     false,
-		filepath.Join(o.Home, "flows", "starter.default.md"):             false,
-	} {
-		if got := plan.Removable(path); got != want {
-			t.Errorf("Removable(%s) = %v, want %v", path, got, want)
-		}
-	}
-}
-
-// A flow the depot is moved off stays while another depot follows it, and its
-// stage files stay with it: that depot's beads are still shown them.
-func TestPruneHoldsTheStageFilesOfAFlowAnotherDepotFollows(t *testing.T) {
-	st, o := yard(t)
-	if err := st.PutDepot(ctx, store.Depot{Name: "api", Base: "main"}, "me"); err != nil {
-		t.Fatal(err)
-	}
-	dir := copyStarter(t)
-	edit(t, dir, "      merged:   { end: true }\n",
-		"      merged:   { end: true }\n  short:\n    stages:\n      new:    { group: builders, file: flows/default/new.md, outcomes: { done: merged } }\n      merged: { end: true }\n")
-	o.Flow = "default"
-	apply(t, st, build(t, st, load(t, dir), o), answers)
-	other := o
-	other.Depot = "api"
-	apply(t, st, build(t, st, load(t, dir), other), answers)
-
-	o.Flow = "short"
-	plan := build(t, st, load(t, dir), o)
-	f := find(t, plan, "file", "flows/starter.default/new.md")
-	if f.Action != pack.Dropped || !strings.Contains(f.Held, "flow starter.default is kept: depot api follows it") {
-		t.Fatalf("new.md of the flow depot api follows = %+v", f)
-	}
-	// The same file of the pack, under the flow the depot follows now.
-	if c := find(t, plan, "file", "flows/default/new.md"); c.Action != pack.Create || c.File.To != filepath.Join(o.Home, "flows", "starter.short", "new.md") {
-		t.Fatalf("new.md of flow short = %+v, %+v", c, c.File)
-	}
-	res, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Prune: true, Actor: "me"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !slices.Contains(res.Left, "file flows/starter.default/new.md") || slices.ContainsFunc(res.Pruned, func(s string) bool { return strings.HasPrefix(s, "file ") }) {
-		t.Fatalf("result = %+v", res)
-	}
-	if sf, err := store.HomeStageFile(o.Home, "starter.default", "new"); err != nil || sf == nil {
-		t.Fatalf("depot api's stage file was pruned from under it: %+v, %v", sf, err)
-	}
-}
-
-// A flow the store refuses to remove (an open bead pins it) keeps its stage
-// files: the prune leaves them with the flow, for that bead.
-func TestPruneLeavesTheStageFilesOfAFlowItCouldNotRemove(t *testing.T) {
-	st, o := yard(t)
-	dir := copyStarter(t)
-	edit(t, dir, "      merged:   { end: true }\n",
-		"      merged:   { end: true }\n  short:\n    stages:\n      new:    { group: builders, file: flows/default/new.md, outcomes: { done: merged } }\n      merged: { end: true }\n")
-	o.Flow = "short"
-	apply(t, st, build(t, st, load(t, dir), o), answers)
-	if _, err := st.CreateBead(ctx, store.NewBead{Title: "pinned", Depot: "web", Stage: "new", Metadata: map[string]any{"flow": "starter.short"}}, "me"); err != nil {
-		t.Fatal(err)
-	}
-
-	o.Flow = "default"
-	res, err := pack.Apply(ctx, st, build(t, st, load(t, dir), o), pack.ApplyOptions{Answers: pack.Answers(answers), Prune: true, Actor: "me"})
-	if err == nil || len(res.PruneErrors) != 1 || !strings.HasPrefix(res.PruneErrors[0], "flow starter.short: ") {
-		t.Fatalf("res = %+v, %v", res, err)
-	}
-	if !slices.Contains(res.Left, "file flows/starter.short/new.md") {
-		t.Fatalf("left = %v, pruned %v", res.Left, res.Pruned)
-	}
-	if sf, err := store.HomeStageFile(o.Home, "starter.short", "new"); err != nil || sf == nil {
-		t.Fatalf("the pinned bead's stage file was pruned: %+v, %v", sf, err)
-	}
-	// The record keeps both, so the next prune tries again.
-	if got := actions(build(t, st, load(t, dir), o), pack.Dropped); !slices.Equal(got, []string{"file flows/starter.short/new.md", "flow starter.short"}) {
-		t.Fatalf("dropped after the prune = %v", got)
-	}
-}
-
 // An import fills the placeholders of the pack's roles and stage files with
 // the yard's names: the operator, and for each crew member of the pack the
 // yard's crew member that takes it. A script is copied as it is. The record
@@ -1582,50 +1181,45 @@ func TestImportFillsThePlaceholders(t *testing.T) {
 	if text, _ := os.ReadFile(filepath.Join(config.At(o.Home).Pack("starter"), "scripts", "merge-local")); !strings.HasSuffix(string(text), "# {{operator}} {{anything}}\n") {
 		t.Error("the script was not copied as it is")
 	}
-	// The record holds what was installed, not the pack's text.
+	// The record holds the file's name and no sha256.
 	for _, po := range record(t, st).Objects {
-		if po.Kind == "file" && po.Name == builder && po.SHA256 != find(t, plan, "file", "roles/builder.md").File.SHA256 {
-			t.Errorf("the record of builder.md has %s, the plan installed %s", po.SHA256, find(t, plan, "file", "roles/builder.md").File.SHA256)
+		if po.Kind == "file" && po.Name == builder && po.SHA256 != "" {
+			t.Errorf("the record of builder.md has sha256 %s, want empty", po.SHA256)
 		}
 	}
 
-	// Again: nothing to write, and nothing marked edited.
+	// Again: nothing to write, and nothing differs.
 	again := build(t, st, load(t, dir), pack.Options{Depot: o.Depot, Home: o.Home, Operator: "Jo"})
-	if got := append(actions(again, pack.Create), actions(again, pack.Change)...); len(got) != 0 || len(again.EditedFiles()) != 0 {
-		t.Fatalf("a second import would write %v, edited %v", got, again.EditedFiles())
+	if got := append(actions(again, pack.Create), actions(again, pack.Change)...); len(got) != 0 || len(actions(again, pack.Differs)) != 0 {
+		t.Fatalf("a second import would write %v, differs %v", got, actions(again, pack.Differs))
 	}
 	if res := apply(t, st, again, nil); res.Wrote() {
 		t.Fatalf("the second import wrote: %+v", res)
 	}
 
-	// Another crew member takes yardmaster: the files that name it change, and
-	// that is no hand edit.
+	// Another crew member takes yardmaster: the files that name it differ.
 	o.Crew = map[string]string{"yardmaster": "chief"}
 	moved := build(t, st, load(t, dir), o)
-	if f := find(t, moved, "file", "roles/builder.md"); f.Action != pack.Change || f.Edited {
-		t.Fatalf("builder.md under another crew member = %+v", f)
+	if f := find(t, moved, "file", "roles/builder.md"); f.Action != pack.Differs {
+		t.Fatalf("builder.md under another crew member = %+v, want differs", f)
 	}
 	if f := find(t, moved, "file", "roles/review-security.md"); f.Action != pack.Unchanged {
 		t.Fatalf("review-security.md names no crew member, yet = %+v", f)
 	}
-	if len(moved.EditedFiles()) != 0 {
-		t.Fatalf("a changed mapping counts as a hand edit: %v", moved.EditedFiles())
-	}
 
-	// A hand edit of the filled copy is the yard's: kept, whatever the
-	// filling, and the pack's is taken by name.
+	// A hand edit of the filled copy differs and is left alone by apply.
 	if err := os.WriteFile(builder, append(got, "edited in the yard\n"...), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	edited := build(t, st, load(t, dir), pack.Options{Depot: o.Depot, Home: o.Home, Operator: "Jo"})
-	if f := find(t, edited, "file", "roles/builder.md"); f.Action != pack.Kept || f.Edited {
-		t.Fatalf("builder.md after a hand edit = %+v", f)
+	if f := find(t, edited, "file", "roles/builder.md"); f.Action != pack.Differs {
+		t.Fatalf("builder.md after a hand edit = %+v, want differs", f)
 	}
-	if res := apply(t, st, edited, nil); res.Wrote() || len(res.Kept) != 1 {
+	if res := apply(t, st, edited, nil); res.Wrote() || res.Differs != 1 {
 		t.Fatalf("applying over a hand edit of a filled copy: %+v", res)
 	}
 	if text, _ := os.ReadFile(builder); !strings.HasSuffix(string(text), "edited in the yard\n") {
-		t.Fatalf("the kept copy was written: %q", text)
+		t.Fatalf("the differing copy was written: %q", text)
 	}
 }
 

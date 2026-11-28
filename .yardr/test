@@ -2114,7 +2114,7 @@ internal/cli/crew.go 1950 the crew, inbox, mail and memory commands
 internal/cli/doctor.go 1243 the doctor examinations and its report
 internal/cli/init.go 1597 yard init, onboarding and settings
 internal/cli/ops.go 1693 the server, daemon, depot, group, route and session commands
-internal/cli/pack.go 1866 pack loading, import planning and its question rounds
+internal/cli/pack.go 1861 pack loading, import planning and its question rounds
 internal/cli/peers.go 1564 the peer identity, intake and ping commands
 internal/cli/routereport.go 1513 the route report and its rendering
 internal/cli/sourcecmd.go 2088 the source command and its builtin checks
@@ -2126,7 +2126,7 @@ internal/pack/export.go 1047 pack export and its object shapes
 internal/pack/pack.go 1776 pack reading, checking and its shapes
 internal/rpc/user.go 1053 the user server and callers (pairing is userpair.go, envelopes usere2e.go)
 internal/standin/standin.go 1508 the fake Linear, GitHub and edge APIs
-internal/store/asks.go 1683 ask and answer parsing and storage
+internal/store/asks.go 1672 ask and answer parsing and storage
 internal/store/beads.go 2557 bead CRUD, queries and dispatch reads
 internal/store/crew.go 1455 crew records and their events
 internal/store/flows.go 1358 flow parsing and storage

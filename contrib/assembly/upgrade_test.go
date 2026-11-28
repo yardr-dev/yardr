@@ -235,8 +235,8 @@ func TestMergeLocalInstallsOnTheNamedDepot(t *testing.T) {
 	if !regexp.MustCompile(`; install ok in \d+ s \(scripts refreshed: merge-local\)`).MatchString(y.notes()) {
 		t.Fatalf("no install summary naming the refreshed script in the landing note:\n%s", y.notes())
 	}
-	if !regexp.MustCompile(`\(stale pack copies: packs/contributors/scripts/merge-local is stale until the pack is re-applied: yardr pack apply contributors --depot r\)`).MatchString(y.notes()) {
-		t.Fatalf("no stale pack copy with its re-apply command in the landing note:\n%s", y.notes())
+	if !regexp.MustCompile(`\(stale pack copies: packs/contributors/scripts/merge-local is stale until replaced: yardr pack apply contributors --depot r --replace scripts/merge-local\)`).MatchString(y.notes()) {
+		t.Fatalf("no stale pack copy with its replace command in the landing note:\n%s", y.notes())
 	}
 	if !regexp.MustCompile(`(?m)^== r-1 took: the tests \d+ s, upgrade \d+ s$`).MatchString(y.log) {
 		t.Fatalf("the log line has no upgrade seconds:\n%s", y.log)

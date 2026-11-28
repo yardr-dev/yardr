@@ -52,7 +52,7 @@ func TestPackCheckPrintsSetupNotes(t *testing.T) {
 	if !strings.Contains(out, setupMark+"\n"+setupNotes) {
 		t.Fatalf("the plan lacks the notes under the marking line:\n%s", out)
 	}
-	if strings.Index(out, setupMark) < strings.LastIndex(out, "not in the pack") {
+	if strings.Index(out, setupMark) < strings.LastIndex(out, "unchanged") {
 		t.Fatalf("the notes come before the plan's end:\n%s", out)
 	}
 }

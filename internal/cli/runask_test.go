@@ -2582,8 +2582,8 @@ func TestBeadAskRunPackApply(t *testing.T) {
 	if _, err := y.as(t, "yardmaster", "ask", b.ID, "Apply it?", "--context", "why", "--run", "pack apply telegram --prune"); err == nil || !strings.Contains(err.Error(), "pack apply with --prune") {
 		t.Fatalf("a refused flag: %v", err)
 	}
-	if _, err := y.as(t, "yardmaster", "ask", b.ID, "Apply it?", "--context", "why", "--run", "pack apply telegram --yes"); err == nil || !strings.Contains(err.Error(), "propose the apply without it") {
-		t.Fatalf("a --yes that overwrites nothing: %v", err)
+	if _, err := y.as(t, "yardmaster", "ask", b.ID, "Apply it?", "--context", "why", "--run", "pack apply telegram --yes"); err == nil || !strings.Contains(err.Error(), "pack apply with --yes") {
+		t.Fatalf("a --yes flag on a card: %v", err)
 	}
 	if err := y.st.PutDepot(context.Background(), store.Depot{Name: "web", Path: t.TempDir()}, "jo"); err != nil {
 		t.Fatal(err)

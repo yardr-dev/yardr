@@ -1092,7 +1092,7 @@ func stalePackNotes(ctx context.Context, st store.API, cfg *config.Config) ([]st
 		}
 		var behind []string
 		for _, o := range plan.Objects {
-			if o.Kind == "file" && (o.Action == pack.Change || o.Action == pack.Create) {
+			if o.Kind == "file" && (o.Action == pack.Differs || o.Action == pack.Create) {
 				behind = append(behind, o.Name)
 			}
 		}

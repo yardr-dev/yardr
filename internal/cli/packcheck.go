@@ -56,9 +56,10 @@ func (a *app) packCheckCmd(naming string) *cobra.Command {
 		Short: "Read a pack and show what importing it into a depot would change",
 		Long: `Reads the pack (pack.yaml, roles/, scripts/), checks it, and prints
 what importing it into the depot would do to this yard, object by object:
-create, change (field: old -> new), unchanged, not in the pack (the yard
-has it, the pack does not, and an import leaves it alone), or no longer in
-the pack (an earlier import brought it, the pack has dropped it since, and
+create, change (field: old -> new), unchanged, differs (the yard has its
+own version and an import leaves it alone; --replace <file> overwrites a
+file under <home>/packs/<pack>/), or no longer in the pack (for a source
+pack, an earlier import brought it, the pack has dropped it since, and
 pack apply --prune removes it). Then what an import would ask, which flow
 would govern the depot, what each source a crew member subscribes to still
 lacks, and which sources the pack asks that a crew member may open threads in

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"io"
 	"io/fs"
@@ -935,9 +934,9 @@ func depotYard(t *testing.T) (*store.Store, string, string, string) {
 		if err != nil {
 			return nil, err
 		}
-		// What a card takes, as readPack holds it.
-		take := store.PackTakeOf(ctx)
-		if err := plan.CheckTake(take); err != nil {
+		// What a card replaces, as readPack holds it.
+		replace := store.PackReplaceOf(ctx)
+		if err := plan.CheckReplace(replace); err != nil {
 			return nil, err
 		}
 		targets, err := packTargetsOf(ctx, yard, plan, pack.Answers{})
@@ -945,7 +944,7 @@ func depotYard(t *testing.T) (*store.Store, string, string, string) {
 			return nil, err
 		}
 		return &store.PackReading{Name: p.Name, Kind: p.Kind, Depot: "yardr", Targets: targets,
-			Label: "embedded in yardr test", Plan: askPlanOf(os.DirFS(dir), plan, pack.Answers{}, nil, nil, take)}, nil
+			Label: "embedded in yardr test", Plan: askPlanOf(os.DirFS(dir), plan, pack.Answers{}, nil, nil, replace)}, nil
 	})
 	return st, home, bead, dir
 }
@@ -987,7 +986,9 @@ func drainMini(t *testing.T, st *store.Store, home, dir string) {
 func TestCarryDepotPack(t *testing.T) {
 	st, home, bead, dir := depotYard(t)
 	writeMiniPack(t, dir, "build v2\n", "review v2\n")
-	seq := askApprove(t, st, bead, packAskOf("mini"))
+	ask := packAskOf("mini")
+	ask.Run.Argv = []string{"pack apply mini --replace roles/builder.md --replace roles/reviewer.md"}
+	seq := askApprove(t, st, bead, ask)
 	// Half applied: the builder's role already stands as v2.
 	builder := filepath.Join(home, "packs", "mini", "roles", "builder.md")
 	if err := os.WriteFile(builder, []byte("build v2\n"), 0o644); err != nil {
@@ -1003,23 +1004,22 @@ func TestCarryDepotPack(t *testing.T) {
 			t.Fatalf("the installed %s = %q, %v", name, data, err)
 		}
 	}
-	if lines := resolvedLines(t, st, bead, seq); !strings.Contains(lines, "approved, ran: yardr pack apply mini") {
+	if lines := resolvedLines(t, st, bead, seq); !strings.Contains(lines, "approved, ran: yardr pack apply mini --replace roles/builder.md --replace roles/reviewer.md") {
 		t.Fatalf("the carried-out card reads:\n%s", lines)
 	}
 
 	t.Run("first install with mappings", carryFirstInstallWithMappings)
 	t.Run("files the pack does not carry", carryStrayFiles)
-	t.Run("a file the pack no longer carries", carryDroppedFile)
-	t.Run("a script edited by hand, overwritten with --yes", carryEditedWithYes)
-	t.Run("a file edited again after approval", carryEditedAgain)
-	t.Run("a second file edited after approval", carryEditedSince)
-	t.Run("a role the yard changed, kept", carryKeptRole)
-	t.Run("a role and a flow the yard changed, taken", carryTaken)
-	t.Run("a take that moved after approval", carryTakenMoved)
+	t.Run("differing role and flow left alone", carryDiffersLeftAlone)
+	t.Run("script and role replaced with --replace", carryReplaced)
+	t.Run("a replace that moved after approval", carryReplacedMoved)
+	t.Run("starter merge-local replaced on a card", carryReplaceStarterMergeLocal)
 
 	st2, home2, bead2, dir2 := depotYard(t)
 	writeMiniPack(t, dir2, "build v2\n", "review v2\n")
-	seq2 := askApprove(t, st2, bead2, packAskOf("mini"))
+	ask2 := packAskOf("mini")
+	ask2.Run.Argv = []string{"pack apply mini --replace roles/builder.md --replace roles/reviewer.md"}
+	seq2 := askApprove(t, st2, bead2, ask2)
 	builder2 := filepath.Join(home2, "packs", "mini", "roles", "builder.md")
 	if err := os.WriteFile(builder2, []byte("build by hand\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -1033,12 +1033,8 @@ func TestCarryDepotPack(t *testing.T) {
 	}
 }
 
-// carryStrayFiles checks the stray-file case of TestCarryDepotPack: an apply
-// whose plan writes only a stage file, with a file the pack does not carry
-// standing in its installed roles directory (a backup left by hand) and in
-// its flow's stage-file directory, is carried out whole. The import leaves
-// such a file alone and the card showed it as left alone, so the carrier has
-// no planned copy to hold it to; it stands as it was.
+// carryStrayFiles checks that an apply carrying a missing stage file back
+// creates it while leaving stray files in the roles and flow directories alone.
 func carryStrayFiles(t *testing.T) {
 	st, home, bead, dir := depotYard(t)
 	stage := filepath.Join(home, "flows", "mini.default", "new.md")
@@ -1054,8 +1050,8 @@ func carryStrayFiles(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Only the stage file differs from what the depot's import installed.
-	if err := os.WriteFile(filepath.Join(dir, "flows", "default", "new.md"), []byte("the new stage, v2\n"), 0o644); err != nil {
+	// Remove the stage file so the apply creates it again.
+	if err := os.Remove(stage); err != nil {
 		t.Fatal(err)
 	}
 	seq := askApprove(t, st, bead, packAskOf("mini"))
@@ -1063,55 +1059,16 @@ func carryStrayFiles(t *testing.T) {
 	if rec := carryState(t, st, bead, seq); rec.State != store.CarryDone {
 		t.Fatalf("the carrying record = %+v", rec)
 	}
-	if lines := resolvedLines(t, st, bead, seq); !strings.Contains(lines, "approved, ran: yardr pack apply mini") || !strings.Contains(lines, "1 changed") {
+	if lines := resolvedLines(t, st, bead, seq); !strings.Contains(lines, "approved, ran: yardr pack apply mini") || !strings.Contains(lines, "1 created") {
 		t.Fatalf("the carried-out card reads:\n%s", lines)
 	}
-	if data, err := os.ReadFile(stage); err != nil || string(data) != "the new stage, v2\n" {
+	if data, err := os.ReadFile(stage); err != nil || string(data) != "the new stage, v1\n" {
 		t.Fatalf("the installed stage file = %q, %v", data, err)
 	}
 	for path, text := range strays {
 		if data, err := os.ReadFile(path); err != nil || string(data) != text {
 			t.Errorf("the stray file %s = %q, %v, want it as it was left", path, data, err)
 		}
-	}
-}
-
-// carryDroppedFile checks the dropped-file case of TestCarryDepotPack: a pack
-// that stops carrying its stage file and changes a role, applied by card over
-// a yard that still has the stage file its last import installed, is carried
-// out whole. The plan holds that copy as dropped, which only a prune removes
-// and a card never prunes, so the import leaves it alone and the carrier has
-// no planned hash to hold it to; it stands as it was, beside the role the
-// import did write.
-func carryDroppedFile(t *testing.T) {
-	st, home, bead, dir := depotYard(t)
-	stage := filepath.Join(home, "flows", "mini.default", "new.md")
-	builder := filepath.Join(home, "packs", "mini", "roles", "builder.md")
-	writeMiniPack(t, dir, "build v2\n", "review v1\n")
-	// The pack's stage no longer names a file, and the file is gone from it.
-	dropped := strings.Replace(miniPack, " file: flows/default/new.md,", "", 1)
-	if dropped == miniPack {
-		t.Fatal("the mini pack's stage names no file to drop")
-	}
-	if err := os.WriteFile(filepath.Join(dir, "pack.yaml"), []byte(dropped), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Remove(filepath.Join(dir, "flows", "default", "new.md")); err != nil {
-		t.Fatal(err)
-	}
-	seq := askApprove(t, st, bead, packAskOf("mini"))
-	drainMini(t, st, home, dir)
-	if rec := carryState(t, st, bead, seq); rec.State != store.CarryDone {
-		t.Fatalf("the carrying record = %+v", rec)
-	}
-	if lines := resolvedLines(t, st, bead, seq); !strings.Contains(lines, "approved, ran: yardr pack apply mini") || !strings.Contains(lines, "1 changed") {
-		t.Fatalf("the carried-out card reads:\n%s", lines)
-	}
-	if data, err := os.ReadFile(builder); err != nil || string(data) != "build v2\n" {
-		t.Fatalf("the installed builder role = %q, %v", data, err)
-	}
-	if data, err := os.ReadFile(stage); err != nil || string(data) != "the new stage, v1\n" {
-		t.Fatalf("the installed stage file = %q, %v, want it as it stood", data, err)
 	}
 }
 
@@ -1124,149 +1081,7 @@ func writeMiniScript(t *testing.T, dir, text string) {
 	}
 }
 
-// carryEditedWithYes checks the --yes case of TestCarryDepotPack: a script
-// the pack changed and a hand edited meanwhile is shown whole on the card,
-// and the carrying out installs the pack's bytes over the hand edit. (A role
-// the yard changed is kept, which --yes does not take: carryKeptRole.)
-func carryEditedWithYes(t *testing.T) {
-	st, home, bead, dir := depotYard(t)
-	writeMiniPack(t, dir, "build v2\n", "review v2\n")
-	writeMiniScript(t, dir, "#!/bin/sh\n# v2\n")
-	land := filepath.Join(home, "packs", "mini", "scripts", "land")
-	if err := os.WriteFile(land, []byte("#!/bin/sh\n# by hand\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	ask := packAskOf("mini")
-	ask.Run.Argv = []string{"pack apply mini --yes"}
-	ctx := context.Background()
-	seq, err := st.AddAsk(ctx, bead, ask, "yardmaster")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if lines := resolvedLines(t, st, bead, seq); !strings.Contains(lines, "approval overwrites the copy edited by hand with the pack's bytes and keeps no other copy of the edit") {
-		t.Fatalf("the --yes card reads:\n%s", lines)
-	}
-	if _, err := st.ApproveAsk(ctx, bead, seq, "mckean", true, nil); err != nil {
-		t.Fatal(err)
-	}
-	drainMini(t, st, home, dir)
-	if rec := carryState(t, st, bead, seq); rec.State != store.CarryDone {
-		t.Fatalf("the carrying record = %+v", rec)
-	}
-	for name, want := range map[string]string{"roles/builder.md": "build v2\n", "roles/reviewer.md": "review v2\n", "scripts/land": "#!/bin/sh\n# v2\n"} {
-		data, err := os.ReadFile(filepath.Join(home, "packs", "mini", filepath.FromSlash(name)))
-		if err != nil || string(data) != want {
-			t.Fatalf("the installed %s = %q, %v", name, data, err)
-		}
-	}
-}
-
-// carryEditedAgain checks the hold of TestCarryDepotPack's --yes case: a
-// copy edited again after the approval is not the card's old hash, so the
-// carrying out fails and the latest hand edit stands.
-func carryEditedAgain(t *testing.T) {
-	st, home, bead, dir := depotYard(t)
-	writeMiniPack(t, dir, "build v2\n", "review v2\n")
-	writeMiniScript(t, dir, "#!/bin/sh\n# v2\n")
-	land := filepath.Join(home, "packs", "mini", "scripts", "land")
-	if err := os.WriteFile(land, []byte("#!/bin/sh\n# by hand\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	ask := packAskOf("mini")
-	ask.Run.Argv = []string{"pack apply mini --yes"}
-	seq := askApprove(t, st, bead, ask)
-	if err := os.WriteFile(land, []byte("#!/bin/sh\n# by hand again\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	drainMini(t, st, home, dir)
-	if rec := carryState(t, st, bead, seq); rec.State != store.CarryFailed || !strings.Contains(rec.Result, "scripts/land") {
-		t.Fatalf("an edited-again record = %+v", rec)
-	}
-	if data, err := os.ReadFile(land); err != nil || string(data) != "#!/bin/sh\n# by hand again\n" {
-		t.Fatalf("the re-edited file was applied over: %q, %v", data, err)
-	}
-}
-
-// carryEditedSince checks the hold of TestCarryDepotPack's --yes case for
-// a second copy edited after the approval: the card showed the role as a
-// change the import writes, and it is the yard's now, so nothing is carried
-// out and both hand edits stand.
-func carryEditedSince(t *testing.T) {
-	st, home, bead, dir := depotYard(t)
-	writeMiniPack(t, dir, "build v2\n", "review v2\n")
-	writeMiniScript(t, dir, "#!/bin/sh\n# v2\n")
-	land := filepath.Join(home, "packs", "mini", "scripts", "land")
-	roles := filepath.Join(home, "packs", "mini", "roles")
-	if err := os.WriteFile(land, []byte("#!/bin/sh\n# by hand\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	ask := packAskOf("mini")
-	ask.Run.Argv = []string{"pack apply mini --yes"}
-	seq := askApprove(t, st, bead, ask)
-	if err := os.WriteFile(filepath.Join(roles, "reviewer.md"), []byte("review by hand\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	drainMini(t, st, home, dir)
-	if rec := carryState(t, st, bead, seq); rec.State != store.CarryFailed || !strings.Contains(rec.Result, "roles/reviewer.md") || !strings.Contains(rec.Result, "keeps or shadows differently than the card") {
-		t.Fatalf("an edited-since record = %+v", rec)
-	}
-	for path, want := range map[string]string{land: "#!/bin/sh\n# by hand\n", filepath.Join(roles, "reviewer.md"): "review by hand\n"} {
-		data, err := os.ReadFile(path)
-		if err != nil || string(data) != want {
-			t.Fatalf("the installed %s = %q, %v, want the hand edit standing", path, data, err)
-		}
-	}
-}
-
-// carryKeptRole checks the kept case of TestCarryDepotPack: a role the pack
-// changed and the yard changed since the last import is kept by a card's
-// approval: the carrying out writes what else the pack changed, leaves the
-// role as the yard has it and says so on the card, and a card with --yes
-// over what is kept alone is refused at the ask, since nothing was edited by
-// hand that it could overwrite.
-func carryKeptRole(t *testing.T) {
-	st, home, bead, dir := depotYard(t)
-	writeMiniPack(t, dir, "build v2\n", "review v2\n")
-	builder := filepath.Join(home, "packs", "mini", "roles", "builder.md")
-	if err := os.WriteFile(builder, []byte("build by hand\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	seq := askApprove(t, st, bead, packAskOf("mini"))
-	drainMini(t, st, home, dir)
-	if rec := carryState(t, st, bead, seq); rec.State != store.CarryDone {
-		t.Fatalf("the carrying record = %+v", rec)
-	}
-	lines := resolvedLines(t, st, bead, seq)
-	if !strings.Contains(lines, "approved, ran: yardr pack apply mini") || !strings.Contains(lines, "1 changed") ||
-		!strings.Contains(lines, "kept: file roles/builder.md: the yard's copy, DIVERGED: changed since the last import, and the pack's has changed too") {
-		t.Fatalf("the carried-out card reads:\n%s", lines)
-	}
-	for name, want := range map[string]string{"builder.md": "build by hand\n", "reviewer.md": "review v2\n"} {
-		data, err := os.ReadFile(filepath.Join(home, "packs", "mini", "roles", name))
-		if err != nil || string(data) != want {
-			t.Fatalf("the installed %s = %q, %v", name, data, err)
-		}
-	}
-	writeMiniPack(t, dir, "build v3\n", "review v2\n")
-	seq = askApprove(t, st, bead, packAskOf("mini"))
-	drainMini(t, st, home, dir)
-	if rec := carryState(t, st, bead, seq); rec.State != store.CarryDone {
-		t.Fatalf("the kept-only carrying record = %+v", rec)
-	}
-	lines = resolvedLines(t, st, bead, seq)
-	if !strings.Contains(lines, "pack mini is applied to depot yardr: nothing written; the yard's own version of 1 object stands (kept: below)") ||
-		!strings.Contains(lines, "kept: file roles/builder.md: the yard's copy, DIVERGED: changed since the last import, and the pack's has changed too") {
-		t.Fatalf("the kept-only carried-out card reads:\n%s", lines)
-	}
-	ask := packAskOf("mini")
-	ask.Run.Argv = []string{"pack apply mini --yes"}
-	if _, err := st.AddAsk(context.Background(), bead, ask, "yardmaster"); err == nil || !strings.Contains(err.Error(), "--yes overwrites a copy edited by hand, and its plan names none") {
-		t.Fatalf("--yes over a kept role = %v", err)
-	}
-}
-
-// yardEditsMiniFlow is the yard changing the flow the mini pack brought:
-// a stage the pack does not have, which the plan then keeps.
+// yardEditsMiniFlow is the yard changing the flow the mini pack brought.
 func yardEditsMiniFlow(t *testing.T, st *store.Store, stage string) {
 	t.Helper()
 	ctx := context.Background()
@@ -1281,50 +1096,74 @@ func yardEditsMiniFlow(t *testing.T, st *store.Store, stage string) {
 	}
 }
 
-// carryTaken checks the take case of TestCarryDepotPack: a role and a flow
-// the yard changed are kept, and a card that takes them shows each whole and
-// sets the pack's version of exactly those, over what the yard had, with
-// nothing kept of it. A flow the pack's version of which would strand an
-// open bead is refused at the ask, naming the bead.
-func carryTaken(t *testing.T) {
+// carryDiffersLeftAlone checks that a differing role and flow stay untouched
+// on a card without --replace, and the card reports them as differs.
+func carryDiffersLeftAlone(t *testing.T) {
 	st, home, bead, dir := depotYard(t)
-	ctx := context.Background()
-	writeMiniPack(t, dir, "build v2\n", "review v2\n")
 	builder := filepath.Join(home, "packs", "mini", "roles", "builder.md")
 	if err := os.WriteFile(builder, []byte("build by hand\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	yardEditsMiniFlow(t, st, "triage")
-	readTakes(t, st, home, dir)
-	stray, err := st.CreateBead(ctx, store.NewBead{Title: "to sort", Depot: "yardr", Stage: "triage"}, "mckean")
-	if err != nil {
+	seq := askApprove(t, st, bead, packAskOf("mini"))
+	drainMini(t, st, home, dir)
+	if rec := carryState(t, st, bead, seq); rec.State != store.CarryDone {
+		t.Fatalf("the carrying record = %+v", rec)
+	}
+	if data, err := os.ReadFile(builder); err != nil || string(data) != "build by hand\n" {
+		t.Fatalf("the installed builder.md = %q, %v", data, err)
+	}
+	if lines := resolvedLines(t, st, bead, seq); !strings.Contains(lines, "2 differ and are left as the yard has them") {
+		t.Fatalf("the carried-out card reads:\n%s", lines)
+	}
+}
+
+// carryReplaced checks --replace on a card: differing script and role are
+// shown whole with both texts and their diff, weigh code, and on approval are
+// overwritten while a differing flow stays untouched; non-replaceable files
+// refuse at the ask.
+func carryReplaced(t *testing.T) {
+	st, home, bead, dir := depotYard(t)
+	ctx := context.Background()
+	writeMiniPack(t, dir, "build v2\n", "review v1\n")
+	writeMiniScript(t, dir, "#!/bin/sh\n# v2\n")
+	builder := filepath.Join(home, "packs", "mini", "roles", "builder.md")
+	land := filepath.Join(home, "packs", "mini", "scripts", "land")
+	if err := os.WriteFile(builder, []byte("build by hand\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(land, []byte("#!/bin/sh\n# by hand\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	yardEditsMiniFlow(t, st, "triage")
+
 	ask := packAskOf("mini")
-	ask.Run.Argv = []string{"pack apply mini --take flow/mini.default --take file/roles/builder.md"}
-	if _, err := st.AddAsk(ctx, bead, ask, "yardmaster"); err == nil || !strings.Contains(err.Error(), "--take flow/mini.default: the pack's flow lacks the stage of open beads") || !strings.Contains(err.Error(), stray.ID+" (triage)") {
-		t.Fatalf("a take that strands %s = %v, want it refused at the ask naming the bead", stray.ID, err)
+	for _, bad := range []struct{ arg, want string }{
+		{"roles/reviewer.md", "does not differ in the plan"},
+		{"roles/nosuch.md", "the plan has no such file"},
+		{"flows/default/new.md", "stage files are changed with yardr flow set-stage"},
+	} {
+		ask.Run.Argv = []string{"pack apply mini --replace " + bad.arg}
+		if _, err := st.AddAsk(ctx, bead, ask, "yardmaster"); err == nil || !strings.Contains(err.Error(), bad.want) {
+			t.Errorf("--replace %s = %v, want %q", bad.arg, err, bad.want)
+		}
 	}
-	// What the plan keeps is not what it is told to take: a name that is no
-	// kept object is refused in the terminal's words.
-	ask.Run.Argv = []string{"pack apply mini --take file/roles/reviewer.md"}
-	if _, err := st.AddAsk(ctx, bead, ask, "yardmaster"); err == nil || !strings.Contains(err.Error(), "--take file/roles/reviewer.md: the plan does not keep it, so there is nothing to take") {
-		t.Fatalf("a take of an object the plan does not keep = %v", err)
-	}
-	ask.Run.Argv = []string{"pack apply mini --take file/roles/nosuch.md"}
-	if _, err := st.AddAsk(ctx, bead, ask, "yardmaster"); err == nil || !strings.Contains(err.Error(), "--take file/roles/nosuch.md: the plan has no such object") {
-		t.Fatalf("a take of an object the plan has not = %v", err)
-	}
-	if _, err := st.CloseBead(ctx, stray.ID, "sorted", store.Expect{}, "mckean"); err != nil {
-		t.Fatal(err)
-	}
-	ask.Run.Argv = []string{"pack apply mini --take flow/mini.default --take file/roles/builder.md"}
+
+	ask.Run.Argv = []string{"pack apply mini --replace scripts/land --replace roles/builder.md"}
 	seq, err := st.AddAsk(ctx, bead, ask, "yardmaster")
 	if err != nil {
 		t.Fatal(err)
 	}
 	card := resolvedLines(t, st, bead, seq)
-	for _, want := range []string{"file roles/builder.md: take, sha256", "-build by hand", "+build v2", "flow mini.default: take (", "approval overwrites the yard's changed copy with the pack's bytes and keeps no other copy of the change", "approval sets the pack's version over the yard's changed one and keeps no other copy of the change"} {
+	for _, want := range []string{
+		"file roles/builder.md: change, sha256",
+		"-build by hand",
+		"+build v2",
+		"file scripts/land: change, sha256",
+		"-# by hand",
+		"+# v2",
+		"approval overwrites the yard's copy with the line's bytes and keeps no other copy of it",
+	} {
 		if !strings.Contains(card, want) {
 			t.Fatalf("the card lacks %q:\n%s", want, card)
 		}
@@ -1336,161 +1175,147 @@ func carryTaken(t *testing.T) {
 	if rec := carryState(t, st, bead, seq); rec.State != store.CarryDone {
 		t.Fatalf("the carrying record = %+v", rec)
 	}
-	for name, want := range map[string]string{"builder.md": "build v2\n", "reviewer.md": "review v2\n"} {
-		data, err := os.ReadFile(filepath.Join(home, "packs", "mini", "roles", name))
-		if err != nil || string(data) != want {
-			t.Fatalf("the installed %s = %q, %v, want the pack's", name, data, err)
-		}
+	if data, err := os.ReadFile(builder); err != nil || string(data) != "build v2\n" {
+		t.Fatalf("builder.md = %q, %v, want build v2", data, err)
 	}
-	if f, err := st.GetFlow(ctx, "mini.default"); err != nil || slices.Contains(f.Stages, "triage") {
-		t.Fatalf("the flow the card took = %+v, %v, want the pack's, with no triage stage", f, err)
+	if data, err := os.ReadFile(land); err != nil || string(data) != "#!/bin/sh\n# v2\n" {
+		t.Fatalf("scripts/land = %q, %v, want v2", data, err)
 	}
-	// Taken, and nothing of it is kept: no line says so, and the next plan
-	// reads every object as the pack has it.
-	lines := resolvedLines(t, st, bead, seq)
-	if !strings.Contains(lines, "approved, ran: yardr pack apply mini --take file/roles/builder.md --take flow/mini.default") || !strings.Contains(lines, "3 changed") || strings.Contains(lines, "kept:") {
-		t.Fatalf("the carried-out card reads:\n%s", lines)
-	}
-	reading, err := st.ReadPack(ctx, "mini", "yardr", store.Mappings{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, o := range reading.Plan.Objects {
-		if o.Action != "unchanged" && o.Action != "not_in_pack" {
-			t.Errorf("after the take %s %s reads %s", o.Kind, o.Name, o.Action)
-		}
+	if f, err := st.GetFlow(ctx, "mini.default"); err != nil || !slices.Contains(f.Stages, "triage") {
+		t.Fatalf("differing flow was overwritten: %+v (%v)", f, err)
 	}
 }
 
-// readTakes is the server's own reading (readPack, through a directory's) of
-// what carryTaken's yard has changed: with no take it carries nothing whole of
-// what it keeps, with one each object the take names is carried whole and
-// still kept, the pack's flow is the target of the kept flow whether or not it
-// is taken, and a name the plan cannot carry out is refused in the terminal's
-// words, before anything is shown.
-func readTakes(t *testing.T, st *store.Store, home, dir string) {
-	t.Helper()
-	ctx := context.Background()
-	object := func(r *store.PackReading, kind, name string) store.AskPlanObject {
-		t.Helper()
-		i := slices.IndexFunc(r.Plan.Objects, func(o store.AskPlanObject) bool { return o.Kind == kind && o.Name == name })
-		if i < 0 {
-			t.Fatalf("the reading has no %s %s", kind, name)
-		}
-		return r.Plan.Objects[i]
-	}
-	plain, err := readDirectoryPack(ctx, dir, "yardr", store.Mappings{}, st, home)
-	if err != nil {
+// carryReplacedMoved checks that if a replaced file changes again on disk
+// between approval and carry-out, carry-out fails without overwriting it.
+func carryReplacedMoved(t *testing.T) {
+	st, home, bead, dir := depotYard(t)
+	writeMiniPack(t, dir, "build v2\n", "review v1\n")
+	builder := filepath.Join(home, "packs", "mini", "roles", "builder.md")
+	if err := os.WriteFile(builder, []byte("build by hand\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if o := object(plain, "file", "roles/builder.md"); o.Action != "kept" || o.FileNewSHA != "" || o.Text != "" {
-		t.Fatalf("the role the yard changed, with no take = %+v, want kept and nothing whole", o)
-	}
-	if o := object(plain, "flow", "mini.default"); o.Action != "kept" || o.FlowOldSHA != "" {
-		t.Fatalf("the flow the yard changed, with no take = %+v, want kept and no old digest", o)
-	}
-	var pack store.Flow
-	if err := json.Unmarshal([]byte(plain.Targets["flow\x00mini.default"]), &pack); err != nil || pack.Name != "mini.default" || slices.Contains(pack.Stages, "triage") {
-		t.Fatalf("the target of the kept flow = %q (%v), want the pack's flow", plain.Targets["flow\x00mini.default"], err)
-	}
-	taken, err := readDirectoryPack(store.WithPackTake(ctx, []string{"file/roles/builder.md", "flow/mini.default"}), dir, "yardr", store.Mappings{}, st, home)
-	if err != nil {
-		t.Fatal(err)
-	}
-	yard, err := st.GetFlow(ctx, "mini.default")
-	if err != nil {
-		t.Fatal(err)
-	}
-	digest, err := yard.Digest()
-	if err != nil {
-		t.Fatal(err)
-	}
-	role := object(taken, "file", "roles/builder.md")
-	sum := sha256.Sum256([]byte("build by hand\n"))
-	if role.Action != "kept" || role.Text != "build v2\n" || role.FileOldSHA != hex.EncodeToString(sum[:]) || role.FileNewSHA == "" || !strings.Contains(role.Diff, "-build by hand") {
-		t.Fatalf("the role a take names = %+v, want it kept and whole as the change it makes", role)
-	}
-	if o := object(taken, "flow", "mini.default"); o.Action != "kept" || o.FlowOldSHA != digest {
-		t.Fatalf("the flow a take names = %+v, want it kept with the digest %s of the yard's flow", o, digest)
-	}
-	if o := object(taken, "file", "roles/reviewer.md"); o.FileNewSHA != "" && o.Action != "change" {
-		t.Fatalf("a file no take names = %+v", o)
-	}
-	for _, c := range []struct{ take, want string }{
-		{"file/roles/reviewer.md", "--take file/roles/reviewer.md: the plan does not keep it, so there is nothing to take"},
-		{"flow/mini.nothing", "--take flow/mini.nothing: the plan has no such object"},
-		{"source/linear", "--take source/linear: a declared source stays as the pack declares it"},
-		{"flow", "--take flow: name an object as the plan prints it"},
-	} {
-		if _, err := readDirectoryPack(store.WithPackTake(ctx, []string{c.take}), dir, "yardr", store.Mappings{}, st, home); err == nil || !strings.Contains(err.Error(), c.want) || !strings.HasPrefix(err.Error(), "nothing was changed:") {
-			t.Errorf("reading a take of %s = %v, want %q", c.take, err, c.want)
-		}
-	}
-}
-
-// carryTakenMoved checks the hold of a take, after the approval: what the
-// card showed whole is what approval overwrites. A role or a flow the yard
-// changed again after it stands, with nothing else written, and so does an
-// object the yard put back as the pack has it meanwhile, which no longer
-// reads kept: the card's take is stale, and nothing is written either.
-func carryTakenMoved(t *testing.T) {
 	ask := packAskOf("mini")
-	ask.Run.Argv = []string{"pack apply mini --take flow/mini.default --take file/roles/builder.md"}
-	setup := func(t *testing.T) (*store.Store, string, string, string, uint64) {
-		st, home, bead, dir := depotYard(t)
-		writeMiniPack(t, dir, "build v2\n", "review v2\n")
-		if err := os.WriteFile(filepath.Join(home, "packs", "mini", "roles", "builder.md"), []byte("build by hand\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		yardEditsMiniFlow(t, st, "triage")
-		return st, home, bead, dir, askApprove(t, st, bead, ask)
+	ask.Run.Argv = []string{"pack apply mini --replace roles/builder.md"}
+	seq := askApprove(t, st, bead, ask)
+	if err := os.WriteFile(builder, []byte("build by hand again\n"), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	// Nothing of the import is written where the hold refuses: the other
-	// role, which the pack changed, stands as it was.
-	unwritten := func(t *testing.T, home string) {
-		t.Helper()
-		if data, err := os.ReadFile(filepath.Join(home, "packs", "mini", "roles", "reviewer.md")); err != nil || string(data) != "review v1\n" {
-			t.Errorf("the pack's other change was written: %q, %v", data, err)
+	drainMini(t, st, home, dir)
+	if rec := carryState(t, st, bead, seq); rec.State != store.CarryFailed || !strings.Contains(rec.Result, "roles/builder.md") {
+		t.Fatalf("the record = %+v, want failure naming roles/builder.md", rec)
+	}
+	if data, err := os.ReadFile(builder); err != nil || string(data) != "build by hand again\n" {
+		t.Fatalf("the latest edit was overwritten: %q, %v", data, err)
+	}
+}
+
+// carryReplaceStarterMergeLocal verifies end-to-end replacing scripts/merge-local
+// of the real embedded starter pack on a card: shows both full texts and their diff,
+// weighs code, wire plan carries Action "change" for the replaced script and
+// "differs" with changes for an edited stage file, and approval writes the
+// original script and records the apply.
+func carryReplaceStarterMergeLocal(t *testing.T) {
+	ctx := context.Background()
+	st, home, bead := carryYard(t)
+	if err := st.PutDepot(ctx, store.Depot{Name: "web", Path: t.TempDir()}, "mckean"); err != nil {
+		t.Fatal(err)
+	}
+	mappings := store.Mappings{
+		Binds:   []string{"builders=claude:opus", "reviewers=claude:opus"},
+		Members: []string{"backlog=mckean", "decisions=mckean"},
+	}
+	// First install starter via real embedded pack.
+	first, err := st.ReadPack(ctx, "starter", "web", mappings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := testCarrier(st, home, "boot-one")
+	run0 := &store.AskRun{
+		Argv:    []string{"pack", "apply", "starter", "--depot", "web"},
+		Pack:    &store.AskPack{Name: first.Name, Kind: first.Kind, Depot: first.Depot, Mappings: mappings, Label: first.Label, Plan: first.Plan, Digest: first.Digest},
+		Carried: first.Sources,
+		Seen:    map[string]string{"pack starter build": first.Build},
+	}
+	if _, _, failure := c.carryPackApply(ctx, &store.Carry{Bead: bead, Ask: 1, Actor: "mckean"}, run0); failure != "" {
+		t.Fatalf("first install of starter failed: %s", failure)
+	}
+	scriptPath := filepath.Join(home, "packs", "starter", "scripts", "merge-local")
+	origScript, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	editedScript := append(slices.Clone(origScript), []byte("\n# edited in yard\n")...)
+	if err := os.WriteFile(scriptPath, editedScript, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stagePath := filepath.Join(home, "flows", "starter.default", "new.md")
+	if err := os.WriteFile(stagePath, []byte("yard stage edit\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ask := packAskOf("starter")
+	ask.Run.Argv = []string{"pack apply starter --depot web --replace scripts/merge-local"}
+	seq, err := st.AddAsk(ctx, bead, ask, "yardmaster")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bv, err := st.Bead(ctx, bead, "mckean")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ba store.BeadAsk
+	for _, a := range bv.Asks {
+		if a.Ask == seq {
+			ba = a
 		}
 	}
-	t.Run("the role changed again", func(t *testing.T) {
-		st, home, bead, dir, seq := setup(t)
-		builder := filepath.Join(home, "packs", "mini", "roles", "builder.md")
-		if err := os.WriteFile(builder, []byte("build by hand again\n"), 0o644); err != nil {
+	if ba.Run == nil || ba.Run.Pack == nil || ba.Run.Pack.Summary {
+		t.Fatalf("card pack = %+v, want whole (non-summary) card", ba.Run)
+	}
+	if !slices.ContainsFunc(ba.Weight, func(w store.AskWeight) bool { return w.Class == store.WeightCode }) {
+		t.Fatalf("card weight = %+v, want code", ba.Weight)
+	}
+	var gotScript, gotStage store.AskPlanObject
+	for _, o := range ba.Run.Pack.Plan.Objects {
+		if o.Kind == "file" && o.Name == "scripts/merge-local" {
+			gotScript = o
+		}
+		if o.Kind == "file" && o.Name == "flows/default/new.md" {
+			gotStage = o
+		}
+	}
+	if gotScript.Action != "change" || gotScript.OldText == nil || *gotScript.OldText != string(editedScript) || gotScript.Text != string(origScript) || !strings.Contains(gotScript.Diff, "-# edited in yard") {
+		t.Fatalf("wire script object: action=%q hasOld=%v len(text)=%d len(diff)=%d, want change with both full texts and diff", gotScript.Action, gotScript.OldText != nil, len(gotScript.Text), len(gotScript.Diff))
+	}
+	if gotStage.Action != "differs" || len(gotStage.Changes) == 0 {
+		t.Fatalf("wire stage object = %+v, want differs with changes", gotStage)
+	}
+
+	if _, err := st.ApproveAsk(ctx, bead, seq, "mckean", true, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.ResumeCarry(ctx, "boot-one"); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		did, err := c.carryNext(ctx)
+		if err != nil {
 			t.Fatal(err)
 		}
-		drainMini(t, st, home, dir)
-		if rec := carryState(t, st, bead, seq); rec.State != store.CarryFailed || !strings.Contains(rec.Result, "roles/builder.md") || !strings.Contains(rec.Result, "neither the card's old") {
-			t.Fatalf("the record = %+v", rec)
+		if !did {
+			break
 		}
-		if data, err := os.ReadFile(builder); err != nil || string(data) != "build by hand again\n" {
-			t.Fatalf("the latest edit was overwritten: %q, %v", data, err)
-		}
-		unwritten(t, home)
-	})
-	t.Run("the flow changed again", func(t *testing.T) {
-		st, home, bead, dir, seq := setup(t)
-		yardEditsMiniFlow(t, st, "triage2")
-		drainMini(t, st, home, dir)
-		if rec := carryState(t, st, bead, seq); rec.State != store.CarryFailed || !strings.Contains(rec.Result, "the flow mini.default stands at digest") {
-			t.Fatalf("the record = %+v", rec)
-		}
-		if f, err := st.GetFlow(context.Background(), "mini.default"); err != nil || !slices.Contains(f.Stages, "triage2") {
-			t.Fatalf("the latest change of the flow was overwritten: %+v, %v", f, err)
-		}
-		unwritten(t, home)
-	})
-	t.Run("the role put back as the pack has it", func(t *testing.T) {
-		st, home, bead, dir, seq := setup(t)
-		if err := os.WriteFile(filepath.Join(home, "packs", "mini", "roles", "builder.md"), []byte("build v2\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		drainMini(t, st, home, dir)
-		if rec := carryState(t, st, bead, seq); rec.State != store.CarryFailed || !strings.Contains(rec.Result, "roles/builder.md keeps or shadows differently than the card") || !strings.Contains(rec.Result, "nothing further was applied") {
-			t.Fatalf("the record = %+v", rec)
-		}
-		unwritten(t, home)
-	})
+	}
+	if rec := carryState(t, st, bead, seq); rec.State != store.CarryDone {
+		t.Fatalf("carry state = %+v, want done", rec)
+	}
+	if got, err := os.ReadFile(scriptPath); err != nil || string(got) != string(origScript) {
+		t.Fatalf("scripts/merge-local not restored to original (%v, len %d vs %d)", err, len(got), len(origScript))
+	}
+	if got, err := os.ReadFile(stagePath); err != nil || string(got) != "yard stage edit\n" {
+		t.Fatalf("edited stage file was touched: %q (%v)", got, err)
+	}
 }
 
 // carryFirstInstallWithMappings checks the first-install case of
@@ -1654,10 +1479,10 @@ func TestDepotPlanHolding(t *testing.T) {
 		{Kind: "group", Name: "builders", Action: "unchanged"},
 		{Kind: "file", Name: "roles/gone.md", Action: "dropped"},
 	}}
-	if err := holdDepotObjects(carded, finishing, nil); err != nil {
+	if err := holdDepotObjects(carded, finishing); err != nil {
 		t.Fatalf("a half-applied plan held: %v", err)
 	}
-	if err := verifyDepotObjects(carded, finishing, nil); err != nil {
+	if err := verifyDepotObjects(carded, finishing); err != nil {
 		t.Fatalf("a finished plan verified: %v", err)
 	}
 	moved := &store.AskPlan{Objects: []store.AskPlanObject{
@@ -1665,7 +1490,7 @@ func TestDepotPlanHolding(t *testing.T) {
 		{Kind: "group", Name: "builders", Action: "unchanged"},
 		{Kind: "file", Name: "roles/gone.md", Action: "dropped"},
 	}}
-	if err := holdDepotObjects(carded, moved, nil); err == nil || !strings.Contains(err.Error(), "roles/a.md") {
+	if err := holdDepotObjects(carded, moved); err == nil || !strings.Contains(err.Error(), "roles/a.md") {
 		t.Fatalf("a moved file held: %v", err)
 	}
 	changed := &store.AskPlan{Objects: []store.AskPlanObject{
@@ -1673,7 +1498,7 @@ func TestDepotPlanHolding(t *testing.T) {
 		{Kind: "group", Name: "builders", Action: "change"},
 		{Kind: "file", Name: "roles/gone.md", Action: "dropped"},
 	}}
-	if err := holdDepotObjects(carded, changed, nil); err == nil || !strings.Contains(err.Error(), "builders") {
+	if err := holdDepotObjects(carded, changed); err == nil || !strings.Contains(err.Error(), "builders") {
 		t.Fatalf("a moved object held: %v", err)
 	}
 	extra := &store.AskPlan{Objects: []store.AskPlanObject{
@@ -1682,7 +1507,7 @@ func TestDepotPlanHolding(t *testing.T) {
 		{Kind: "file", Name: "roles/gone.md", Action: "dropped"},
 		{Kind: "group", Name: "reviewers", Action: "create"},
 	}}
-	if err := holdDepotObjects(carded, extra, nil); err == nil || !strings.Contains(err.Error(), "reviewers") {
+	if err := holdDepotObjects(carded, extra); err == nil || !strings.Contains(err.Error(), "reviewers") {
 		t.Fatalf("an object not on the card held: %v", err)
 	}
 	extraAfter := &store.AskPlan{Objects: []store.AskPlanObject{
@@ -1691,11 +1516,11 @@ func TestDepotPlanHolding(t *testing.T) {
 		{Kind: "file", Name: "roles/gone.md", Action: "dropped"},
 		{Kind: "group", Name: "reviewers", Action: "unchanged"},
 	}}
-	if err := verifyDepotObjects(carded, extraAfter, nil); err == nil || !strings.Contains(err.Error(), "reviewers") {
+	if err := verifyDepotObjects(carded, extraAfter); err == nil || !strings.Contains(err.Error(), "reviewers") {
 		t.Fatalf("an object not on the card verified: %v", err)
 	}
 	newAsk := &store.AskPlan{Objects: carded.Objects, Asks: []string{"let builders open threads in linear"}}
-	if err := holdDepotObjects(carded, newAsk, nil); err == nil || !strings.Contains(err.Error(), "linear") {
+	if err := holdDepotObjects(carded, newAsk); err == nil || !strings.Contains(err.Error(), "linear") {
 		t.Fatalf("a new plan ask held: %v", err)
 	}
 	shadowed := &store.AskPlan{Objects: []store.AskPlanObject{
@@ -1703,101 +1528,32 @@ func TestDepotPlanHolding(t *testing.T) {
 		{Kind: "group", Name: "builders", Action: "unchanged", Shadows: []string{".yardr/roles/builders.md"}},
 		carded.Objects[2],
 	}}
-	if err := holdDepotObjects(carded, shadowed, nil); err == nil || !strings.Contains(err.Error(), "builders") {
+	if err := holdDepotObjects(carded, shadowed); err == nil || !strings.Contains(err.Error(), "builders") {
 		t.Fatalf("a changed shadowing held: %v", err)
 	}
 
-	// A group the import creates has the pack's env before its script,
-	// which the card showed: a plan that rebuilds with another is not the
-	// card's, and one that reads unchanged (the group made meanwhile) is
-	// finishing.
 	cardedEnv := &store.AskPlan{Objects: []store.AskPlanObject{{Kind: "group", Name: "assembly", Action: "create", Env: []string{"YARDR_LAND=squash"}}}}
 	sameEnv := &store.AskPlan{Objects: []store.AskPlanObject{{Kind: "group", Name: "assembly", Action: "create", Env: []string{"YARDR_LAND=squash"}}}}
-	if err := holdDepotObjects(cardedEnv, sameEnv, nil); err != nil {
+	if err := holdDepotObjects(cardedEnv, sameEnv); err != nil {
 		t.Fatalf("a plan with the card's env held: %v", err)
 	}
 	movedEnv := &store.AskPlan{Objects: []store.AskPlanObject{{Kind: "group", Name: "assembly", Action: "create", Env: []string{"YARDR_LAND=rebase"}}}}
-	if err := holdDepotObjects(cardedEnv, movedEnv, nil); err == nil || !strings.Contains(err.Error(), "assembly") {
+	if err := holdDepotObjects(cardedEnv, movedEnv); err == nil || !strings.Contains(err.Error(), "assembly") {
 		t.Fatalf("a moved env held: %v", err)
 	}
 	madeMeanwhile := &store.AskPlan{Objects: []store.AskPlanObject{{Kind: "group", Name: "assembly", Action: "unchanged"}}}
-	if err := holdDepotObjects(cardedEnv, madeMeanwhile, nil); err != nil {
+	if err := holdDepotObjects(cardedEnv, madeMeanwhile); err != nil {
 		t.Fatalf("a group made meanwhile held: %v", err)
 	}
 
-	// Edited files are held to the card's set: the same set holds, one
-	// edited since or one standing unedited now carries out nothing, and
-	// a card asked without --yes holds any edited file as before.
-	edited := &store.AskPlan{Edited: []string{"roles/a.md was edited by hand"}, Objects: carded.Objects}
-	if err := holdDepotObjects(edited, &store.AskPlan{Edited: []string{"roles/a.md was edited by hand"}, Objects: carded.Objects}, nil); err != nil {
-		t.Fatalf("the card's edited set held: %v", err)
+	// Differing objects left alone on the card stay differs after apply.
+	diffPlan := &store.AskPlan{Objects: []store.AskPlanObject{
+		{Kind: "flow", Name: "starter.default", Action: "differs", Changes: []store.AskChange{{Field: "stages", Old: "a", New: "b"}}},
+	}}
+	if err := holdDepotObjects(diffPlan, diffPlan); err != nil {
+		t.Fatalf("differing plan held: %v", err)
 	}
-	since := &store.AskPlan{Objects: carded.Objects, Edited: []string{"roles/a.md was edited by hand", "roles/b.md was edited by hand"}}
-	if err := holdDepotObjects(edited, since, nil); err == nil || !strings.Contains(err.Error(), "roles/b.md") {
-		t.Fatalf("a file edited since held: %v", err)
-	}
-	if err := holdDepotObjects(carded, since, nil); err == nil || !strings.Contains(err.Error(), "roles/a.md") {
-		t.Fatalf("an edited file without --yes held: %v", err)
-	}
-	unedited := &store.AskPlan{Objects: carded.Objects}
-	if err := holdDepotObjects(edited, unedited, nil); err == nil || !strings.Contains(err.Error(), "unedited") {
-		t.Fatalf("an edit standing unedited now held: %v", err)
-	}
-
-	// A kept object the card takes is held as the change it makes: a file
-	// by the hash of the copy the card showed and the pack's text, a flow by
-	// the digest of the flow it overwrites, which its Changes cannot hold
-	// whole. What is kept and not taken stays held as kept.
-	take := []string{"file/roles/b.md", "flow/starter.default"}
-	keptPlan := func(file, flow string, flowKept bool) *store.AskPlan {
-		flowAction := "kept"
-		if !flowKept {
-			flowAction = "unchanged"
-		}
-		return &store.AskPlan{Objects: []store.AskPlanObject{
-			{Kind: "file", Name: "roles/b.md", Action: "kept", Keeps: []string{"the yard's copy"}, FileOldSHA: file, FileNewSHA: "new", Text: "pack\n"},
-			{Kind: "flow", Name: "starter.default", Action: flowAction, Keeps: []string{"the yard's flow"}, FlowOldSHA: flow},
-			{Kind: "flow", Name: "starter.train", Action: "kept", Keeps: []string{"the yard's flow"}},
-		}}
-	}
-	cardedTaken := keptPlan("old", "flowold", true)
-	if err := holdDepotObjects(cardedTaken, keptPlan("old", "flowold", true), take); err != nil {
-		t.Fatalf("a taken plan that stands held: %v", err)
-	}
-	if err := holdDepotObjects(cardedTaken, keptPlan("third", "flowold", true), take); err == nil || !strings.Contains(err.Error(), "roles/b.md") || !strings.Contains(err.Error(), "neither the card's old old") {
-		t.Fatalf("a taken file moved since held: %v", err)
-	}
-	if err := holdDepotObjects(cardedTaken, keptPlan("old", "flownew", true), take); err == nil || !strings.Contains(err.Error(), "flow starter.default") || !strings.Contains(err.Error(), "flownew") {
-		t.Fatalf("a taken flow moved since held: %v", err)
-	}
-	movedText := keptPlan("old", "flowold", true)
-	movedText.Objects[0].Text, movedText.Objects[0].FileNewSHA = "pack, moved\n", "newer"
-	if err := holdDepotObjects(cardedTaken, movedText, take); err == nil || !strings.Contains(err.Error(), "roles/b.md") {
-		t.Fatalf("the pack's text moved under a take held: %v", err)
-	}
-	// What no longer reads kept is Apply's to refuse, before it writes: the
-	// hold lets a carded change that now reads unchanged through, as it
-	// does any.
-	if err := holdDepotObjects(cardedTaken, keptPlan("old", "", false), take); err != nil {
-		t.Fatalf("a taken flow that reads unchanged now held: %v", err)
-	}
-	// Without the take it is a kept object like any, held by its action and
-	// its words, and the pins of the card say nothing.
-	if err := holdDepotObjects(cardedTaken, keptPlan("third", "flownew", true), nil); err != nil {
-		t.Fatalf("kept objects with no take held on their pins: %v", err)
-	}
-	// After the import a taken object is the pack's: it reads unchanged, and
-	// reading kept still says the take was not carried out. A kept object
-	// left alone reads kept as it did.
-	if err := verifyDepotObjects(cardedTaken, keptPlan("old", "", false), take); err == nil || !strings.Contains(err.Error(), "was taken on the card and reads kept after the import") {
-		t.Fatalf("a taken file still kept verified: %v", err)
-	}
-	written := keptPlan("new", "", false)
-	written.Objects[0].Action = "unchanged"
-	if err := verifyDepotObjects(cardedTaken, written, take); err != nil {
-		t.Fatalf("taken objects that read unchanged verified: %v", err)
-	}
-	if err := verifyDepotObjects(cardedTaken, keptPlan("old", "", true), nil); err != nil {
-		t.Fatalf("kept objects left as the yard has them verified: %v", err)
+	if err := verifyDepotObjects(diffPlan, diffPlan); err != nil {
+		t.Fatalf("differing plan verified: %v", err)
 	}
 }

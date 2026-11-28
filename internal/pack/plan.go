@@ -22,9 +22,9 @@ const (
 	Create    = "create"
 	Change    = "change"
 	Unchanged = "unchanged"
-	// NotInPack is an object of the yard the pack does not carry: an
-	// import leaves it alone.
-	NotInPack = "not_in_pack"
+	// Differs is an object of a line that the yard already has and that reads
+	// otherwise than the line says: an import writes nothing for it.
+	Differs = "differs"
 	// Dropped is an object that came from this pack in an earlier import
 	// and is no longer in it: an import reports it, and removes it only
 	// when told to prune.
@@ -33,12 +33,6 @@ const (
 	// (Options.Groups): the pack's routes lead to it, and an import changes
 	// nothing of it and does not record it as the pack's.
 	Takes = "takes"
-	// Kept is an object of the pack that the yard changed since the last
-	// import, or that no record can vouch for: an import leaves it as the
-	// yard has it, recorded under the pack's version so that the next plan
-	// tells what moved since, and sets the pack's only where it is told to
-	// take it by name (ApplyOptions.Take). Its Keeps say which and why.
-	Kept = "kept"
 )
 
 // Options say where a pack would be imported.
@@ -116,6 +110,10 @@ type Plan struct {
 	// the changed frame at once, and the plan names the reach before
 	// anything is written.
 	FrameShared []string `json:"frame_shared,omitempty"`
+	// frameActive says this import's record is the scope's active frame:
+	// true only where the scope has no active frame yet or this pack is
+	// already the scope's choice.
+	frameActive bool
 	// Kind is the kind of depot the pack says it is for, "" when it says
 	// none.
 	Kind  string `json:"kind,omitempty"`
@@ -226,20 +224,10 @@ type Object struct {
 	// (YARDR_LAND=squash). A group the yard has gets none: Keeps says what
 	// of the pack's env it does not carry.
 	Env []string `json:"env,omitempty"`
-	// Edited says an installed file was changed by hand since the last
-	// import and this one would overwrite it, or a flow it would remove: it
-	// stops the import (EditedFiles) until told it may. A role or a stage
-	// file the yard changed is Kept, not Edited, and so is a flow.
-	Edited bool `json:"edited,omitempty"`
 	// Of a dropped object: Owned is the earlier import's record of it, and
 	// Held, when set, why not even a prune removes it.
 	Owned *store.PackObject `json:"owned,omitempty"`
 	Held  string            `json:"held,omitempty"`
-	// Have is, of a kept flow, the digest the store keeps a flow by
-	// (store.Flow.Digest) of the yard's version, which an import that takes
-	// it overwrites: what a card pins a take of it to, since Changes name only
-	// the stages that differ. It is no part of the plan's JSON.
-	Have string `json:"-"`
 
 	File         *FileOp            `json:"file,omitempty"`
 	Group        *store.Group       `json:"group,omitempty"`
@@ -964,12 +952,24 @@ func (b *planner) chosen() ([]Flow, error) {
 		// The flow the depot was given by the last import, unless told anew.
 		own[0], own[i] = own[i], own[0]
 	} else if len(own) > 1 {
-		names := make([]string, len(own))
-		for i, f := range own {
-			names[i] = f.Name
+		// Where the depot already follows a flow, its pointer stays, so the
+		// question which of the line's flows the depot follows is not asked.
+		pointers, err := b.st.FlowPointers(b.ctx)
+		if err != nil {
+			return nil, err
 		}
-		b.plan.Questions = append(b.plan.Questions, Question{ID: FlowQuestion, Object: "pack " + b.p.Name, Field: "flow",
-			Ask: fmt.Sprintf("which of the pack's flows does depot %s follow (--flow <name>)? It has: %s.", b.o.Depot, strings.Join(names, ", ")), Default: own[0].Name})
+		if j := slices.IndexFunc(pointers, func(p store.FlowPointer) bool { return p.Depot == b.o.Depot && p.Type == "" }); j >= 0 {
+			if k := slices.IndexFunc(own, func(f Flow) bool { return FlowName(b.p.Name, f.Name) == pointers[j].Flow }); k >= 0 {
+				own[0], own[k] = own[k], own[0]
+			}
+		} else {
+			names := make([]string, len(own))
+			for i, f := range own {
+				names[i] = f.Name
+			}
+			b.plan.Questions = append(b.plan.Questions, Question{ID: FlowQuestion, Object: "pack " + b.p.Name, Field: "flow",
+				Ask: fmt.Sprintf("which of the pack's flows does depot %s follow (--flow <name>)? It has: %s.", b.o.Depot, strings.Join(names, ", ")), Default: own[0].Name})
+		}
 	}
 	if len(own) > 0 {
 		b.plan.Flow = own[0].Name

@@ -189,13 +189,11 @@ func (b *planner) groups() error {
 	if err != nil {
 		return err
 	}
-	named := map[string]bool{}
 	for _, g := range b.p.Groups {
 		name, takes, err := b.groupName(g, have)
 		if err != nil {
 			return err
 		}
-		named[name] = true
 		b.plan.Groups[g.Name] = name
 		if takes {
 			b.add(b.taken(g, have[slices.IndexFunc(have, func(h store.Group) bool { return h.Name == name })]))
@@ -345,12 +343,6 @@ func (b *planner) groups() error {
 			}
 		}
 		b.add(o)
-	}
-	// The depot's other groups, by the name an import gives a depot's groups.
-	for _, h := range have {
-		if !named[h.Name] && strings.HasPrefix(h.Name, b.o.Depot+"-") {
-			b.add(Object{Kind: "group", Name: h.Name, Action: NotInPack})
-		}
 	}
 	return nil
 }

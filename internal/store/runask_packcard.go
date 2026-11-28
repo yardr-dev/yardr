@@ -22,10 +22,10 @@ import (
 const MaxRunPackCarried = 1 << 20
 
 // packDepotDoes is the card of a depot pack: the pack line with its
-// counts, one line to a created or changed object, or to a kept one the
-// card takes, one to a dropped object left where it stands, the governs,
-// and each declared source as a kind-source card renders it.
-func (w *wtx) packDepotDoes(name string, reading *PackReading, carried []AskSource, decls map[string]*source.Declaration, take []string) ([]string, error) {
+// counts, one line to a created or changed object, one to a differing object
+// left as the yard has it, one to a dropped object left where it stands,
+// the governs, and each declared source as a kind-source card renders it.
+func (w *wtx) packDepotDoes(name string, reading *PackReading, carried []AskSource, decls map[string]*source.Declaration) ([]string, error) {
 	plan := reading.Plan
 	counts := packActionCounts(plan)
 	does := []string{packDepotLine(name, reading, counts) + ". It asks nothing."}
@@ -33,14 +33,8 @@ func (w *wtx) packDepotDoes(name string, reading *PackReading, carried []AskSour
 		does = append(does, "the plan uses mapping "+flag+".")
 	}
 	for _, o := range plan.Objects {
-		// A kept object the card takes is shown as the change it makes, whole
-		// as a change is; the plan itself says kept, and the words under it
-		// why.
-		if packTaken(take, o) {
-			o.Action = "take"
-		}
 		switch o.Action {
-		case "create", "change", "take":
+		case "create", "change":
 			if o.Kind == "file" {
 				ins, del := Counts(o.Diff)
 				does = append(does, fmt.Sprintf("%s %s: %s, sha256 %s -> sha256 %s (%d insertions, %d deletions).",
@@ -48,6 +42,8 @@ func (w *wtx) packDepotDoes(name string, reading *PackReading, carried []AskSour
 			} else {
 				does = append(does, packObjectLine(o))
 			}
+		case "differs":
+			does = append(does, fmt.Sprintf("%s %s: differs, left as the yard has it.", o.Kind, o.Name))
 		case "dropped":
 			does = append(does, fmt.Sprintf("%s %s: dropped by the pack, left where it stands.", o.Kind, o.Name))
 		}
@@ -82,8 +78,13 @@ func packDepotLine(name string, reading *PackReading, counts map[string]int) str
 	} else {
 		kind = "kind " + kind
 	}
-	return fmt.Sprintf("pack %s (%s), of %s, into depot %s: %d to create, %d to change, %d unchanged, and %d dropped and left where they stand",
-		name, reading.Label, kind, reading.Depot, counts["create"], counts["change"], counts["unchanged"], counts["dropped"])
+	line := fmt.Sprintf("pack %s (%s), of %s, into depot %s: %d to create, %d to change, %d unchanged",
+		name, reading.Label, kind, reading.Depot, counts["create"], counts["change"], counts["unchanged"])
+	if n := counts["differs"]; n > 0 {
+		line += fmt.Sprintf(", %d differ", n)
+	}
+	line += fmt.Sprintf(", and %d dropped and left where they stand", counts["dropped"])
+	return line
 }
 
 // packObjectLine is the line of a created or changed object that is no
@@ -238,9 +239,12 @@ func packSummaryDoes(name string, reading *PackReading, carried []AskSource, dec
 }
 
 // packFileFullTextBytes counts what the full-text view opens for one file:
-// a changed file's diff and new text, or a created file's new text alone.
+// a changed file's old text, diff and new text, or a created file's text.
 func packFileFullTextBytes(o AskPlanObject) int {
 	n := len(o.Text)
+	if o.OldText != nil {
+		n += len(*o.OldText)
+	}
 	if o.Action == "change" {
 		n += len(o.Diff)
 	}
@@ -276,6 +280,12 @@ func packSummaryObjects(plan *AskPlan) []string {
 		case packCarriesFile(o):
 		case o.Action == "dropped":
 			out = append(out, fmt.Sprintf("%s %s: dropped by the pack, left where it stands.", o.Kind, o.Name))
+		case o.Action == "differs":
+			g := group{o.Kind, o.Action}
+			if names[g] == nil {
+				order = append(order, g)
+			}
+			names[g] = append(names[g], o.Name)
 		case o.Action != "create" && o.Action != "change":
 		case len(o.Changes) > 0:
 			out = append(out, packObjectLine(o))
@@ -294,7 +304,11 @@ func packSummaryObjects(plan *AskPlan) []string {
 		if kinds != "crew" {
 			kinds += "s"
 		}
-		grouped = append(grouped, fmt.Sprintf("%s to %s: %s.", kinds, g.action, strings.Join(names[g], ", ")))
+		if g.action == "differs" {
+			grouped = append(grouped, fmt.Sprintf("%s that differ (left as the yard has them): %s.", kinds, strings.Join(names[g], ", ")))
+		} else {
+			grouped = append(grouped, fmt.Sprintf("%s to %s: %s.", kinds, g.action, strings.Join(names[g], ", ")))
+		}
 	}
 	return append(grouped, out...)
 }
@@ -321,8 +335,11 @@ func packSummarySource(carried AskSource, d *source.Declaration) string {
 // check's words.
 func packSummaryCounts(plan *AskPlan) string {
 	counts := packActionCounts(plan)
-	line := fmt.Sprintf("in all: %d to create, %d to change, %d unchanged, %d not in the pack",
-		counts["create"], counts["change"], counts["unchanged"], counts["not_in_pack"])
+	line := fmt.Sprintf("in all: %d to create, %d to change, %d unchanged",
+		counts["create"], counts["change"], counts["unchanged"])
+	if n := counts["differs"]; n > 0 {
+		line += fmt.Sprintf(", %d differ", n)
+	}
 	if n := counts["dropped"]; n > 0 {
 		line += fmt.Sprintf(", %d no longer in it", n)
 	}

@@ -135,13 +135,12 @@ func TestRunAskFlowSetRefusesToStrandABeadTwice(t *testing.T) {
 	}
 }
 
-// A flow set card carries a flow a pack manages as it carries any store
-// flow, and says so: whose the flow is, what pack apply then does with the
-// yard's version, and the door to the pack's (--take). The approval saves
-// the flow and leaves the import record as the import wrote it, which is
-// what lets the next pack apply read the change as the yard's and keep it.
-// A card filed before the flow was a pack's is another card once it is, and
-// one whose flow a --take moved is stale; neither runs anything.
+// A flow set card carries a flow copied from a line as it carries any store
+// flow, and says so: whose the flow is, and that pack apply writes only what
+// the yard lacks and leaves the yard's version as it is. The approval saves
+// the flow and leaves the import record as the import wrote it. A card filed
+// before the flow was a line's is another card once it is, and one whose flow
+// moved since is stale; neither runs anything.
 func TestRunAskFlowSetCarriesAPackManagedFlow(t *testing.T) {
 	t.Parallel()
 	y := listYard(t)
@@ -167,20 +166,18 @@ func TestRunAskFlowSetCarriesAPackManagedFlow(t *testing.T) {
 		Objects: []PackObject{{Kind: "flow", Name: "code", SHA256: digest}}}, true, "mckean"); err != nil {
 		t.Fatal(err)
 	}
-	y.refusedStale(t, early, `the yard would say "The flow is the pack starter's`)
+	y.refusedStale(t, early, `the yard would say "The flow was copied from the line starter`)
 
 	// Asked of the pack's flow, the card carries.
 	seq := y.ask(t, flowSetAsk("code", text), "yardmaster")
 	r := y.asked(t, seq)
 	strongHas(t, r.Ask.Run.Does,
 		"changes the flow code whole",
-		"The flow is the pack starter's, imported into depot web: this sets the yard's version of it, and changes nothing of the pack.",
-		"yardr pack apply then keeps the yard's version, whatever the pack moves, and sets the pack's again only where it is told to (--take flow/code).",
+		"The flow was copied from the line starter into depot web: this sets the yard's version of it, and changes nothing of the line.",
+		"yardr pack apply writes only what the yard lacks: the yard's version stays, and the plan reports it as differs.",
 		"Its stages stand in the order in, work, done now; on approval they stand work, in, done.")
-	for _, want := range []string{"yardr flow set code with the flow that stands", "yardr pack apply starter --depot web --take flow/code"} {
-		if !strings.Contains(r.Ask.Run.Back, want) {
-			t.Errorf("taken back by %q, want it to name %q", r.Ask.Run.Back, want)
-		}
+	if !strings.Contains(r.Ask.Run.Back, "yardr flow set code with the flow that stands") {
+		t.Errorf("taken back by %q, want it to name flow set", r.Ask.Run.Back)
 	}
 	before, err := y.Packs(y.ctx)
 	if err != nil {
@@ -200,7 +197,7 @@ func TestRunAskFlowSetCarriesAPackManagedFlow(t *testing.T) {
 		t.Errorf("the approval changed the import record: %+v, then %+v (%v)", before, after, err)
 	}
 
-	// Writing the pack's version after the ask moves the flow the card saw:
+	// Writing the flow after the ask moves the flow the card saw:
 	// the card is stale and the flow stays as the write left it.
 	seq = y.ask(t, flowSetAsk("code", "in -> done\ndone terminal\n"), "yardmaster")
 	if _, err := y.PutFlow(y.ctx, *f, "mckean"); err != nil {
@@ -212,15 +209,15 @@ func TestRunAskFlowSetCarriesAPackManagedFlow(t *testing.T) {
 	}
 
 	// A flow a pack's record lists that the store lacks is added in the same
-	// words, with the same door to the pack's version.
+	// words.
 	if _, err := y.RecordPack(y.ctx, PackImport{Pack: "extra", Depot: "web",
 		Objects: []PackObject{{Kind: "flow", Name: "ghost"}}}, true, "mckean"); err != nil {
 		t.Fatal(err)
 	}
 	seq = y.ask(t, flowSetAsk("ghost", "in -> done\ndone terminal\n"), "yardmaster")
 	r = y.asked(t, seq)
-	strongHas(t, r.Ask.Run.Does, "adds the flow ghost", "The flow is the pack extra's, imported into depot web", "(--take flow/ghost)")
-	if !strings.Contains(r.Ask.Run.Back, "yardr flow rm ghost") || !strings.Contains(r.Ask.Run.Back, "yardr pack apply extra --depot web --take flow/ghost") {
+	strongHas(t, r.Ask.Run.Does, "adds the flow ghost", "The flow was copied from the line extra into depot web")
+	if !strings.Contains(r.Ask.Run.Back, "yardr flow rm ghost") {
 		t.Errorf("taken back by %q", r.Ask.Run.Back)
 	}
 	if _, err := y.ApproveAsk(y.ctx, y.bead, seq, "mckean", true, nil); err != nil {

@@ -72,7 +72,7 @@ func TestPackCheckPrintsThePlan(t *testing.T) {
 		"source linear, for crew member boss\n  missing  hook ",
 		"its stage files would be copied to " + filepath.Join(a.cfg.Home, "flows", "starter.<flow>") + "\n",
 		"  create           flows/default/new.md -> " + filepath.Join(a.cfg.Home, "flows", "starter.default", "new.md") + "\n",
-		"39 to create, 0 to change, 0 unchanged, 0 not in the pack\n",
+		"39 to create, 0 to change, 0 unchanged\n",
 		// What runs as the user who runs the yard, after the digest that
 		// pins it: one program here.
 		"\ndigest sha256:",
@@ -166,7 +166,7 @@ func TestPackCheckPrintsThePlan(t *testing.T) {
 		"  group.web-reviewers.kind: which agent runs group web-reviewers",
 		"  group.decisions.members: who is in group decisions",
 		"digest sha256:" + plan.Digest + "\n",
-		"39 to create, 0 to change, 0 unchanged, 0 not in the pack\n",
+		"39 to create, 0 to change, 0 unchanged\n",
 	} {
 		if !strings.Contains(answered, want) {
 			t.Errorf("the answered plan lacks %q:\n%s", want, answered)
@@ -276,12 +276,13 @@ func TestPackApplyFrameOnlyPackToTheYard(t *testing.T) {
 		t.Fatalf("the second apply logged %+v", evs)
 	}
 
-	// The embedded default itself may be named for the yard the same way.
-	if out, err := run(t, a.packCmd(), "apply", "pageframe", "--yes"); err != nil || !strings.Contains(out, "frame: the yard would use pageframe's frame (was brand's)") {
+	// Applying another frame pack (pageframe) does not displace the standing
+	// active frame (brand).
+	if out, err := run(t, a.packCmd(), "apply", "pageframe", "--yes"); err != nil || strings.Contains(out, "would use pageframe's frame") {
 		t.Fatalf("applying pageframe with no depot: %v\n%s", err, out)
 	}
-	if f, err := pack.FrameFor(ctx, a.st, a.cfg.Home, "web"); err != nil || f.Pack != "pageframe" || f.Path == "" {
-		t.Fatalf("web's frame = %+v, %v: want the installed pageframe the yard chose", f, err)
+	if f, err := pack.FrameFor(ctx, a.st, a.cfg.Home, "web"); err != nil || f.Pack != "brand" || f.Path != installed {
+		t.Fatalf("web's frame = %+v, %v: want brand still active", f, err)
 	}
 
 	// A frame beside a depot's own refuses to go to the yard.
@@ -1007,8 +1008,8 @@ func TestPackApplyRefused(t *testing.T) {
 	}
 }
 
-// What the pack has dropped is listed by check and by apply, and removed
-// by apply --prune.
+// --prune is refused for a line and removes a dropped source of a connector
+// (kind: source).
 func TestPackApplyPrune(t *testing.T) {
 	t.Parallel()
 	a := packApp(t)
@@ -1024,39 +1025,40 @@ func TestPackApplyPrune(t *testing.T) {
 	if out, err := run(t, a.packCmd(), args...); err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	path := filepath.Join(dir, "pack.yaml")
-	text, _ := os.ReadFile(path)
-	s := strings.Replace(string(text), "      stages: [decide, clear]\n", "", 1)
-	if s == string(text) {
-		t.Fatal("pack.yaml has no hears.stages line")
+	// --prune is refused for a line.
+	if _, err := run(t, a.packCmd(), "apply", dir, "--depot", "web", "--prune", "--yes"); err == nil || !strings.Contains(err.Error(), "kind: source") {
+		t.Fatalf("--prune on a line = %v, want refusal naming kind: source", err)
 	}
-	if err := os.WriteFile(path, []byte(s), 0o644); err != nil {
+
+	// A connector (kind: source) still prunes a dropped source with --prune.
+	conn := t.TempDir()
+	const declA = "name: alpha\nbase: https://alpha.example.com\ncredential: { env: ALPHA_TOKEN }\ncalls:\n  ping: { kind: read, request: { method: GET, path: /ping } }\n"
+	const declB = "name: beta\nbase: https://beta.example.com\ncredential: { env: BETA_TOKEN }\ncalls:\n  ping: { kind: read, request: { method: GET, path: /ping } }\n"
+	for name, body := range map[string]string{
+		"pack.yaml":  "name: conn\nkind: source\nsources:\n  alpha: { declaration: alpha.yaml }\n  beta:  { declaration: beta.yaml }\n",
+		"alpha.yaml": declA,
+		"beta.yaml":  declB,
+	} {
+		if err := os.WriteFile(filepath.Join(conn, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if out, err := run(t, a.packCmd(), "apply", conn, "--yes"); err != nil {
+		t.Fatalf("first connector apply: %v\n%s", err, out)
+	}
+	if err := os.WriteFile(filepath.Join(conn, "pack.yaml"), []byte("name: conn\nkind: source\nsources:\n  alpha: { declaration: alpha.yaml }\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	const sub = "boss yardr all depot=web stage=decide"
-	const clear = "boss yardr all depot=web stage=clear"
-	out, err := run(t, a.packCmd(), "check", dir, "--depot", "web")
-	if err != nil || !strings.Contains(out, "  no longer in it  "+sub+" (an earlier import brought it; left alone unless --prune)\n") ||
-		!strings.Contains(out, "  no longer in it  "+clear+" (an earlier import brought it; left alone unless --prune)\n") ||
-		!strings.Contains(out, ", 2 no longer in it\n") {
-		t.Fatalf("check: %v\n%s", err, out)
+	out, err := run(t, a.packCmd(), "check", conn)
+	if err != nil || !strings.Contains(out, "  no longer in it  beta") {
+		t.Fatalf("connector check: %v\n%s", err, out)
 	}
-	out, err = run(t, a.packCmd(), "apply", dir, "--depot", "web")
-	if err != nil || !strings.Contains(out, "no longer in the pack and left in the yard (yardr pack apply … --prune removes them):\n") ||
-		!strings.Contains(out, "  subscription "+sub+"\n") || !strings.Contains(out, "  subscription "+clear+"\n") {
-		t.Fatalf("apply: %v\n%s", err, out)
+	if _, err := run(t, a.packCmd(), "apply", conn, "--prune"); err == nil || !strings.Contains(err.Error(), "give --yes") {
+		t.Fatalf("connector prune without --yes: %v", err)
 	}
-	// A prune writes, so it needs --yes like any other change.
-	if _, err = run(t, a.packCmd(), "apply", dir, "--depot", "web", "--prune"); err == nil || !strings.Contains(err.Error(), "give --yes") {
-		t.Fatalf("prune without --yes: %v", err)
-	}
-	out, err = run(t, a.packCmd(), "apply", dir, "--depot", "web", "--prune", "--yes")
-	if err != nil || !strings.Contains(out, "  pruned  subscription "+sub+"\n") || !strings.Contains(out, "  pruned  subscription "+clear+"\n") {
-		t.Fatalf("prune: %v\n%s", err, out)
-	}
-	boss, _ := a.st.GetCrew(context.Background(), "boss")
-	if len(boss.Subscriptions) != 2 {
-		t.Fatalf("boss subscriptions = %v", boss.Subscriptions)
+	out, err = run(t, a.packCmd(), "apply", conn, "--prune", "--yes")
+	if err != nil || !strings.Contains(out, "  pruned  source beta\n") {
+		t.Fatalf("connector prune: %v\n%s", err, out)
 	}
 }
 
@@ -1172,8 +1174,9 @@ func importedStarter(t *testing.T) (a *app, args []string) {
 
 // What an import that wrote nothing says of itself: nothing changed, or the
 // frame choice moved, or the yard's own version of what it kept stands, and
-// both of the last two when both are so.
-func TestAppliedLineSaysWhatWasKept(t *testing.T) {
+// appliedLine reports when nothing was written, including differing objects
+// and frame movement.
+func TestAppliedLineSaysWhatDiffered(t *testing.T) {
 	t.Parallel()
 	plan := &pack.Plan{FrameUse: "pages in depot web would use the frame of pack p"}
 	for _, tc := range []struct {
@@ -1182,9 +1185,9 @@ func TestAppliedLineSaysWhatWasKept(t *testing.T) {
 	}{
 		{pack.Result{}, "pack p is already applied to depot web: nothing changed"},
 		{pack.Result{FrameMoved: true}, "pack p is already applied to depot web: no file changed; pages in depot web would use the frame of pack p"},
-		{pack.Result{Kept: []string{"flow p.f: kept"}}, "pack p is applied to depot web: nothing written; the yard's own version of 1 object stands (kept: below)"},
-		{pack.Result{Kept: []string{"a", "b"}}, "pack p is applied to depot web: nothing written; the yard's own version of 2 objects stands (kept: below)"},
-		{pack.Result{FrameMoved: true, Kept: []string{"a"}}, "pack p is applied to depot web: nothing written; the yard's own version of 1 object stands (kept: below); pages in depot web would use the frame of pack p"},
+		{pack.Result{Differs: 1}, "pack p is applied to depot web: nothing written; the yard's own version of 1 object stands"},
+		{pack.Result{Differs: 2}, "pack p is applied to depot web: nothing written; the yard's own version of 2 objects stands"},
+		{pack.Result{FrameMoved: true, Differs: 1}, "pack p is applied to depot web: nothing written; the yard's own version of 1 object stands; pages in depot web would use the frame of pack p"},
 	} {
 		tc.res.Pack, tc.res.Depot = "p", "web"
 		if got := appliedLine(plan, &tc.res); got != tc.want {
@@ -1193,81 +1196,38 @@ func TestAppliedLineSaysWhatWasKept(t *testing.T) {
 	}
 }
 
-// A plan prints what it keeps, what it stops at and what it takes in the
-// words of each: a flow the pack dropped that the yard changed is not "edited
-// by hand" and has no source to belong in, a kept object has its line and its
-// count, and one the import is told to take is printed as the change it is.
-func TestPrintPlanSaysWhatIsKeptStoppedAndTaken(t *testing.T) {
+// printPlan prints differing objects and replaces them when told with --replace.
+func TestPrintPlanSaysWhatDiffersAndReplaces(t *testing.T) {
 	t.Parallel()
-	plan := &pack.Plan{Pack: "p", Depot: "web", Objects: []pack.Object{
-		{Kind: "flow", Name: "p.old", Action: pack.Dropped, Edited: true},
-		{Kind: "flow", Name: "p.kept", Action: pack.Kept, Keeps: []string{"the yard's flow, changed since the last import (the pack's has not changed since); --take flow/p.kept takes the pack's"}},
-		{Kind: "flow", Name: "p.taken", Action: pack.Kept, Keeps: []string{"the yard's flow, DIVERGED"}},
+	plan := &pack.Plan{Pack: "p", Depot: "web", Install: "/home/packs/p", Objects: []pack.Object{
+		{Kind: "flow", Name: "p.diff", Action: pack.Differs, Changes: []pack.Diff{{Field: "stages", Old: "a", New: "b"}}},
+		{Kind: "file", Name: "scripts/land", Action: pack.Differs, File: &pack.FileOp{To: "/home/packs/p/scripts/land"}},
 	}}
 	var out bytes.Buffer
-	printPlan(&out, plan.Taking([]string{"flow/p.taken"}), nil, nil, nil, nil, false)
+	printPlan(&out, plan.Replacing([]string{"scripts/land"}), nil, nil, nil, nil, false)
 	for _, want := range []string{
-		"    changed since the last import: removed only with --yes (the pack no longer carries it, so no source of the pack holds the change)\n",
-		"  kept             p.kept\n",
-		"    kept: the yard's flow, changed since the last import (the pack's has not changed since); --take flow/p.kept takes the pack's\n",
-		"  change           p.taken\n",
-		"\n0 to create, 1 to change, 0 unchanged, 0 not in the pack, 1 no longer in it, 1 kept as the yard has them\n",
+		"  differs          p.diff\n",
+		"  change           scripts/land -> /home/packs/p/scripts/land\n",
+		"\n0 to create, 1 to change, 0 unchanged, 1 differ\n",
 	} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("the plan lacks %q:\n%s", want, out.String())
 		}
 	}
-	if strings.Contains(out.String(), "DIVERGED") || strings.Contains(out.String(), "edited by hand") {
-		t.Errorf("the plan prints what it takes as kept, or a flow as edited by hand:\n%s", out.String())
-	}
 }
 
-// A script under the home that was edited by hand is marked in the plan and
-// not overwritten on a plain apply: the error names the file and says where
-// the edit belongs. --yes overwrites it.
-func TestPackApplyRefusesAHandEditedScript(t *testing.T) {
-	a, args := importedStarter(t)
-	copied := filepath.Join(config.At(a.cfg.Home).Pack("starter"), "scripts", "merge-local")
-	if err := os.WriteFile(copied, []byte("#!/bin/sh\n# edited in the yard\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	out, err := run(t, a.packCmd(), "check", "../../packs/starter", "--depot", "web")
-	if err != nil || !strings.Contains(out, "edited by hand since the last import: overwritten or removed only with --yes; the edit belongs in the pack's source\n") {
-		t.Fatalf("check over a hand edit: %v\n%s", err, out)
-	}
-	// Refused in a terminal too: a confirmation is not enough to lose an edit.
-	for _, tty := range []bool{false, true} {
-		setInteractive(t, tty)
-		out, err = run(t, a.packCmd(), args...)
-		if err == nil || !strings.Contains(err.Error(), copied+" was edited by hand") || !strings.Contains(err.Error(), "the edit belongs in the pack's source (") ||
-			!strings.Contains(err.Error(), "--yes proceeds") {
-			t.Fatalf("apply over a hand edit (terminal %v): %v\n%s", tty, err, out)
-		}
-		if text, _ := os.ReadFile(copied); string(text) != "#!/bin/sh\n# edited in the yard\n" {
-			t.Fatalf("the refused apply wrote %q", text)
-		}
-	}
-	setInteractive(t, false)
-	if out, err = run(t, a.packCmd(), append(args, "--yes")...); err != nil || !strings.Contains(out, "1 changed") {
-		t.Fatalf("apply --yes over a hand edit: %v\n%s", err, out)
-	}
-	// The pack's script, as it is: no placeholder is filled in a script.
-	want, _ := os.ReadFile("../../packs/starter/scripts/merge-local")
-	if text, _ := os.ReadFile(copied); string(text) != string(want) {
-		t.Fatalf("after --yes the copy is %q", text)
-	}
-}
-
-// A role under the home and a flow that the yard changed are the yard's: the
-// plan shows them as kept with the way to the pack's, a plain apply, in a
-// terminal or not, leaves them and says so, and --yes does not take them.
-// --take does, by the name the plan printed, and a name that takes nothing is
-// refused before anything is written.
-func TestPackApplyKeepsWhatTheYardChangedUntilTaken(t *testing.T) {
+// An edited script, role or flow in the yard reports differs and is left alone
+// by apply (with or without --yes); --replace overwrites a differing script or
+// role under <home>/packs/<pack>/ and refuses non-replaceable names.
+func TestPackApplyDiffersAndReplaces(t *testing.T) {
 	a, args := importedStarter(t)
 	ctx := context.Background()
-	copied := filepath.Join(config.At(a.cfg.Home).PackRoles("starter"), "builder.md")
-	if err := os.WriteFile(copied, []byte("edited in the yard\n"), 0o644); err != nil {
+	script := filepath.Join(config.At(a.cfg.Home).Pack("starter"), "scripts", "merge-local")
+	role := filepath.Join(config.At(a.cfg.Home).PackRoles("starter"), "builder.md")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\n# edited in the yard\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(role, []byte("edited in the yard\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	flow, err := a.st.GetFlow(ctx, "starter.default")
@@ -1278,76 +1238,68 @@ func TestPackApplyKeepsWhatTheYardChangedUntilTaken(t *testing.T) {
 	if _, err := a.st.PutFlow(ctx, *flow, "me"); err != nil {
 		t.Fatal(err)
 	}
-	keptRole := "the yard's copy, changed since the last import (the pack's has not changed since); --take file/roles/builder.md takes the pack's"
-	keptFlow := "the yard's flow, changed since the last import (the pack's has not changed since); --take flow/starter.default takes the pack's"
+
 	out, err := run(t, a.packCmd(), "check", "../../packs/starter", "--depot", "web")
-	if err != nil || !strings.Contains(out, "  kept             roles/builder.md -> "+copied+"\n") || !strings.Contains(out, "    kept: "+keptRole+"\n") ||
-		!strings.Contains(out, "  kept             starter.default\n") || !strings.Contains(out, "    kept: "+keptFlow+"\n") ||
-		strings.Contains(out, "edited by hand") || !strings.Contains(out, ", 2 kept as the yard has them\n") {
-		t.Fatalf("check over what the yard changed: %v\n%s", err, out)
+	if err != nil || !strings.Contains(out, "  differs          scripts/merge-local -> "+script+"\n") ||
+		!strings.Contains(out, "  differs          roles/builder.md -> "+role+"\n") ||
+		!strings.Contains(out, "  differs          starter.default\n") ||
+		!strings.Contains(out, ", 3 differ\n") {
+		t.Fatalf("check over differing objects: %v\n%s", err, out)
 	}
+
+	// Plain apply and apply --yes both leave all three untouched.
 	for _, with := range [][]string{nil, {"--yes"}} {
-		for _, tty := range []bool{false, true} {
-			// Nothing is to be written, so no confirmation is asked either.
-			setInteractive(t, tty)
-			out, err = run(t, a.packCmd(), append(slices.Clone(args), with...)...)
-			if err != nil || !strings.Contains(out, "pack starter is applied to depot web: nothing written; the yard's own version of 2 objects stands (kept: below)\n") ||
-				!strings.Contains(out, "  kept: file roles/builder.md: "+keptRole+"\n") || !strings.Contains(out, "  kept: flow starter.default: "+keptFlow+"\n") {
-				t.Fatalf("apply over what the yard changed (terminal %v, %v): %v\n%s", tty, with, err, out)
-			}
-			if text, _ := os.ReadFile(copied); string(text) != "edited in the yard\n" {
-				t.Fatalf("apply (terminal %v, %v) wrote %q", tty, with, text)
-			}
+		setInteractive(t, false)
+		out, err = run(t, a.packCmd(), append(slices.Clone(args), with...)...)
+		if err != nil || !strings.Contains(out, "pack starter is applied to depot web: nothing written; the yard's own version of 3 objects stands\n") {
+			t.Fatalf("apply (%v): %v\n%s", with, err, out)
+		}
+		if text, _ := os.ReadFile(script); string(text) != "#!/bin/sh\n# edited in the yard\n" {
+			t.Fatalf("apply (%v) overwrote script: %q", with, text)
+		}
+		if text, _ := os.ReadFile(role); string(text) != "edited in the yard\n" {
+			t.Fatalf("apply (%v) overwrote role: %q", with, text)
 		}
 	}
-	setInteractive(t, false)
-	for _, take := range []string{"file/roles/nothing.md", "source/linear", "roles/builder.md", "flow/starter.train"} {
-		out, err = run(t, a.packCmd(), append(slices.Clone(args), "--yes", "--take", "file/roles/builder.md", "--take", take)...)
-		if err == nil || !strings.HasPrefix(err.Error(), "nothing was changed: --take "+take+": ") {
-			t.Fatalf("--take %s: %v\n%s", take, err, out)
+
+	// Refused --replace names write nothing.
+	for _, bad := range []string{"roles/nothing.md", "roles/reviewer.md", "flows/default/new.md"} {
+		out, err = run(t, a.packCmd(), append(slices.Clone(args), "--yes", "--replace", "scripts/merge-local", "--replace", bad)...)
+		if err == nil || !strings.HasPrefix(err.Error(), "nothing was changed: --replace "+bad+": ") {
+			t.Fatalf("--replace %s: %v\n%s", bad, err, out)
 		}
-		if text, _ := os.ReadFile(copied); string(text) != "edited in the yard\n" {
-			t.Fatalf("the refused --take %s wrote %q", take, text)
+		if text, _ := os.ReadFile(script); string(text) != "#!/bin/sh\n# edited in the yard\n" {
+			t.Fatalf("refused --replace %s overwrote script", bad)
 		}
 	}
-	// One taken, one still kept: a result that wrote says both.
-	out, err = run(t, a.packCmd(), append(slices.Clone(args), "--yes", "--take", "file/roles/builder.md")...)
-	if err != nil || !strings.Contains(out, ": 0 created, 1 changed, ") || !strings.Contains(out, ", 1 kept\n") ||
-		strings.Contains(out, "kept: file roles/builder.md") || !strings.Contains(out, "  kept: flow starter.default: "+keptFlow+"\n") {
-		t.Fatalf("apply --take of the role: %v\n%s", err, out)
+
+	// Replace script and role; flow stays as the yard has it.
+	out, err = run(t, a.packCmd(), append(slices.Clone(args), "--yes", "--replace", "scripts/merge-local", "--replace", "roles/builder.md")...)
+	if err != nil || !strings.Contains(out, ": 0 created, 2 changed, ") || !strings.Contains(out, ", 1 differs\n") {
+		t.Fatalf("apply --replace: %v\n%s", err, out)
 	}
-	// The pack's text, with the yard's names where it has placeholders.
-	want, _ := os.ReadFile("../../packs/starter/roles/builder.md")
-	want = pack.Fill(want, map[string]string{"operator": defaultOperator(), "yardmaster": "boss"})
-	if text, _ := os.ReadFile(copied); string(text) != string(want) || strings.Contains(string(text), "{{") {
-		t.Fatalf("after --take the copy is %q", text)
+	wantScript, _ := os.ReadFile("../../packs/starter/scripts/merge-local")
+	if text, _ := os.ReadFile(script); string(text) != string(wantScript) {
+		t.Fatalf("after --replace script does not match pack")
 	}
-	if out, err = run(t, a.packCmd(), append(slices.Clone(args), "--yes", "--take", "flow/starter.default")...); err != nil || !strings.Contains(out, ": 0 created, 1 changed, ") || strings.Contains(out, "kept") {
-		t.Fatalf("apply --take of the flow: %v\n%s", err, out)
+	wantRole, _ := os.ReadFile("../../packs/starter/roles/builder.md")
+	wantRole = pack.Fill(wantRole, map[string]string{"operator": defaultOperator(), "yardmaster": "boss"})
+	if text, _ := os.ReadFile(role); string(text) != string(wantRole) {
+		t.Fatalf("after --replace role does not match filled pack")
 	}
-	if got, _ := a.st.GetFlow(ctx, "starter.default"); got == nil || slices.Contains(got.Transitions["decide"], "merged") {
-		t.Fatalf("after --take the flow is %+v", got)
+	if got, _ := a.st.GetFlow(ctx, "starter.default"); got == nil || !slices.Contains(got.Transitions["decide"], "merged") {
+		t.Fatalf("flow was overwritten: %+v", got)
 	}
-	// As data, the result names what it kept.
-	flow, err = a.st.GetFlow(ctx, "starter.default")
-	if err != nil {
-		t.Fatal(err)
-	}
-	flow.Transitions["decide"] = append(flow.Transitions["decide"], "merged")
-	if _, err := a.st.PutFlow(ctx, *flow, "me"); err != nil {
-		t.Fatal(err)
-	}
-	// Through the root the run takes --actor: the app's own actor is for
-	// its pack commands alone, and without the flag the run acts as the
-	// OS user instead of the operator the yard imported as.
+
+	// As JSON data, result.differs counts the differing flow.
 	out, err = run(t, a.rootCmd(), append([]string{"pack"}, append(slices.Clone(args), "--yes", "--json", "--actor", testOperator(t, a.st))...)...)
 	var data struct {
 		Result struct {
-			Kept []string `json:"kept"`
+			Differs int `json:"differs"`
 		} `json:"result"`
 	}
-	if err != nil || json.Unmarshal([]byte(out), &data) != nil || len(data.Result.Kept) != 1 || !strings.HasPrefix(data.Result.Kept[0], "flow starter.default: the yard's flow") {
-		t.Fatalf("apply --json over a kept flow: %v\n%s", err, out)
+	if err != nil || json.Unmarshal([]byte(out), &data) != nil || data.Result.Differs != 1 {
+		t.Fatalf("apply --json over differing flow: %v\n%s", err, out)
 	}
 }
 

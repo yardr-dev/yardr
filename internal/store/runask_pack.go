@@ -36,12 +36,11 @@ import (
 type AskPlan struct {
 	Objects []AskPlanObject `json:"objects,omitempty"`
 	Governs []AskGovern     `json:"governs,omitempty"`
-	// Missing, Asks, Refused and Edited name what keeps the plan from
-	// asking nothing, each a line the refusal reads back.
+	// Missing, Asks and Refused name what keeps the plan from asking nothing,
+	// each a line the refusal reads back.
 	Missing []string `json:"missing,omitempty"`
 	Asks    []string `json:"asks,omitempty"`
 	Refused []string `json:"refused,omitempty"`
-	Edited  []string `json:"edited,omitempty"`
 	// NonText names a changed file whose old or new bytes are not
 	// text: a card carries text only, so the row refuses it.
 	NonText []string `json:"nontext,omitempty"`
@@ -53,33 +52,25 @@ type AskPlanObject struct {
 	Name    string      `json:"name"`
 	Action  string      `json:"action"`
 	Changes []AskChange `json:"changes,omitempty"`
-	// Edited says the installed copy was changed by hand since the last
-	// import: a card shows it only with --yes, and approval overwrites it.
-	Edited bool `json:"edited,omitempty"`
-	// Runs says the yard runs this file once installed: a program, a
-	// role or a script, not a stage file or the page frame. Overwriting
-	// a hand-edited copy of one weighs code, as installing one does.
-	Runs    bool     `json:"runs,omitempty"`
-	Keeps   []string `json:"keeps,omitempty"`
-	Shadows []string `json:"shadows,omitempty"`
-	// StageFile says the file is a stage's of one of the pack's flows: an
-	// approval that takes it keeps the yard's text in the stage history first.
-	StageFile bool `json:"stage_file,omitempty"`
+	Keeps   []string    `json:"keeps,omitempty"`
+	Shadows []string    `json:"shadows,omitempty"`
 	// Env are the assignments a script group the import creates has
 	// before its script in its cmd, from the pack's env: part of what the
 	// approval has the yard write, so the card shows them and the carrying
 	// out is held to them.
 	Env []string `json:"env,omitempty"`
-	// Of a file: its hashes whole, old and new, and for a create or
-	// change, or a kept file the card takes, its new text and the unified
-	// diff old against new, whole, for the tap and a terminal.
+	// Of a file: its hashes whole, old and new, the pack's text and the
+	// unified diff old against new. OldText is carried only for a replaced
+	// file, so a card can show the yard's side whole without implying that
+	// other changes carry it too.
 	FileOldSHA string `json:"file_old_sha256,omitempty"`
 	FileNewSHA string `json:"file_new_sha256,omitempty"`
-	Text       string `json:"text,omitempty"`
-	Diff       string `json:"diff,omitempty"`
-	// Of a kept flow the card takes: the digest of the yard's flow, which
-	// Changes (the stages that differ) cannot hold whole.
-	FlowOldSHA string `json:"flow_old_sha256,omitempty"`
+	// OldText is carried for a replaced file so a card can show what it
+	// overwrites; nil means it was not carried, while a pointer to empty is an
+	// existing empty file.
+	OldText *string `json:"old_text,omitempty"`
+	Text    string  `json:"text,omitempty"`
+	Diff    string  `json:"diff,omitempty"`
 }
 
 // AskChange is one change of a plan object, as printPlan prints it.
@@ -265,10 +256,7 @@ func packBytesSeen(r *PackReading) string {
 		}
 	}
 	if r.Plan != nil && r.Kind != "source" {
-		plan := *r.Plan
-		// not_in_pack is pack.NotInPack (store cannot import pack); skipped as in packPlanMoved.
-		plan.Objects = slices.DeleteFunc(slices.Clone(plan.Objects), func(o AskPlanObject) bool { return o.Action == "not_in_pack" })
-		raw, _ := json.Marshal(&plan)
+		raw, _ := json.Marshal(r.Plan)
 		parts = append(parts, string(raw))
 	}
 	return seen(parts...)
@@ -339,7 +327,7 @@ func (w *wtx) packApplyCard(run AskRun, asking bool) (AskRun, error) {
 	// approval is held to the plan the card showed. What a writer sends
 	// beside argv never reaches here, since an ask keeps argv and carried
 	// bytes alone (askedRun).
-	_, depot, mappings, yes, take, sha, err := packApplyWords(run.Argv[2:])
+	_, depot, mappings, replace, sha, err := packApplyWords(run.Argv[2:])
 	if err != nil {
 		return AskRun{}, err
 	}
@@ -355,7 +343,7 @@ func (w *wtx) packApplyCard(run AskRun, asking bool) (AskRun, error) {
 			return AskRun{}, fmt.Errorf("pack %s: depot %s: %w", name, depot, ErrNotFound)
 		}
 	}
-	reading, dirForm, err := w.packCardReading(WithPackTake(context.Background(), take), name, depot, mappings, sha, asking)
+	reading, dirForm, err := w.packCardReading(WithPackReplace(context.Background(), replace), name, depot, mappings, sha, asking)
 	if err != nil {
 		return AskRun{}, err
 	}
@@ -433,7 +421,7 @@ func (w *wtx) packApplyCard(run AskRun, asking bool) (AskRun, error) {
 		digest = ""
 	}
 	card := AskRun{Argv: run.Argv, Seen: seenMap, Carried: carried,
-		Pack: &AskPack{Name: packName, Kind: reading.Kind, Depot: reading.Depot, Mappings: reading.Mappings, Label: reading.Label, Digest: digest, Take: take}}
+		Pack: &AskPack{Name: packName, Kind: reading.Kind, Depot: reading.Depot, Mappings: reading.Mappings, Label: reading.Label, Digest: digest, Replace: replace}}
 	if reading.Kind == "source" {
 		if named {
 			if urlForm {
@@ -444,7 +432,7 @@ func (w *wtx) packApplyCard(run AskRun, asking bool) (AskRun, error) {
 			}
 			return AskRun{}, fmt.Errorf("pack %s: it is of kind source, so it goes into the yard and no depot, and a setup card installs it: yardr bead ask <bead> - --setup %s, with the question and context on stdin", name, name)
 		}
-		if err := packSourceWords(name, yes, take); err != nil {
+		if err := packSourceWords(name, replace); err != nil {
 			return AskRun{}, err
 		}
 		does, err := w.packSourceDoes(packName, reading, carried, decls)
@@ -471,14 +459,16 @@ func (w *wtx) packApplyCard(run AskRun, asking bool) (AskRun, error) {
 				return AskRun{}, fmt.Errorf("pack %s: its plan asks or refuses, so no card can apply it: %s: it is the operator's to type in a terminal (yardr pack check %s --depot %s shows its plan there)", name, strings.Join(group, "; "), name, reading.Depot)
 			}
 		}
-		shown, err := w.packCardWhole(name, reading, yes, take)
-		if err != nil {
+		if err := packReplaceWhole(name, reading, replace); err != nil {
 			return AskRun{}, err
 		}
 		for _, o := range reading.Plan.Objects {
+			if o.OldText != nil {
+				payload += len(*o.OldText)
+			}
 			payload += len(o.Text) + len(o.Diff)
 		}
-		does, err := w.packDepotDoes(packName, reading, carried, decls, take)
+		does, err := w.packDepotDoes(packName, reading, carried, decls)
 		if err != nil {
 			return AskRun{}, err
 		}
@@ -497,9 +487,8 @@ func (w *wtx) packApplyCard(run AskRun, asking bool) (AskRun, error) {
 				return AskRun{}, err
 			}
 		}
-		card.Does = packTakeDoes(packYesDoes(does, shown), take, reading.Plan.Objects)
+		card.Does = packReplaceDoes(does, replace)
 		card.Pack.Plan = reading.Plan
-		card.Pack.Yes = len(shown) > 0
 		card.Description = fmt.Sprintf("Import a pack into depot %s: set the yard to what the pack says", reading.Depot)
 		card.Back = fmt.Sprintf("no one command takes it back: read the standing state with yardr pack check %s --depot %s in a terminal", name, reading.Depot)
 		card.BackBy = "the operator"
@@ -507,18 +496,22 @@ func (w *wtx) packApplyCard(run AskRun, asking bool) (AskRun, error) {
 	for i := range card.Does {
 		card.Does[i] = safeSourceCardLine(card.Does[i])
 	}
-	// A card that shows edited files or taken objects whole is whole or
-	// refused: a summary would fold the diffs approval overwrites by. A
-	// directory is whole or refused too: it has no summary shape.
+	// A card that replaces files shows each file whole or is refused: a
+	// summary would fold the diffs approval overwrites by. A directory is
+	// whole or refused too: it has no summary shape.
 	summary := false
-	if !card.Pack.Yes && len(take) == 0 && !dirForm {
+	if len(replace) == 0 && !dirForm {
 		summary, err = w.packSummary(&card, reading, carried, decls, named, payload)
 		if err != nil {
 			return AskRun{}, err
 		}
 	}
-	if payload > MaxRunPackFiles && !summary {
-		return AskRun{}, fmt.Errorf("pack %s: its carried file texts and diffs run to %d bytes: a card holds at most %d together, so this is the operator's to type in a terminal (yardr pack check %s shows it there)", name, payload, MaxRunPackFiles, name)
+	fileCap := MaxRunPackFiles
+	if len(replace) > 0 {
+		fileCap = MaxRunPackReplace
+	}
+	if payload > fileCap && !summary {
+		return AskRun{}, fmt.Errorf("pack %s: its carried file texts and diffs run to %d bytes: a card holds at most %d together, so this is the operator's to type in a terminal (yardr pack check %s shows it there)", name, payload, fileCap, name)
 	}
 	if len(card.Does) > MaxRunSourceCardLines {
 		return AskRun{}, fmt.Errorf("pack %s: its card would run to %d lines: a card is read whole, so this is the operator's to type in a terminal (yardr pack check %s shows it there)", name, len(card.Does), name)
@@ -940,28 +933,23 @@ func (w *wtx) packApplyStale(seq uint64, was, now AskRun) error {
 
 // packPlanMoved names what moved between two depot plans of one pack apply, "" when the approval still stands.
 func packPlanMoved(was, now *AskPlan) string {
-	// not_in_pack is pack.NotInPack (store cannot import pack); the apply writes nothing for such objects.
-	wasObjs := slices.DeleteFunc(slices.Clone(was.Objects), func(o AskPlanObject) bool { return o.Action == "not_in_pack" })
-	nowObjs := slices.DeleteFunc(slices.Clone(now.Objects), func(o AskPlanObject) bool { return o.Action == "not_in_pack" })
-	wasKept, nowKept := *was, *now
-	wasKept.Objects, nowKept.Objects = wasObjs, nowObjs
-	wasRaw, _ := json.Marshal(wasKept)
-	nowRaw, _ := json.Marshal(nowKept)
+	wasRaw, _ := json.Marshal(was)
+	nowRaw, _ := json.Marshal(now)
 	if string(wasRaw) == string(nowRaw) {
 		return ""
 	}
-	for _, o := range wasObjs {
+	for _, o := range was.Objects {
 		raw, _ := json.Marshal(o)
-		i := slices.IndexFunc(nowObjs, func(n AskPlanObject) bool { return n.Kind == o.Kind && n.Name == o.Name })
+		i := slices.IndexFunc(now.Objects, func(n AskPlanObject) bool { return n.Kind == o.Kind && n.Name == o.Name })
 		if i < 0 {
 			return fmt.Sprintf("the object %s %s", o.Kind, o.Name)
 		}
-		if nraw, _ := json.Marshal(nowObjs[i]); string(nraw) != string(raw) {
+		if nraw, _ := json.Marshal(now.Objects[i]); string(nraw) != string(raw) {
 			return fmt.Sprintf("the object %s %s", o.Kind, o.Name)
 		}
 	}
-	for _, n := range nowObjs {
-		if !slices.ContainsFunc(wasObjs, func(o AskPlanObject) bool { return o.Kind == n.Kind && o.Name == n.Name }) {
+	for _, n := range now.Objects {
+		if !slices.ContainsFunc(was.Objects, func(o AskPlanObject) bool { return o.Kind == n.Kind && o.Name == n.Name }) {
 			return fmt.Sprintf("the object %s %s", n.Kind, n.Name)
 		}
 	}

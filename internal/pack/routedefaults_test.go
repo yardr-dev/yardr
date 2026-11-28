@@ -186,13 +186,13 @@ func TestPackDoesNotLeavePeopleStageToOperatorOnlyDefault(t *testing.T) {
 	if !found {
 		t.Fatalf("the plan does not create a people-stage route; routes:\n%s", strings.Join(routeActions(plan), "\n"))
 	}
-	if !slices.Contains(actions(plan, pack.NotInPack), "route yard default stage decide originator me -> people") {
-		t.Errorf("the narrower default %s is not listed as left alone: %v", def.ID, actions(plan, pack.NotInPack))
-	}
 	apply(t, st, plan, nil)
 	routes, err := st.Routes(ctx)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(routes, func(r store.Route) bool { return r.ID == def.ID }) {
+		t.Errorf("the narrower default %s went with the import", def.ID)
 	}
 	depot := "web"
 	bead := store.Bead{Stage: "decide", Type: "task", Depot: &depot, Originator: "another-user", Priority: store.DefaultPriority}
@@ -231,9 +231,6 @@ func TestPackLeavesAQuotaWinnerToItsChain(t *testing.T) {
 			if !notesHave(plan, "stage new of flow default: worked by "+name+" "+saved.ID, "condition or further groups", "no route written") {
 				t.Errorf("notes do not leave the stage to its chain:\n%s", strings.Join(plan.Notes, "\n"))
 			}
-			if !slices.Contains(actions(plan, pack.NotInPack), "route "+map[bool]string{true: "depot web stage new -> web-builders@Weekly<80 else spare", false: "yard default stage new -> web-builders@Weekly<80 else spare"}[own]) {
-				t.Errorf("the quota route is not listed as not in the pack: %v", actions(plan, pack.NotInPack))
-			}
 			apply(t, st, plan, nil)
 			routes, _ := st.Routes(ctx)
 			var found bool
@@ -269,15 +266,6 @@ func TestPackListsBeadShapedAndUnpackedRoutesWithTheirScope(t *testing.T) {
 	}
 
 	plan := build(t, st, load(t, writePack(t, smallFiles(small))), o)
-	for _, want := range []string{
-		"route yard default stage new label difficulty:3 -> hard-builders",
-		"route yard default stage triage originator any -> people",
-		"route depot web stage new label difficulty:3 -> spare",
-	} {
-		if !slices.Contains(actions(plan, pack.NotInPack), want) {
-			t.Errorf("not in the pack = %v, want %q among them", actions(plan, pack.NotInPack), want)
-		}
-	}
 	before, _ := st.Routes(ctx)
 	apply(t, st, plan, nil)
 	after, _ := st.Routes(ctx)

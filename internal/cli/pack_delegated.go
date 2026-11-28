@@ -48,11 +48,9 @@ func (a *app) packApplyRun(c *cobra.Command, name string, f *importFlags) error 
 //
 // The list names what is taken and not what is refused, so that a flag pack
 // apply gains is refused until someone names it here, and is never accepted
-// and dropped unsaid. Under a list of the refused it was: --take was left
-// off it and applied with no word until it was found. Taking a flag is a
-// decision of its own: --yes and --take overwrite what the yard changed,
-// which is the operator's to do (pack.Apply refuses a take of a delegated
-// run as well, whoever calls it).
+// and dropped unsaid. Taking a flag is a decision of its own: --replace
+// overwrites a file the yard holds, which is the operator's to do (pack.Apply
+// refuses a replace of a delegated run as well, whoever calls it).
 //
 // What closes the other roads a flag could come in by, each read in the code
 // when this list was made:

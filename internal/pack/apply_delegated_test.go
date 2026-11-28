@@ -237,8 +237,19 @@ func TestDelegatedApplyPastInlineBeforeStateRestores(t *testing.T) {
 		t.Fatal(err)
 	}
 	applyAs(t, st, build(t, st, load(t, dir), o), answers, "jo")
+	// Give the group a large standing config so its before-state exceeds the
+	// 4 KiB inline threshold and goes into a blob on the delegated apply.
+	g0, err := st.GetGroup(ctx, "web-builders")
+	if err != nil {
+		t.Fatal(err)
+	}
+	g0.Config["args"] = []any{strings.Repeat("standing-arg ", 300)}
+	if err := st.PutGroup(ctx, *g0, "jo"); err != nil {
+		t.Fatal(err)
+	}
 	// The pack's next word changes the builders' limit, as a pack upgrade
 	// would: the group as it stands (limit 5) is the record's before-state.
+	// Changing the role in the pack reports differs and leaves the yard's copy.
 	manifest := filepath.Join(dir, "pack.yaml")
 	text, err := os.ReadFile(manifest)
 	if err != nil {
@@ -257,8 +268,6 @@ func TestDelegatedApplyPastInlineBeforeStateRestores(t *testing.T) {
 	plan := build(t, st, p, o)
 	setPlan(plan)
 	installed := find(t, plan, "file", "roles/builder.md").File.To
-	// What stands is the installed text, with the pack's names filled in:
-	// that whole text is the before-state the record must hold.
 	stood, err := os.ReadFile(installed)
 	if err != nil {
 		t.Fatal(err)
@@ -287,11 +296,11 @@ func TestDelegatedApplyPastInlineBeforeStateRestores(t *testing.T) {
 			groupObj = &body.Objects[i]
 		}
 	}
-	if fileObj == nil || !fileObj.Had || fileObj.Before != string(stood) || fileObj.Diff == "" {
-		t.Fatalf("file object in the record holds %d before bytes, want its diff and the complete %d bytes that stood", len(fileObj.Before), len(stood))
+	if fileObj == nil || fileObj.Action != pack.Differs {
+		t.Fatalf("file object in the record = %+v, want differs", fileObj)
 	}
-	if groupObj == nil || !groupObj.Had || !strings.Contains(groupObj.Before, `"limit":5`) {
-		t.Fatalf("group object in the record = %+v, want the group as it stood", groupObj)
+	if groupObj == nil || !groupObj.Had || !strings.Contains(groupObj.Before, `"limit":5`) || len(groupObj.Before) < 4096 {
+		t.Fatalf("group object in the record = %+v, want the full group before-state in the blob", groupObj)
 	}
 	if _, err := st.Delegation(ctx, rec.ID, "ada"); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("ada reads the record: %v", err)
@@ -302,15 +311,10 @@ func TestDelegatedApplyPastInlineBeforeStateRestores(t *testing.T) {
 		}
 	}
 
-	// Setting each object back from the blob restores what stood.
-	if data, err := os.ReadFile(installed); err != nil || string(data) == string(stood) {
-		t.Fatalf("installed role after the apply = %d bytes, %v; want the second text installed", len(data), err)
-	}
-	if err := os.WriteFile(installed, []byte(fileObj.Before), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	// The differing role was left untouched; restoring the group from the blob
+	// restores limit 5.
 	if data, err := os.ReadFile(installed); err != nil || string(data) != string(stood) {
-		t.Errorf("restored role = %d bytes, %v; want what stood", len(data), err)
+		t.Fatalf("installed role after the apply = %d bytes, %v; want the standing text untouched", len(data), err)
 	}
 	var g store.Group
 	if err := json.Unmarshal([]byte(groupObj.Before), &g); err != nil {
@@ -541,9 +545,20 @@ func TestDelegatedRepositoryApplyRestoresThePriorDigest(t *testing.T) {
 		t.Fatalf("first record = state %q, %+v; want done from %s with no prior digest", rec1.State, body1, from)
 	}
 
+	// Give the group a large standing config so its before-state goes into a blob.
+	g0, err := st.GetGroup(ctx, "web-builders")
+	if err != nil {
+		t.Fatal(err)
+	}
+	g0.Config["args"] = []any{strings.Repeat("standing-arg ", 300)}
+	if err := st.PutGroup(ctx, *g0, "jo"); err != nil {
+		t.Fatal(err)
+	}
+
 	// The pack's next word changes the builders' limit and the role: the
 	// record holds the digest that stood, the complete before-state past
-	// 4 KiB in its blob, and the words that take the run back.
+	// 4 KiB in its blob, and the words that take the run back; the role
+	// reports differs and stays untouched.
 	write(manifest, []byte(strings.Replace(string(manifest1), "limit: 5", "limit: 2", 1)))
 	write(role, []byte("the second builder role\n"))
 	digest2 := pin()
@@ -560,14 +575,20 @@ func TestDelegatedRepositoryApplyRestoresThePriorDigest(t *testing.T) {
 			t.Errorf("the taking-back words lack %q: %s", want, body2.Back)
 		}
 	}
-	var fileObj *store.DelegatedPackObject
+	var fileObj, groupObj *store.DelegatedPackObject
 	for i := range body2.Objects {
-		if body2.Objects[i].Kind == "file" && body2.Objects[i].Name == "roles/builder.md" {
+		switch body2.Objects[i].Kind + " " + body2.Objects[i].Name {
+		case "file roles/builder.md":
 			fileObj = &body2.Objects[i]
+		case "group web-builders":
+			groupObj = &body2.Objects[i]
 		}
 	}
-	if fileObj == nil || !fileObj.Had || fileObj.Before != string(stood) || fileObj.Diff == "" {
-		t.Fatalf("the role in the record = %+v, want its diff and the complete %d bytes that stood", fileObj, len(stood))
+	if fileObj == nil || fileObj.Action != pack.Differs {
+		t.Fatalf("the role in the record = %+v, want differs", fileObj)
+	}
+	if groupObj == nil || !groupObj.Had || !strings.Contains(groupObj.Before, `"limit":5`) {
+		t.Fatalf("the group in the record = %+v, want limit 5 before-state", groupObj)
 	}
 	if text := packTelling(t, st); !strings.Contains(text, "from "+from) || !strings.Contains(text, "sha256:"+digest1) {
 		t.Errorf("the telling = %q, want where it came from and the digest that stood", text)
@@ -581,12 +602,12 @@ func TestDelegatedRepositoryApplyRestoresThePriorDigest(t *testing.T) {
 	if _, err := repositoryRun(t, st, o, dctx, setPlan, origin, "starter", body2.Prior); err == nil || !strings.Contains(err.Error(), "is not the one pinned") {
 		t.Fatalf("a pin on bytes the origin does not serve: err = %v", err)
 	}
-	if latestDelegated(t, st).ID != rec2.ID || string(read(installed)) != "the second builder role\n" {
-		t.Error("a refused pin wrote a record or a file")
+	if latestDelegated(t, st).ID != rec2.ID || string(read(installed)) != string(stood) {
+		t.Error("a refused pin wrote a record or touched the role")
 	}
 
 	// The origin serves the first pack again: applying pinned to the
-	// recorded prior digest restores what stood.
+	// recorded prior digest restores the group limit.
 	write(manifest, manifest1)
 	write(role, role1)
 	if _, err := repositoryRun(t, st, o, dctx, setPlan, origin, "starter", body2.Prior); err != nil {
@@ -629,56 +650,59 @@ func TestDelegatedApplyRefusesATake(t *testing.T) {
 	p := load(t, dir)
 	p.Dir = "embedded in yardr test"
 	plan := build(t, st, p, o)
-	if find(t, plan, "file", "roles/builder.md").Action != pack.Kept || find(t, plan, "flow", "starter.default").Action != pack.Kept {
-		t.Fatalf("the plan keeps %v, want the role and the flow", actions(plan, pack.Kept))
+	if find(t, plan, "file", "roles/builder.md").Action != pack.Differs || find(t, plan, "flow", "starter.default").Action != pack.Differs {
+		t.Fatalf("the plan differs %v, want the role and the flow", actions(plan, pack.Differs))
 	}
 	setPlan(plan)
-	stood := storedDigest(t, st, "starter.default")
 
-	const flow, role = "flow/starter.default", "file/roles/builder.md"
-	for _, take := range [][]string{{flow}, {role}, {flow, role}} {
+	const role, script = "roles/builder.md", "scripts/merge-local"
+	scriptPath := find(t, first, "file", script).File.To
+	const scriptByHand = "#!/bin/sh\necho by hand\n"
+	if err := os.WriteFile(scriptPath, []byte(scriptByHand), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	plan = build(t, st, p, o)
+	setPlan(plan)
+
+	for _, rep := range [][]string{{role}, {script}, {role, script}} {
 		before := head(t, st)
-		res, err := pack.Apply(dctx, st, plan, pack.ApplyOptions{Answers: answered(t, plan, answers), Actor: "yardmaster", Take: take})
+		res, err := pack.Apply(dctx, st, plan, pack.ApplyOptions{Answers: answered(t, plan, answers), Actor: "yardmaster", Replace: rep})
 		if res != nil || err == nil || !strings.HasPrefix(err.Error(), "nothing was changed: ") {
-			t.Fatalf("a delegated take of %v = %+v, %v, want it refused, nothing changed", take, res, err)
+			t.Fatalf("a delegated replace of %v = %+v, %v, want it refused, nothing changed", rep, res, err)
 		}
-		// A sentence for each name, joined as the plan's own refusals of a take
-		// are, each saying a delegated apply takes nothing and where it is made.
 		sentences := strings.Split(strings.TrimPrefix(err.Error(), "nothing was changed: "), "; ")
-		if len(sentences) != len(take) {
-			t.Fatalf("a delegated take of %v = %v, want a sentence for each name", take, err)
+		if len(sentences) != len(rep) {
+			t.Fatalf("a delegated replace of %v = %v, want a sentence for each name", rep, err)
 		}
-		for i, name := range take {
-			if !strings.HasPrefix(sentences[i], "--take "+name+": a delegated apply takes nothing") || !strings.Contains(sentences[i], "the operator's, at a terminal or on a pack apply card") {
-				t.Errorf("the sentence for %s = %q, want it to say a delegated apply takes nothing, and where the operator takes", name, sentences[i])
+		for i, name := range rep {
+			if !strings.HasPrefix(sentences[i], "--replace "+name+": a delegated apply replaces nothing") || !strings.Contains(sentences[i], "the operator's, at a terminal or on a pack apply card") {
+				t.Errorf("the sentence for %s = %q, want it to say a delegated apply replaces nothing, and where the operator replaces", name, sentences[i])
 			}
 		}
-		// Before the record and the first object: no record, no event, and what
-		// the yard has of the flow and the role stands.
 		if _, err := st.Delegation(ctx, 1, "jo"); !errors.Is(err, store.ErrNotFound) {
-			t.Errorf("a refused take of %v left a delegated record: %v", take, err)
+			t.Errorf("a refused replace of %v left a delegated record: %v", rep, err)
 		}
 		if got := kinds(t, st, before); len(got) != 0 {
-			t.Errorf("a refused take of %v logged %v", take, got)
-		}
-		if got := storedDigest(t, st, "starter.default"); got != stood {
-			t.Fatalf("a refused take of %v changed the flow: %s, was %s", take, got, stood)
+			t.Errorf("a refused replace of %v logged %v", rep, got)
 		}
 		if data, err := os.ReadFile(installed); err != nil || string(data) != byHand {
-			t.Fatalf("a refused take of %v changed the role: %q, %v", take, data, err)
+			t.Fatalf("a refused replace of %v changed the role: %q, %v", rep, data, err)
+		}
+		if data, err := os.ReadFile(scriptPath); err != nil || string(data) != scriptByHand {
+			t.Fatalf("a refused replace of %v changed the script: %q, %v", rep, data, err)
 		}
 	}
 
-	// The operator's own apply of the same plan, with no delegation, takes
-	// both: it is the delegation that refuses, not the take.
-	res, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Answers: answered(t, plan, answers), Actor: "jo", Take: []string{flow, role}})
-	if err != nil || res.Changed != 2 || len(res.Kept) != 0 {
-		t.Fatalf("the operator's take of both = %+v, %v, want both changed and nothing kept", res, err)
-	}
-	if got := storedDigest(t, st, "starter.default"); got == stood {
-		t.Error("the operator's take left the yard's flow")
+	// The operator's own apply of the same plan, with no delegation, replaces
+	// both: it is the delegation that refuses, not the replace.
+	res, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Answers: answered(t, plan, answers), Actor: "jo", Replace: []string{role, script}})
+	if err != nil || res.Changed != 2 {
+		t.Fatalf("the operator's replace of both = %+v, %v, want both changed", res, err)
 	}
 	if data, err := os.ReadFile(installed); err != nil || string(data) == byHand {
-		t.Errorf("the role after the operator's take = %q, %v, want the pack's", data, err)
+		t.Errorf("the role after the operator's replace = %q, %v, want the pack's", data, err)
+	}
+	if data, err := os.ReadFile(scriptPath); err != nil || string(data) == scriptByHand {
+		t.Errorf("the script after the operator's replace = %q, %v, want the pack's", data, err)
 	}
 }

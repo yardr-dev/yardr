@@ -109,8 +109,8 @@ type importFlags struct {
 	notify     []string
 	sha256     digestFlag
 	yes        bool
-	prune      bool     // pack apply's alone
-	take       []string // so is --take
+	prune      bool     // pack apply's alone (for kind: source)
+	replace    []string // pack apply's alone
 }
 
 // digestFlag is --sha256, a pack's digest. It is held to a digest when the
@@ -138,7 +138,7 @@ func (f *importFlags) registerAnswers(c *cobra.Command) {
 	c.Flags().StringArrayVar(&f.sourceEnv, "source-env", nil, "<source>=<file>: set the file the source's credential is read from, as yardr source set <source> env_file=<file> does, for a source the pack declares (repeatable)")
 	c.Flags().StringArrayVar(&f.sourceBase, "source-base", nil, "<source>=<name>: call the declaration's region base <name> for a source the pack declares, as yardr source set <source> base=<name> does (repeatable; default: as at the last import)")
 	c.Flags().StringArrayVar(&f.notify, "notify", nil, "<user>=<source>[,<envfile>]: tell the user through the source, as yardr user set <user> notify=<source> env_file=<envfile> does, for a source the pack declares that can tell a user (repeatable)")
-	c.Flags().BoolVar(&f.yes, "yes", false, "apply without asking for confirmation, and overwrite an installed script that was edited by hand (a flow, stage file or role the yard changed is kept: --take sets the pack's)")
+	c.Flags().BoolVar(&f.yes, "yes", false, "apply without asking for confirmation")
 	c.Flags().Var(&f.sha256, "sha256", "apply only the pack whose digest this is (digest sha256:<hex>); another pack, or the same one changed since it was read, is refused before anything is asked or written")
 }
 
@@ -425,15 +425,13 @@ event.
 The pack's roles win: a group or crew member gets the pack's copied role also
 where the depot has its own .yardr/roles/<name>.md, which the plan names as
 shadowed. --depot-roles keeps the depot's own role instead; the import records
-the choice and the next one repeats it. A pack is a starting point: a flow, a
-stage file or a role that the yard changed since the last import is the
-yard's, so the import leaves it as it is, and says so in a "kept:" line (the
-plan shows it as kept; DIVERGED where the pack changed too). --take
-<kind>/<name> sets the pack's version of one instead, named as the plan prints
-it (flow/starter.default, file/flows/default/new.md; repeatable); a name that
-takes nothing refuses the import before anything is written, and --yes does
-not take. A script under <home>/packs/<pack>/ that was edited by hand is
-overwritten only with --yes: the edit belongs in the pack's source.
+the choice and the next one repeats it. Applying a line writes only what the
+yard lacks of its flows, stage files, role files, scripts, page frame and flow
+pointers: what already matches is unchanged, what reads otherwise is differs
+and left as the yard has it, and nothing is removed. --replace <file> sets the
+original's version of a differing file under <home>/packs/<pack>/ (a role's
+copy, a script or the page frame; repeatable); a stage file is changed with
+yardr flow set-stage and a flow with yardr flow set.
 
 What it asks, and the flag that answers instead:
   whether a group the yard has takes a group of   --group <pack's>=<yard's>
@@ -565,8 +563,9 @@ member gets. Those of a group or crew member the yard already has are
 never touched.
 
 Refused, changing nothing, while open beads sit in a stage the pack's flow
-lacks; the message names them. Objects an earlier import brought and the
-pack has dropped since are listed, and removed only with --prune. A running
+lacks; the message names them. For a connector (kind: source), a declared
+source the pack dropped is listed and removed only with --prune; applying a
+line never removes what the yard has. A running
 crew member whose role or subscriptions change is not restarted; the output
 says so. After what it did come the pack's setup notes, when it has any, as
 after pack check. The import is recorded (yardr pack list). See docs/packs.md.
@@ -580,8 +579,8 @@ after pack check. The import is recorded (yardr pack list). See docs/packs.md.
 	}
 	af.packFlags.register(apply, "is")
 	af.registerAnswers(apply)
-	apply.Flags().BoolVar(&af.prune, "prune", false, "remove what an earlier import of this pack brought and the pack has dropped since")
-	apply.Flags().StringArrayVar(&af.take, "take", nil, "<kind>/<name>: set the pack's version of a flow, stage file or role the yard changed and the plan keeps, named as the plan prints it (flow/starter.default, file/flows/default/new.md; repeatable)")
+	apply.Flags().BoolVar(&af.prune, "prune", false, "for a connector (kind: source): remove a declared source an earlier import brought and the pack has dropped since")
+	apply.Flags().StringArrayVar(&af.replace, "replace", nil, "<file>: overwrite a differing file under <home>/packs/<pack>/ (roles, scripts or the frame) with the pack's bytes (repeatable)")
 
 	list := &cobra.Command{
 		Use: "list", Short: "List the packs imported into this yard", Args: cobra.NoArgs,
@@ -630,13 +629,13 @@ type plannedImport struct {
 	sources map[string]string
 	// envs, tos and bases are the checked --source-env, --notify and
 	// --source-base flags, and sets what applying them did.
-	envs  []sourceEnv
-	tos   []notifyTo
-	bases []sourceBase
-	sets  *notifySets
-	prune bool
-	yes   bool
-	take  []string
+	envs    []sourceEnv
+	tos     []notifyTo
+	bases   []sourceBase
+	sets    *notifySets
+	prune   bool
+	yes     bool
+	replace []string
 }
 
 // planImport is an import up to the writing, as pack apply and depot init
@@ -663,6 +662,9 @@ func (a *app) planImport(w, warn io.Writer, ctx context.Context, cmd, arg string
 	// is the yard's frame; check alone plans a yard-wide pack without one.
 	if fits == nil && f.opts.Depot == "" && p.Kind != pack.KindSource && !p.FrameOnly() {
 		return nil, errors.New(`required flag(s) "depot" not set`)
+	}
+	if f.prune && p.Kind != pack.KindSource {
+		return nil, fmt.Errorf("pack %s: --prune is for a connector (kind: source) alone; applying a line never removes what the yard has", p.Name)
 	}
 	if fits != nil {
 		if err := fits(p); err != nil {
@@ -735,8 +737,8 @@ func (a *app) planImport(w, warn io.Writer, ctx context.Context, cmd, arg string
 		_ = a.out(w, plan, func(w io.Writer) { printPlan(w, plan, nil, nil, nil, nil, true) })
 		return nil, errCheckFailed
 	}
-	// A name that takes nothing is refused before anything is shown or asked.
-	if err := plan.CheckTake(f.take); err != nil {
+	// A file name that cannot be replaced is refused before anything is shown or asked.
+	if err := plan.CheckReplace(f.replace); err != nil {
 		return nil, err
 	}
 	// What --source-env, --notify and --source-base set for the sources
@@ -796,12 +798,7 @@ func (a *app) planImport(w, warn io.Writer, ctx context.Context, cmd, arg string
 		}
 	}
 	if !a.json {
-		printPlan(w, plan.Taking(f.take), answers, open.Answers, calls.Answers, notDone(refused, sources), false)
-	}
-	// A copy someone edited is not overwritten on a confirmation
-	// alone: the edit is lost for good, and its place is the pack.
-	if edited := plan.EditedFiles(); len(edited) > 0 && !f.yes {
-		return nil, fmt.Errorf("nothing was changed: %s; --yes proceeds", strings.Join(edited, "; "))
+		printPlan(w, plan.Replacing(f.replace), answers, open.Answers, calls.Answers, notDone(refused, sources), false)
 	}
 	// Without a terminal nothing is missing here: that failed above,
 	// before the plan. In a terminal what is still open is asked.
@@ -819,7 +816,7 @@ func (a *app) planImport(w, warn io.Writer, ctx context.Context, cmd, arg string
 		if o.Kind == "source" && sources[o.Name] != "" {
 			continue
 		}
-		if o.Action == pack.Create || o.Action == pack.Change || (f.prune && o.Action == pack.Dropped && o.Held == "") || (o.Action == pack.Kept && slices.Contains(f.take, o.TakeName())) {
+		if o.Action == pack.Create || o.Action == pack.Change || (f.prune && o.Action == pack.Dropped && o.Held == "") || (o.Action == pack.Differs && o.Kind == "file" && slices.Contains(f.replace, o.Name)) {
 			todo++
 		}
 	}
@@ -850,7 +847,7 @@ func (a *app) planImport(w, warn io.Writer, ctx context.Context, cmd, arg string
 	if err := expose.ask(); err != nil {
 		return nil, cancelled(w, err)
 	}
-	return &plannedImport{st: st, plan: plan, pack: p, opts: f.opts, answers: answers, open: open, calls: calls, expose: expose, refused: refused, sources: sources, envs: envs, tos: tos, bases: bases, prune: f.prune, yes: f.yes, take: f.take}, nil
+	return &plannedImport{st: st, plan: plan, pack: p, opts: f.opts, answers: answers, open: open, calls: calls, expose: expose, refused: refused, sources: sources, envs: envs, tos: tos, bases: bases, prune: f.prune, yes: f.yes, replace: f.replace}, nil
 }
 
 // apply writes a planned import and says what it did. extra is what the
@@ -885,7 +882,7 @@ func (i *plannedImport) apply(w io.Writer, ctx context.Context, a *app, extra ma
 			recordBase[b.source] = b.name
 		}
 	}
-	res, err := pack.Apply(ctx, i.st, i.plan, pack.ApplyOptions{Answers: i.answers, OpenThreads: i.open.Answers, Calls: i.calls.Answers, Expose: i.expose.Answers, MapRefused: i.refused, SourceRefused: i.sources, SourceBase: recordBase, Prune: i.prune, Overwrite: i.yes, Take: i.take, Actor: a.who()})
+	res, err := pack.Apply(ctx, i.st, i.plan, pack.ApplyOptions{Answers: i.answers, OpenThreads: i.open.Answers, Calls: i.calls.Answers, Expose: i.expose.Answers, MapRefused: i.refused, SourceRefused: i.sources, SourceBase: recordBase, Prune: i.prune, Replace: i.replace, Actor: a.who()})
 	if err != nil {
 		if res != nil {
 			v := map[string]any{"plan": i.plan, "answers": i.answers, "open_threads": i.open, "calls": i.calls, "expose": i.expose, "maps_refused": i.refused, "sources_refused": i.sources, "result": res}
@@ -1579,7 +1576,7 @@ func printPlan(w io.Writer, p *pack.Plan, answers pack.Answers, open, calls map[
 		fmt.Fprintf(w, "in its roles and stage files %s\n", fills(p.Fill))
 	}
 	count := map[string]int{}
-	label := map[string]string{pack.Create: "create", pack.Change: "change", pack.Unchanged: "unchanged", pack.NotInPack: "not in the pack", pack.Dropped: "no longer in it", pack.Takes: "takes", pack.Kept: "kept"}
+	label := map[string]string{pack.Create: "create", pack.Change: "change", pack.Unchanged: "unchanged", pack.Differs: "differs", pack.Dropped: "no longer in it", pack.Takes: "takes"}
 	for _, kind := range planKinds {
 		first := true
 		for _, o := range p.Objects {
@@ -1592,12 +1589,10 @@ func printPlan(w io.Writer, p *pack.Plan, answers pack.Answers, open, calls map[
 			}
 			count[o.Action]++
 			line := fmt.Sprintf("  %-15s  %s", label[o.Action], o.Name)
-			if o.Kind == "file" && o.File != nil && o.Action != pack.NotInPack {
+			if o.Kind == "file" && o.File != nil {
 				line += " -> " + o.File.To
 			}
 			switch {
-			case o.Action == pack.NotInPack:
-				line += " (would be left alone)"
 			case o.Action == pack.Takes:
 				line += " (the yard's, for the pack's " + packName(p.Groups, o.Name) + ": nothing of it would be changed)"
 			case o.Action == pack.Dropped && o.Held != "":
@@ -1606,10 +1601,10 @@ func printPlan(w io.Writer, p *pack.Plan, answers pack.Answers, open, calls map[
 				line += " (an earlier import brought it; left alone unless --prune)"
 			}
 			fmt.Fprintln(w, line)
-			if o.Edited {
-				what := "edited by hand since the last import: overwritten or removed only with --yes; the edit belongs in the pack's source"
-				if o.Kind == "flow" {
-					what = "changed since the last import: removed only with --yes (the pack no longer carries it, so no source of the pack holds the change)"
+			if o.Action == pack.Differs {
+				what := "the yard's version reads otherwise; nothing is written"
+				if o.Kind == "file" {
+					what = "the yard's copy reads otherwise; nothing is written"
 				}
 				fmt.Fprintf(w, "  %-15s    %s\n", "", what)
 			}
@@ -1798,16 +1793,16 @@ func printPlan(w io.Writer, p *pack.Plan, answers pack.Answers, open, calls map[
 			fmt.Fprintln(w, "  "+n)
 		}
 	}
-	fmt.Fprintf(w, "\n%d to create, %d to change, %d unchanged, %d not in the pack",
-		count[pack.Create], count[pack.Change], count[pack.Unchanged], count[pack.NotInPack])
+	fmt.Fprintf(w, "\n%d to create, %d to change, %d unchanged",
+		count[pack.Create], count[pack.Change], count[pack.Unchanged])
+	if n := count[pack.Differs]; n > 0 {
+		fmt.Fprintf(w, ", %d differ", n)
+	}
 	if n := count[pack.Dropped]; n > 0 {
 		fmt.Fprintf(w, ", %d no longer in it", n)
 	}
 	if n := count[pack.Takes]; n > 0 {
 		fmt.Fprintf(w, ", %d of the yard's taken", n)
-	}
-	if n := count[pack.Kept]; n > 0 {
-		fmt.Fprintf(w, ", %d kept as the yard has them", n)
 	}
 	fmt.Fprintln(w)
 	if len(p.Refused) > 0 {

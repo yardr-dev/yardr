@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -12,10 +11,8 @@ import (
 )
 
 // An up-to-date import of an embedded pack makes doctor print nothing
-// about it; a copied role as an earlier yardr left it, which the running
-// binary's differs from, makes it name the import as behind, as a notice and
-// not a fault. A role the yard changed itself is kept by an import, so it is
-// not behind: pack apply would leave it as it is.
+// about it; a copied role that differs from the running binary's makes it
+// name the import as behind, as a notice and not a fault.
 func TestDoctorNamesStaleEmbeddedPackCopy(t *testing.T) {
 	t.Parallel()
 	a := packApp(t)
@@ -29,7 +26,7 @@ func TestDoctorNamesStaleEmbeddedPackCopy(t *testing.T) {
 	if strings.Contains(out, "behind yardr") {
 		t.Fatalf("an up-to-date import is named as behind:\n%s", out)
 	}
-	// A copied role the yard changed: the import keeps it, and nothing is behind.
+	// A copied role differing from the running binary's triggers the notice.
 	role := filepath.Join(config.At(a.cfg.Home).Pack("starter"), "roles", "builder.md")
 	text, err := os.ReadFile(role)
 	if err != nil {
@@ -37,24 +34,6 @@ func TestDoctorNamesStaleEmbeddedPackCopy(t *testing.T) {
 	}
 	edited := append(text, "\nStale test edit.\n"...)
 	if err := os.WriteFile(role, edited, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if out, _ = run(t, a.doctorCmd()); strings.Contains(out, "behind yardr") {
-		t.Fatalf("a role the yard changed is named as behind:\n%s", out)
-	}
-	// The same copy as an earlier yardr's import left it: the record holds
-	// what is on disk, and the running binary's role is what moved.
-	ctx := context.Background()
-	recs, err := a.st.Packs(ctx)
-	if err != nil || len(recs) != 1 {
-		t.Fatalf("records = %+v, %v", recs, err)
-	}
-	for i, po := range recs[0].Objects {
-		if po.Kind == "file" && po.Name == role {
-			recs[0].Objects[i].SHA256 = sum256(edited)
-		}
-	}
-	if _, err := a.st.RecordPack(ctx, recs[0], true, "me"); err != nil {
 		t.Fatal(err)
 	}
 	out, _ = run(t, a.doctorCmd())

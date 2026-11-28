@@ -1008,18 +1008,15 @@ nothing else. What is not the same:
   on a card too large to read whole: `run.does` then names the pack by that
   digest and each file by its hash, and the texts stand behind it.
   `run.pack.files` ties them together, each entry `{name, line}`: `name` is
-  the object of kind `file` in `run.pack.plan.objects` that holds the text,
-  the diff and the hashes, and `line` is the zero-based index in `run.does`
+  the object of kind `file` in `run.pack.plan.objects` that holds the old
+  text where replaced, the pack's text, the diff and the hashes, and `line`
+  is the zero-based index in `run.does`
   of that file's line, or `-1` for a file folded into the card's closing count. A
   client opens a file from `files` and never parses `does`. A whole card
-  has no `summary` and no `files`. A card that takes (`run.pack.take`, the
-  flows, stage files and roles of the yard that the plan keeps and the card
-  sets to the pack's, each as the plan prints it, such as
-  `flow/starter.default`) is always whole: its `run.pack.plan` still says
-  `kept` of each, and carries a kept file's hashes, text and diff and a kept
-  flow's `flow_old_sha256`, the digest of the flow it overwrites. A kept file
-  that is a stage file of the pack's flows is marked `stage_file`: approval
-  keeps the yard's text of it in the stage history first.
+  has no `summary` and no `files`. A card that replaces (`run.pack.replace`)
+  a differing file under the line's directory is always whole: its
+  `run.pack.plan` carries the yard's full text as `old_text`, the pack's full
+  text as `text`, their hashes and the unified `diff`.
 - **`Bead`, `UserAsks` and `UserOpenAsks` tell a run ask as its asker typed it, to a device
   that is no operator's.** The `run` card has `argv`, `command` and
   `description`, and an approved ask's `ran` has `argv` and `failed`; a
@@ -1031,8 +1028,9 @@ nothing else. What is not the same:
   `run.back_by`, `run.carried` (the declarations and command files a source
   brings), `run.pack.plan` (the paths and the diffs of the files a pack
   writes), `run.pack.mappings` (the people, grants and sources that plan
-  was shaped by), `run.pack.take` (the flows and files of the yard the card
-  sets to the pack's), and `run.pack.digest`, `run.pack.summary` and
+  was shaped by), `run.pack.replace` (the differing files under the line's
+  directory the card sets to the pack's), and `run.pack.digest`,
+  `run.pack.summary` and
   `run.pack.files` (a summary card's shape, below) are absent. Where the
   typed words themselves carry a value or a
   path, they are the operator's alone: on a run ask that sets a setting, adds

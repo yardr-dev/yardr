@@ -75,7 +75,7 @@ const askRunList = `  peer add <name> <invite>
       no approval and is run directly
   call <source> <call> [param=value ...] [--as <user>]
       one call of a declared source, made when approved; a file is shown by its digest and a secret-file by its file alone
-  pack apply <name> [--yes] [--take <kind>/<name>] [--sha256 <digest>] [--depot <depot> [--flow <flow>] [--crew <pack>=<yard>] [--group <pack>=<yard>] [--bind <spec>] [--members <group>=<a,b>] [--open-threads <crew>=<sources>] [--calls <who>=<source>:<calls>]]
+  pack apply <name> [--replace <file>] [--sha256 <digest>] [--depot <depot> [--flow <flow>] [--crew <pack>=<yard>] [--group <pack>=<yard>] [--bind <spec>] [--members <group>=<a,b>] [--open-threads <crew>=<sources>] [--calls <who>=<source>:<calls>]]
       a pack yardr embeds, a directory inside a depot's main
       checkout, or the packs repository's URL pinned with --sha256,
       read at the ask and pinned by its digest: of kind
@@ -87,16 +87,12 @@ const askRunList = `  peer add <name> <invite>
       another; the card comes from the server's own reading and shows
       each source, mapping, object and file diff whole, and a
       directory past the whole-card bounds is refused, never
-      summarized; the server carries it out; with --yes over files
-      the plan says were edited by hand, which the card shows whole
-      and approval overwrites, keeping no other copy, and a --yes
-      that overwrites nothing is refused; with --take over a flow,
-      stage file or role the plan keeps because the yard changed it
-      (named as the plan prints it, flow/starter.default), which the
-      card shows whole and approval sets to the pack's, keeping no
-      other copy but a stage file's text, which goes to the stage
-      history first, and a take the plan cannot carry out is
-      refused;
+      summarized; the server carries it out; with --replace over a
+      file under the line's directory (roles/<name>, scripts/<name>,
+      frame.html) that differs from the pack, which the card shows
+      whole (diff and new text, weighty, code, never summarized) and
+      approval overwrites with the pack's bytes, keeping no other
+      copy, and a --replace that cannot be carried out is refused;
       any other URL, an imported pack, a directory outside every
       checkout, any other flag and a plan that asks stay in a
       terminal; --setup installs a pack of kind source, embedded or
@@ -279,11 +275,10 @@ const askRunList = `  peer add <name> <invite>
       first: the card shows what stands and what would stand whole, the
       stages added, removed and reordered, and the flow that stands as
       its take-back (weighty, code, a reorder alone included); a flow a
-      pack manages is carried the same way, its card saying that yardr
-      pack apply then keeps the yard's version and sets the pack's only
-      with --take flow/<name>, which its take-back names too; a removal
-      naming the beads it would strand is refused at the ask and again
-      at approval; the yardmaster files it from the operator's own mail
+      pack brought is carried the same way, its card saying that yardr
+      pack apply never overwrites an existing flow; a removal naming
+      the beads it would strand is refused at the ask and again at
+      approval; the yardmaster files it from the operator's own mail
       only
   flow set-stage <flow> <stage> [--digest <sha256|none>]
       a store flow's stage file, <home>/flows/<flow>/<stage>.md, created
@@ -294,11 +289,10 @@ const askRunList = `  peer add <name> <invite>
       mode of the file it replaces, and only where the file is as the card
       saw it (--digest names the file's SHA-256, or none where none
       stands, and a file that moved since is refused at the ask and again
-      at approval); a flow a pack manages is carried the same way, its
-      card saying that yardr pack apply then keeps the yard's copy and
-      sets the pack's only with --take file/<name>; a flow of a depot's
-      repository is refused, naming the file to change on its branch
-      (weighty, code)
+      at approval); a flow a pack brought is carried the same way, its
+      card saying that yardr pack apply never overwrites an existing
+      stage file; a flow of a depot's repository is refused, naming the
+      file to change on its branch (weighty, code)
   flow copy-repo <depot>
       the flows of the depot's repository that govern its beads (its
       default.flow, each type's file, and a named flow a pointer leads

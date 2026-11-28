@@ -287,7 +287,7 @@ func (w *wtx) delegatedPackPlan(ctx context.Context, start *DelegatedPackStart, 
 	}
 	if reading.Plan != nil {
 		var asks []string
-		for _, lines := range [][]string{reading.Plan.Missing, reading.Plan.Asks, reading.Plan.Refused, reading.Plan.Edited, reading.Plan.NonText} {
+		for _, lines := range [][]string{reading.Plan.Missing, reading.Plan.Asks, reading.Plan.Refused, reading.Plan.NonText} {
 			asks = append(asks, lines...)
 		}
 		if len(asks) > 0 {

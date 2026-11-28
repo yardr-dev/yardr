@@ -42,6 +42,11 @@ const (
 	// with legitimate calls, ask 24349): past either the pack is read at a desk.
 	MaxRunPackDeclarations = 256 << 10
 	MaxRunPackFiles        = 128 << 10
+	// MaxRunPackReplace is the most carried file text and diffs a --replace
+	// card holds together: it is never summarised and carries both the yard's
+	// full text and the pack's full text beside their diff, so a large script
+	// needs room above MaxRunPackFiles while staying below MaxRunPackCarried.
+	MaxRunPackReplace = 256 << 10
 	// MaxRunDepotTest is the most a depot test ask carries: a card
 	// shows the command whole, so past this it is the operator's to
 	// type in a terminal.

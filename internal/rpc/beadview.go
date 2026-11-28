@@ -136,7 +136,7 @@ func withoutRunWords(run *store.RunAsked, ran *store.AskRan) (*store.RunAsked, *
 	}
 	if bare.Pack != nil {
 		pack := *bare.Pack
-		pack.Plan, pack.Mappings, pack.Files, pack.Take = nil, store.Mappings{}, nil, nil
+		pack.Plan, pack.Mappings, pack.Files, pack.Replace = nil, store.Mappings{}, nil, nil
 		pack.Digest, pack.Summary = "", false
 		if heldPackDirectory(run.Argv) {
 			pack.Label = ""

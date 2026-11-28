@@ -176,6 +176,9 @@ func packObjectsLeftOut(rec *Delegation, imp PackImport) error {
 // the socket sends it, and so is the filter of a subscription, a say or a
 // make that has no key. What is stored is never changed by it.
 func normalObject(po PackObject) PackObject {
+	if po.Kind != "source" {
+		po.SHA256 = ""
+	}
 	po.Map = nonEmpty(po.Map)
 	if po.Subscription != nil {
 		s := *po.Subscription

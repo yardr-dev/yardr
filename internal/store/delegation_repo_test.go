@@ -154,13 +154,7 @@ func TestDelegatedPackFromTheRepository(t *testing.T) {
 		}
 	}
 	// Its objects are the reading's of the fetched pack, as an embedded
-	// pack's are: the hash of a file edited since refuses, and so does a
-	// record that leaves the file out.
-	edited := imp
-	edited.Objects = fakePackImportObjects("the role as someone edited it")
-	if _, err := y.api.RecordPack(packCtx, edited, true, "yardmaster"); err == nil || !strings.Contains(err.Error(), " with its sha256 as "+store.TextSum("the role the pack installs")) {
-		t.Errorf("an import record of the hash of an edited file from %s: %v", repoURL, err)
-	}
+	// pack's are: a record that leaves a file out refuses.
 	unfiled := imp
 	unfiled.Objects = imp.Objects[:1] // the group alone
 	if _, err := y.api.RecordPack(packCtx, unfiled, true, "yardmaster"); err == nil || !strings.Contains(err.Error(), "leaves out") {

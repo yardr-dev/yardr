@@ -223,15 +223,13 @@ func TestPackApplyRefusals(t *testing.T) {
 	}
 	y.setPack(&fakePack{label: "embedded in yardr test1"})
 	for _, c := range []struct{ argv, want string }{
-		{"pack apply wired --yes", "propose the apply without it"},
-		{"pack apply wired --yes=x", "--yes takes no value"},
-		{"pack apply wired --yes --yes", "one --yes, not 2"},
-		{"pack apply wired --take flow", "--take flow is not <kind>/<name>"},
-		{"pack apply wired --take flow/", "--take flow/ is not <kind>/<name>"},
-		{"pack apply wired --take flow/a --take flow/a", "--take names flow/a twice"},
-		{"pack apply wired --take", "--take needs its value"},
-		{"pack apply wired --take flow/a", "a pack of kind source keeps none"},
-		{"pack apply wired --yes --take flow/a", "propose the apply without it"},
+		{"pack apply wired --yes", "pack apply with --yes"},
+		{"pack apply wired --take flow/a", "pack apply with --take"},
+		{"pack apply wired --replace", "--replace needs its value"},
+		{"pack apply wired --replace /etc/passwd", "is not a relative file path under the line's directory"},
+		{"pack apply wired --replace ../x", "is not a relative file path under the line's directory"},
+		{"pack apply wired --replace scripts/a --replace scripts/a", "--replace names scripts/a twice"},
+		{"pack apply wired --replace scripts/a", "pack of kind source"},
 		{"pack apply wired --auth=x", "pack apply with --auth"},
 		{"pack apply wired --sha256 abc", "pack apply with --sha256"},
 		{"pack apply wired --prune", "pack apply with --prune"},
@@ -260,193 +258,7 @@ func TestPackApplyRefusals(t *testing.T) {
 	if notes, err := y.Notes(y.ctx, y.bead); err != nil || len(notes) != 0 {
 		t.Fatalf("the refused asks left %d notes, %v", len(notes), err)
 	}
-	packApplyYesRefusals(t)
-	packApplyTakeRefusals(t)
-}
-
-// An ask with --yes over a file edited by hand stores a card showing the
-// file whole, weighs the overwrite as the pack's weight over it as a
-// changed file, and approval records it to be carried out.
-func packApplyYesShowsEditedWhole(t *testing.T) {
-	t.Helper()
-	y, _ := runYard(t)
-	y.firstInstallDepot(t)
-	oldText, newText := "role old\n", "role new\n"
-	oldSum := sha256.Sum256([]byte(oldText))
-	newSum := sha256.Sum256([]byte(newText))
-	oldSHA, newSHA := hex.EncodeToString(oldSum[:]), hex.EncodeToString(newSum[:])
-	plan := &AskPlan{
-		Edited: []string{"roles/a.md was edited by hand since the last import, and the import would overwrite it"},
-		Objects: []AskPlanObject{{
-			Kind: "file", Name: "roles/a.md", Action: "change",
-			Edited: true, Runs: true,
-			FileOldSHA: oldSHA, FileNewSHA: newSHA,
-			Text: newText, Diff: Unified(oldText, newText),
-		}},
-	}
-	y.setPack(&fakePack{label: "embedded in yardr test1", kind: "git", depot: "web", plan: plan, noSources: true})
-	for _, c := range []struct{ argv, wantArgv string }{
-		{"pack apply starter --yes", "pack apply starter --yes"},
-		{"pack apply starter --depot web --yes", "pack apply starter --yes --depot web"},
-		{"pack apply starter --yes --depot web --bind reviewers=claude:opus", "pack apply starter --yes --depot web --bind reviewers=claude:opus"},
-	} {
-		ask := packAsk()
-		ask.Run.Argv = []string{c.argv}
-		seq := y.ask(t, ask, "yardmaster")
-		got := y.asked(t, seq)
-		run := got.Ask.Run
-		if strings.Join(run.Argv, " ") != c.wantArgv {
-			t.Errorf("%s: the stored argv = %q, want %q", c.argv, run.Argv, c.wantArgv)
-		}
-		if run.Pack == nil || !run.Pack.Yes {
-			t.Fatalf("%s: the stored pack = %+v, want Yes", c.argv, run.Pack)
-		}
-		joined := strings.Join(run.Does, "\n")
-		for _, want := range []string{
-			"file roles/a.md: change, sha256 " + oldSHA + " -> sha256 " + newSHA,
-			"file roles/a.md: approval overwrites the copy edited by hand with the pack's bytes and keeps no other copy of the edit.",
-		} {
-			if !strings.Contains(joined, want) {
-				t.Errorf("%s: the card lacks %q:\n%s", c.argv, want, joined)
-			}
-		}
-		stored := run.Pack.Plan.Objects[0]
-		if stored.Text != newText || stored.Diff != Unified(oldText, newText) {
-			t.Errorf("%s: the stored object carries text %q and diff %q, want the file whole", c.argv, stored.Text, stored.Diff)
-		}
-		lines := strings.Join(got.Lines(testCatalogue()), "\n")
-		for _, want := range []string{
-			"the change to file roles/a.md (sha256 " + oldSHA + " -> " + newSHA + "), whole as carried:",
-			"-role old",
-			"+role new",
-			"the file roles/a.md as the pack would install it, whole as carried:",
-		} {
-			if !strings.Contains(lines, want) {
-				t.Errorf("%s: the card does not show the edited file whole; lacks %q:\n%s", c.argv, want, lines)
-			}
-		}
-		ws := got.Ask.Weight
-		i := slices.IndexFunc(ws, func(a AskWeight) bool { return a.Class == WeightCode })
-		if i < 0 || !strings.Contains(ws[i].Line, "the hand-edited file roles/a.md of pack starter") {
-			t.Errorf("%s: weight = %+v, want code over the edited file", c.argv, ws)
-		}
-		if !StrongWeight(ws) {
-			t.Errorf("%s: weight = %+v, want strong", c.argv, ws)
-		}
-		done, err := y.ApproveAsk(y.ctx, y.bead, seq, "mckean", true, nil)
-		if err != nil {
-			t.Fatalf("%s: ApproveAsk = %v", c.argv, err)
-		}
-		if done.Result != "approved, to be carried out" {
-			t.Fatalf("%s: the approval recorded %q", c.argv, done.Result)
-		}
-	}
-}
-
-// An edited file changed again since the ask, or a new one edited since,
-// stales the approval and nothing runs.
-func packApplyYesStale(t *testing.T) {
-	t.Helper()
-	y, _ := runYard(t)
-	y.firstInstallDepot(t)
-	oldText, newText := "role old\n", "role new\n"
-	oldSum := sha256.Sum256([]byte(oldText))
-	newSum := sha256.Sum256([]byte(newText))
-	plan := &AskPlan{
-		Edited: []string{"roles/a.md was edited by hand since the last import, and the import would overwrite it"},
-		Objects: []AskPlanObject{{
-			Kind: "file", Name: "roles/a.md", Action: "change",
-			Edited: true, Runs: true,
-			FileOldSHA: hex.EncodeToString(oldSum[:]), FileNewSHA: hex.EncodeToString(newSum[:]),
-			Text: newText, Diff: Unified(oldText, newText),
-		}},
-	}
-	f := &fakePack{label: "embedded in yardr test1", kind: "git", depot: "web", plan: plan, noSources: true}
-	y.setPack(f)
-	ask := packAsk()
-	ask.Run.Argv = []string{"pack apply starter --yes"}
-	// The copy edited again: its standing hash is neither the card's old
-	// nor its new.
-	seq := y.ask(t, ask, "yardmaster")
-	newerSum := sha256.Sum256([]byte("role newer\n"))
-	f.plan.Objects[0].FileOldSHA = hex.EncodeToString(newerSum[:])
-	if _, err := y.ApproveAsk(y.ctx, y.bead, seq, "mckean", true, nil); err == nil ||
-		!strings.Contains(err.Error(), "roles/a.md") || !strings.Contains(err.Error(), nothingRan) {
-		t.Fatalf("an edited file changed again: ApproveAsk = %v", err)
-	}
-	// A new file edited since: the plan names what the card did not show.
-	f.plan.Objects[0].FileOldSHA = hex.EncodeToString(oldSum[:])
-	seq = y.ask(t, ask, "yardmaster")
-	bOld, bNew := "second old\n", "second new\n"
-	bOldSum := sha256.Sum256([]byte(bOld))
-	bNewSum := sha256.Sum256([]byte(bNew))
-	f.plan.Edited = append(f.plan.Edited, "roles/b.md was edited by hand since the last import, and the import would overwrite it")
-	f.plan.Objects = append(f.plan.Objects, AskPlanObject{
-		Kind: "file", Name: "roles/b.md", Action: "change",
-		Edited: true, Runs: true,
-		FileOldSHA: hex.EncodeToString(bOldSum[:]), FileNewSHA: hex.EncodeToString(bNewSum[:]),
-		Text: bNew, Diff: Unified(bOld, bNew),
-	})
-	if _, err := y.ApproveAsk(y.ctx, y.bead, seq, "mckean", true, nil); err == nil ||
-		!strings.Contains(err.Error(), "differs") || !strings.Contains(err.Error(), nothingRan) {
-		t.Fatalf("a new file edited since: ApproveAsk = %v", err)
-	}
-}
-
-// With --yes a plan that asks, is refused or holds non-text bytes still
-// refuses as without it, and so does one whose edited file the pack
-// dropped; --prune and the other terminal-only flags refuse naming a
-// terminal, with or without --yes.
-func packApplyYesRefusals(t *testing.T) {
-	t.Helper()
-	y, _ := runYard(t)
-	y.firstInstallDepot(t)
-	ask := packAsk()
-	ask.Run.Argv = []string{"pack apply starter --yes"}
-	for _, c := range []struct {
-		name string
-		plan AskPlan
-		want string
-	}{
-		{"a missing answer", AskPlan{Missing: []string{"group.web-builders.kind: which agent?"}}, "group.web-builders.kind: which agent?"},
-		{"an open ask", AskPlan{Asks: []string{"expose hal to the peer north"}}, "expose hal to the peer north"},
-		{"a refused plan", AskPlan{Refused: []string{"a route stands"}}, "a route stands"},
-		{"a non-text file", AskPlan{NonText: []string{"roles/a.md"}}, "roles/a.md"},
-		{"a dropped file edited by hand", AskPlan{
-			Edited:  []string{"roles/old.md was edited by hand since the last import, and the import would remove it"},
-			Objects: []AskPlanObject{{Kind: "file", Name: "roles/old.md", Action: "dropped", Edited: true}},
-		}, "in a terminal"},
-		{"an edited file past the payload bound", AskPlan{
-			Edited: []string{"roles/big.md was edited by hand since the last import, and the import would overwrite it"},
-			Objects: []AskPlanObject{{Kind: "file", Name: "roles/big.md", Action: "change",
-				Edited: true, Runs: true, Text: strings.Repeat("a", MaxRunPackFiles+1)}},
-		}, "a card holds at most"},
-	} {
-		y.setPack(&fakePack{label: "embedded in yardr test1", kind: "git", depot: "web", plan: &c.plan, noSources: true})
-		if _, err := y.AddAsk(y.ctx, y.bead, ask, "yardmaster"); err == nil || !strings.Contains(err.Error(), c.want) {
-			t.Errorf("%s: AddAsk = %v, want %q", c.name, err, c.want)
-		}
-	}
-	y.setPack(&fakePack{label: "embedded in yardr test1", kind: "git", depot: "web", plan: &AskPlan{}, noSources: true})
-	for _, argv := range []string{
-		"pack apply starter --prune",
-		"pack apply starter --depot-roles",
-		"pack apply starter --pack-roles",
-		"pack apply starter --auth x",
-		"pack apply starter --source-env a=b",
-		"pack apply starter --source-base a=b",
-		"pack apply starter --notify a=b",
-		"pack apply starter --yes --prune",
-		"pack apply starter --depot web --yes --prune",
-	} {
-		ask := packAsk()
-		ask.Run.Argv = []string{argv}
-		_, err := y.AddAsk(y.ctx, y.bead, ask, "yardmaster")
-		flag := "--" + strings.Split(argv[strings.LastIndex(argv, "--")+2:], " ")[0]
-		if err == nil || !strings.Contains(err.Error(), flag) || !strings.Contains(err.Error(), "terminal") {
-			t.Errorf("%s: AddAsk = %v, want the flag refused naming a terminal", argv, err)
-		}
-	}
+	packApplyReplaceRefusals(t)
 }
 
 // A pack of kind source is never installed through this row with a depot
@@ -599,7 +411,6 @@ func TestPackApplyFirstInstallRefusals(t *testing.T) {
 		{"an unmapped group", AskPlan{Missing: []string{"group.web-builders.kind: which agent?"}}, "group.web-builders.kind: which agent?"},
 		{"an expose question", AskPlan{Asks: []string{"expose hal to the peer north"}}, "expose hal to the peer north"},
 		{"a refused plan", AskPlan{Refused: []string{"a route stands"}}, "a route stands"},
-		{"an edited file", AskPlan{Edited: []string{"roles/a.md"}}, "roles/a.md"},
 		{"an over-cap plan", AskPlan{Objects: []AskPlanObject{{Kind: "file", Name: "big", Action: "create", Text: strings.Repeat("a", MaxRunPackFiles+1)}}}, "a card holds at most"},
 	} {
 		y.setPack(&fakePack{label: "embedded in yardr test1", kind: "git", depot: "web", plan: &c.plan})
@@ -1312,10 +1123,8 @@ func TestPackApplyDepotCardAndStale(t *testing.T) {
 	if _, err := y.ApproveAsk(y.ctx, y.bead, seq3, "mckean", false, nil); err == nil || !strings.Contains(err.Error(), "the object group builders") {
 		t.Fatalf("a moved env: ApproveAsk = %v", err)
 	}
-	packApplyYesShowsEditedWhole(t)
-	packApplyYesStale(t)
-	packApplyTakeShowsKeptWhole(t)
-	packApplyTakeStale(t)
+	packApplyReplaceShowsWhole(t)
+	packApplyReplaceStale(t)
 }
 
 // A depot ask is refused where the plan asks, where there is no single
@@ -1482,7 +1291,7 @@ func TestPackApplySummaryCard(t *testing.T) {
 		"file roles/old.md: dropped by the pack, left where it stands.",
 		"depot web would follow flow starter.default; it follows default now.",
 		"source wired: added, its calls go to https://wired.example.com/v1, with command files wired/limits sha256 ",
-		"in all: 23 to create, 1 to change, 1 unchanged, 0 not in the pack, 1 no longer in it.",
+		"in all: 23 to create, 1 to change, 1 unchanged, 1 no longer in it.",
 		"the full text stands behind this card, on this bead's page: 25 files, ",
 	} {
 		if !strings.Contains(joined, want) {
@@ -1870,64 +1679,6 @@ func TestPackApplyDirectoryStale(t *testing.T) {
 	}
 }
 
-// A subscription the pack does not carry comes, goes or changes without
-// staling the card: the apply writes nothing for a not_in_pack object and
-// the card shows nothing of it, so the approval still stands. A change to
-// what the apply would do still refuses in the same words, and a dropped
-// object that goes still refuses: those stay compared.
-func TestPackApplyStaleSkipsNotInPack(t *testing.T) {
-	t.Parallel()
-	y, _ := runYard(t)
-	_, dir, resolved := dirCheckout(t, y)
-	base := func() *AskPlan {
-		plan := firstInstallPlan()
-		plan.Objects = append(plan.Objects,
-			AskPlanObject{Kind: "subscription", Name: "yardmaster yardr all bead=yd-1 state=done", Action: "not_in_pack"},
-			AskPlanObject{Kind: "file", Name: "roles/old.md", Action: "dropped"})
-		return plan
-	}
-	f := &fakePack{name: "team", label: "directory " + resolved + " in yardr test1", build: "test1",
-		kind: "git", depot: "web", digest: dirPackDigest, plan: base(), noSources: true}
-	y.setDirPack(f)
-	for _, c := range []struct {
-		name, want string
-		approve    bool
-		move       func()
-	}{
-		{"a not_in_pack subscription removed", "", true, func() {
-			f.plan.Objects = slices.DeleteFunc(f.plan.Objects, func(o AskPlanObject) bool { return o.Action == "not_in_pack" })
-		}},
-		{"a not_in_pack subscription added", "", true, func() {
-			f.plan.Objects = append(f.plan.Objects, AskPlanObject{Kind: "subscription", Name: "yardmaster yardr all bead=yd-2 state=done", Action: "not_in_pack"})
-		}},
-		{"a not_in_pack subscription changed", "", true, func() {
-			f.plan.Objects[3].Changes = []AskChange{{Field: "state", Old: "done", New: "open"}}
-		}},
-		{"a changed file", "the object file roles/a.md", false, func() {
-			f.plan.Objects[0].Text = "role changed\n"
-		}},
-		{"a removed dropped file", "the object file roles/old.md", false, func() {
-			f.plan.Objects = slices.DeleteFunc(f.plan.Objects, func(o AskPlanObject) bool { return o.Action == "dropped" })
-		}},
-	} {
-		f.plan = base()
-		ask := packAsk()
-		ask.Run.Argv = []string{"pack apply " + dir + " --depot web"}
-		seq := y.ask(t, ask, "yardmaster")
-		c.move()
-		done, err := y.ApproveAsk(y.ctx, y.bead, seq, "mckean", true, nil)
-		if c.approve {
-			if err != nil || done.Result != "approved, to be carried out" {
-				t.Errorf("%s: ApproveAsk = %+v, %v, want approval", c.name, done, err)
-			}
-			continue
-		}
-		if err == nil || !strings.Contains(err.Error(), c.want) || !strings.Contains(err.Error(), nothingRan) {
-			t.Errorf("%s: ApproveAsk = %v, want %q with nothing run", c.name, err, c.want)
-		}
-	}
-}
-
 // A directory past any bound is refused at the ask in the embedded row's
 // words, naming pack check: no summary is written for one. A pin that
 // names another directory, or that is no digest, is refused too.
@@ -1957,8 +1708,7 @@ func TestPackApplyDirectoryRefusals(t *testing.T) {
 		{"a pin that is no digest", " --depot web --sha256 abc", `"abc": not a digest`, firstInstallPlan()},
 		{"past the file bound", " --depot web", "a card holds at most 131072 together, so this is the operator's to type in a terminal (yardr pack check " + dir + " shows it there)", &AskPlan{Objects: []AskPlanObject{{Kind: "file", Name: "big", Action: "create", Text: strings.Repeat("a", MaxRunPackFiles+1)}}}},
 		{"a plan that asks", " --depot web", "its plan asks or refuses, so no card can apply it", &AskPlan{Missing: []string{"group.web-builders.kind: which agent?"}}},
-		{"an edited file", " --depot web", "its plan asks or refuses, so no card can apply it", &AskPlan{Edited: []string{"roles/a.md"}}},
-		{"a --yes that overwrites nothing", " --depot web --yes", "propose the apply without it", firstInstallPlan()},
+		{"--yes is not a card flag", " --depot web --yes", "pack apply with --yes", firstInstallPlan()},
 	} {
 		y.setDirPack(&fakePack{name: "team", label: label, build: "test1", kind: "git",
 			depot: "web", digest: dirPackDigest, plan: c.plan, noSources: true})
@@ -2189,7 +1939,7 @@ func TestPackApplyURLSummaryCard(t *testing.T) {
 	for _, want := range []string{
 		"pack team (" + urlPackURL + "), of kind git, into depot web: 23 to create, 1 to change, 1 unchanged, and 1 dropped and left where they stand, digest sha256:" + urlPackDigest + ".",
 		"file roles/0.md: create, sha256 (none) -> sha256 " + strings.Repeat("b", 64),
-		"in all: 23 to create, 1 to change, 1 unchanged, 0 not in the pack, 1 no longer in it.",
+		"in all: 23 to create, 1 to change, 1 unchanged, 1 no longer in it.",
 	} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("the summary lacks %q:\n%s", want, joined)

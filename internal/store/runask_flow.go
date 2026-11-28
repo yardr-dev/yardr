@@ -6,13 +6,12 @@
 // card carries the whole flow as the line format writes it, its stage
 // order first, shows what stands and what would stand whole, and
 // takes the change back with the flow that stands, carried whole the
-// same way. A flow a pack manages is carried like any other: the card
-// says whose it is and what yardr pack apply then does with the yard's
-// version (keeps it, and sets the pack's only for --take), and its
-// take-back names that door too. It refuses a removal that would strand
-// a bead, naming the beads, at the ask and again at approval, as the
-// terminal command does. The yardmaster files these cards from the
-// operator's own mail only; mail from anyone else gets no filing.
+// same way. A flow copied from a line is carried like any other: the card
+// says which line it came from and that yardr pack apply writes only what
+// the yard lacks, leaving the yard's version as it is. It refuses a removal
+// that would strand a bead, naming the beads, at the ask and again at
+// approval, as the terminal command does. The yardmaster files these cards
+// from the operator's own mail only; mail from anyone else gets no filing.
 //
 // The row is registered here, beside its functions, as the group set
 // row is (runask_groupset.go), and not in runList's literal: runask.go
@@ -242,9 +241,7 @@ func (w *wtx) flowSetCard(run AskRun, asking bool) (AskRun, error) {
 	if pack, depot, err := w.flowPackManaged(want.Name); err != nil {
 		return AskRun{}, err
 	} else if pack != "" {
-		lines, door := flowPackWords(want.Name, pack, depot)
-		does = slices.Insert(does, 1, lines...)
-		back += "; or, for the pack's own version of the flow instead, " + door + " in a terminal"
+		does = slices.Insert(does, 1, flowPackWords(pack, depot)...)
 	}
 	return AskRun{
 		Argv:   run.Argv,
@@ -256,26 +253,20 @@ func (w *wtx) flowSetCard(run AskRun, asking bool) (AskRun, error) {
 	}, nil
 }
 
-// flowPackWords are the card's lines for a flow a pack manages, which
-// stand after its first line, and the terminal command that sets the
-// pack's version of it: pack apply of that pack, into the depot whose
-// import lists the flow, taking it by the name the plan prints. The
-// card changes the yard's version only, never the pack where it is
-// kept, and the lines say what pack apply then does with that change
-// (keeps it, as it keeps whatever the yard changed of a pack's flow),
+// flowPackWords are the card's lines for a flow copied from a line, which
+// stand after its first line. The card changes the yard's version only,
+// never the line's original, and says what yardr pack apply then does
+// (writes only what the yard lacks, leaving the yard's version as it is),
 // so an approver reads it before approving.
-func flowPackWords(name, pack, depot string) (lines []string, door string) {
+func flowPackWords(pack, depot string) []string {
 	into := "the yard"
-	door = "yardr pack apply " + pack
 	if depot != "" {
 		into = "depot " + depot
-		door += " --depot " + depot
 	}
-	door += " --take flow/" + name
 	return []string{
-		fmt.Sprintf("The flow is the pack %s's, imported into %s: this sets the yard's version of it, and changes nothing of the pack.", pack, into),
-		fmt.Sprintf("yardr pack apply then keeps the yard's version, whatever the pack moves, and sets the pack's again only where it is told to (--take flow/%s).", name),
-	}, door
+		fmt.Sprintf("The flow was copied from the line %s into %s: this sets the yard's version of it, and changes nothing of the line.", pack, into),
+		"yardr pack apply writes only what the yard lacks: the yard's version stays, and the plan reports it as differs.",
+	}
 }
 
 // flowDiffLines are the card's lines for what a flow change adds,
@@ -308,9 +299,8 @@ func flowDiffLines(have, want Flow) []string {
 }
 
 // flowSetStale says why the ask seq for flow set is approved no more:
-// the flow was set since, a pack's --take included, which moves the
-// flow the card saw. The stranding is the card's own again at approval
-// (flowSetProposal), in its words.
+// the flow was set since, which moves the flow the card saw. The stranding
+// is the card's own again at approval (flowSetProposal), in its words.
 func (w *wtx) flowSetStale(seq uint64, was, now AskRun) error {
 	name := was.Argv[2]
 	if key := "flow " + name; was.Seen[key] != now.Seen[key] {

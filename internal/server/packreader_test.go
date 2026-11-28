@@ -233,28 +233,17 @@ func TestReadEmbeddedDepotPack(t *testing.T) {
 		t.Fatalf("the first-install reading's subscription target = %+v, %v", subTarget, err)
 	}
 
-	// Every installed file says whether its copy was edited by hand and
-	// whether the yard runs it: a fresh checkout edits none, the yard
-	// runs its roles and scripts, and its stage files are not programs.
+	// Installed roles/scripts and stage files are both present on a fresh plan.
 	var roles, stages int
 	for _, o := range first.Plan.Objects {
 		if o.Kind != "file" || (o.Action != "create" && o.Action != "change") {
 			continue
 		}
-		if o.Edited {
-			t.Errorf("the fresh file %s reads edited", o.Name)
-		}
 		switch {
 		case strings.HasPrefix(o.Name, "roles/"), strings.HasPrefix(o.Name, "scripts/"):
 			roles++
-			if !o.Runs {
-				t.Errorf("the file %s reads as one the yard does not run", o.Name)
-			}
 		case strings.HasPrefix(o.Name, "flows/"):
 			stages++
-			if o.Runs {
-				t.Errorf("the stage file %s reads as one the yard runs", o.Name)
-			}
 		}
 	}
 	if roles == 0 || stages == 0 {
@@ -314,16 +303,14 @@ func TestReadEmbeddedDepotPack(t *testing.T) {
 	if err != nil || again.Depot != "web" || again.Plan == nil {
 		t.Fatalf("a pack held by two depots, named to one = %+v, %v", again, err)
 	}
-	askPlanMarksEditedAndRuns(t)
-	askPlanCarriesTakenWhole(t)
+	askPlanCarriesReplacedWhole(t)
 }
 
-// askPlanFrom carries a kept object whole only where the card's take names
-// it: a file with both hashes, its text and its diff, a flow with the digest
-// of the yard's, each still kept, and a taken file that is not text, as a
-// changed one, among the plan's non-text files. What is kept and not named,
-// and what the take names that is not kept, carries nothing of the kind.
-func askPlanCarriesTakenWhole(t *testing.T) {
+// askPlanFrom emits a replaced differing file as Action "change" with both
+// hashes, both full texts and their diff, leaves non-replaced differing
+// objects as Action "differs" with their changes and no text, and records a
+// non-text replaced file in NonText.
+func askPlanCarriesReplacedWhole(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
 	installed := func(name, text string) string {
@@ -336,84 +323,33 @@ func askPlanCarriesTakenWhole(t *testing.T) {
 	}
 	read := func(rel string) ([]byte, error) { return []byte("pack " + rel + "\n"), nil }
 	plan := &pack.Plan{Objects: []pack.Object{
-		{Kind: "file", Name: "roles/a.md", Action: pack.Kept, Keeps: []string{"the yard's copy"}, File: &pack.FileOp{To: installed("a.md", "by hand\n"), SHA256: "packsum"}},
-		{Kind: "file", Name: "roles/b.md", Action: pack.Kept, Keeps: []string{"the yard's copy"}, File: &pack.FileOp{To: installed("b.md", "by hand\n"), SHA256: "packsum"}},
-		{Kind: "file", Name: "roles/bin", Action: pack.Kept, Keeps: []string{"the yard's copy"}, File: &pack.FileOp{To: installed("bin", "\xff\xfe"), SHA256: "packsum"}},
+		{Kind: "file", Name: "roles/a.md", Action: pack.Differs, Changes: []pack.Diff{{Field: "content", Old: "a", New: "b"}}, File: &pack.FileOp{To: installed("a.md", "by hand\n"), SHA256: "packsum"}},
+		{Kind: "file", Name: "roles/b.md", Action: pack.Differs, Changes: []pack.Diff{{Field: "content", Old: "a", New: "b"}}, File: &pack.FileOp{To: installed("b.md", "by hand\n"), SHA256: "packsum"}},
+		{Kind: "file", Name: "roles/bin", Action: pack.Differs, Changes: []pack.Diff{{Field: "content", Old: "a", New: "b"}}, File: &pack.FileOp{To: installed("bin", "\xff\xfe"), SHA256: "packsum"}},
 		{Kind: "file", Name: "roles/c.md", Action: pack.Unchanged, File: &pack.FileOp{To: installed("c.md", "pack roles/c.md\n"), SHA256: "packsum"}},
-		{Kind: "flow", Name: "starter.default", Action: pack.Kept, Keeps: []string{"the yard's flow"}, Have: "yardsum"},
-		{Kind: "flow", Name: "starter.train", Action: pack.Kept, Keeps: []string{"the yard's flow"}, Have: "othersum"},
+		{Kind: "flow", Name: "starter.default", Action: pack.Differs, Changes: []pack.Diff{{Field: "stages", Old: "a", New: "b"}}},
 	}}
-	got := askPlanFrom(read, plan, pack.Answers{}, nil, nil, []string{"file/roles/a.md", "file/roles/bin", "file/roles/c.md", "flow/starter.default", "flow/starter.nothing"})
+	got := askPlanFrom(read, plan, pack.Answers{}, nil, nil, []string{"roles/a.md", "roles/bin", "roles/c.md"})
 	byName := map[string]store.AskPlanObject{}
 	for _, o := range got.Objects {
 		byName[o.Kind+"/"+o.Name] = o
 	}
 	sum := sha256.Sum256([]byte("by hand\n"))
-	if a := byName["file/roles/a.md"]; a.Action != "kept" || len(a.Keeps) != 1 || a.FileNewSHA != "packsum" || a.FileOldSHA != hex.EncodeToString(sum[:]) ||
-		a.Text != "pack roles/a.md\n" || !strings.Contains(a.Diff, "-by hand") || !strings.Contains(a.Diff, "+pack roles/a.md") {
-		t.Errorf("the taken file = %+v, want it kept and whole", a)
+	if a := byName["file/roles/a.md"]; a.Action != "change" || a.FileNewSHA != "packsum" || a.FileOldSHA != hex.EncodeToString(sum[:]) ||
+		a.OldText == nil || *a.OldText != "by hand\n" || a.Text != "pack roles/a.md\n" || !strings.Contains(a.Diff, "-by hand") || !strings.Contains(a.Diff, "+pack roles/a.md") {
+		t.Errorf("the replaced file = %+v, want change with both texts and diff", a)
 	}
-	if b := byName["file/roles/b.md"]; b.Action != "kept" || b.FileNewSHA != "" || b.FileOldSHA != "" || b.Text != "" || b.Diff != "" {
-		t.Errorf("the kept file no take names = %+v, want nothing whole", b)
+	if b := byName["file/roles/b.md"]; b.Action != "differs" || len(b.Changes) != 1 || b.FileNewSHA != "" || b.FileOldSHA != "" || b.Text != "" || b.Diff != "" {
+		t.Errorf("the non-replaced differing file = %+v, want differs with changes and no text", b)
 	}
-	if c := byName["file/roles/c.md"]; c.FileNewSHA != "" || c.Text != "" {
-		t.Errorf("the unchanged file a take names = %+v, want nothing whole", c)
+	if c := byName["file/roles/c.md"]; c.Action != "unchanged" || c.FileNewSHA != "" || c.Text != "" {
+		t.Errorf("the unchanged file = %+v, want unchanged and no text", c)
 	}
 	if !slices.Equal(got.NonText, []string{"roles/bin"}) {
-		t.Errorf("non-text = %q, want the taken file whose copy is not text", got.NonText)
+		t.Errorf("non-text = %q, want the replaced file whose copy is not text", got.NonText)
 	}
-	if f := byName["flow/starter.default"]; f.Action != "kept" || f.FlowOldSHA != "yardsum" {
-		t.Errorf("the taken flow = %+v, want it kept with the yard's digest", f)
-	}
-	if f := byName["flow/starter.train"]; f.Action != "kept" || f.FlowOldSHA != "" {
-		t.Errorf("the kept flow no take names = %+v, want no digest", f)
-	}
-}
-
-// askPlanFrom marks each installed file for a --yes card: whether its copy
-// was edited by hand, and whether the yard runs it — a program, a role or
-// a script, not a stage file or the page frame, which only a reader's
-// browser runs. It marks a stage file of the pack's flows too, which a card
-// that takes it says its text is kept for: the plan's own mark of a flow and
-// a stage, and not a file of the flow's directory that the pack does not
-// carry, which has a flow and no stage.
-func askPlanMarksEditedAndRuns(t *testing.T) {
-	t.Helper()
-	read := func(rel string) ([]byte, error) { return nil, fs.ErrNotExist }
-	plan := &pack.Plan{
-		Frame: &pack.FrameFile{File: "page.html"},
-		Objects: []pack.Object{
-			{Kind: "file", Name: "roles/a.md", Action: pack.Change, Edited: true, File: &pack.FileOp{To: "nowhere/a.md", Mode: "0644"}},
-			{Kind: "file", Name: "scripts/land", Action: pack.Change, File: &pack.FileOp{To: "nowhere/land", Mode: "0755"}},
-			{Kind: "file", Name: "flows/default/new.md", Action: pack.Change, File: &pack.FileOp{To: "nowhere/new.md", Flow: "mini.default", Stage: "new"}},
-			{Kind: "file", Name: "flows/default/qa/smoke.md", Action: pack.Kept, File: &pack.FileOp{To: "nowhere/qa/smoke.md", Flow: "mini.default", Stage: "qa/smoke"}},
-			{Kind: "file", Name: "flows/mini.default/notes.md", Action: pack.NotInPack, File: &pack.FileOp{To: "nowhere/notes.md", Flow: "mini.default"}},
-			{Kind: "file", Name: "page.html", Action: pack.Change, File: &pack.FileOp{To: "nowhere/page.html", Mode: "0644"}},
-		},
-	}
-	got := askPlanFrom(read, plan, pack.Answers{}, nil, nil, nil)
-	if len(got.Edited) != 1 || !strings.Contains(got.Edited[0], "nowhere/a.md") {
-		t.Fatalf("the plan's edited = %q, want the role's line", got.Edited)
-	}
-	for _, want := range []struct {
-		name                string
-		edited, runs, stage bool
-	}{
-		{"roles/a.md", true, true, false},
-		{"scripts/land", false, true, false},
-		{"flows/default/new.md", false, false, true},
-		{"flows/default/qa/smoke.md", false, false, true},
-		{"flows/mini.default/notes.md", false, false, false},
-		{"page.html", false, false, false},
-	} {
-		i := slices.IndexFunc(got.Objects, func(o store.AskPlanObject) bool { return o.Name == want.name })
-		if i < 0 {
-			t.Fatalf("the plan holds no %s", want.name)
-		}
-		if g := got.Objects[i]; g.Edited != want.edited || g.Runs != want.runs || g.StageFile != want.stage {
-			t.Errorf("%s: edited %v runs %v stage file %v, want edited %v runs %v stage file %v",
-				want.name, g.Edited, g.Runs, g.StageFile, want.edited, want.runs, want.stage)
-		}
+	if f := byName["flow/starter.default"]; f.Action != "differs" || len(f.Changes) != 1 {
+		t.Errorf("the differing flow = %+v, want differs with changes", f)
 	}
 }
 

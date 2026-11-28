@@ -9,7 +9,7 @@ package pack
 // is rewritten "done" or "failed" at the end, a failure naming the
 // objects written before it. A record that would pass the blob cap
 // refuses before anything writes (store.StartDelegatedPack), and so does a
-// take (ApplyOptions.Take), which a delegated run never makes. The
+// replace (ApplyOptions.Replace), which a delegated run never makes. The
 // partial import stays either way, and applying again finishes it. A
 // pack of the packs repository (Plan.Dir a URL) is the same run, with the
 // URL beside its digest and, in the record, the digest that stood before.
@@ -46,17 +46,14 @@ func (p *Plan) beginDelegated(ctx context.Context, st store.API, o ApplyOptions,
 	if _, ok := store.DelegationOf(ctx); !ok {
 		return nil, nil
 	}
-	// A take sets the pack's version over what the yard changed, which is the
+	// Replacing a differing file overwrites what the yard has, which is the
 	// operator's to decide, at a terminal or on a card, and a delegated run
-	// takes nothing. It is refused whatever the kind, and not by what the store
-	// happens to refuse: a flow's write is, but only after the objects before
-	// it were written, and a kind-by-kind allowance would let the next kind
-	// through. Refused here, before the record and the first object, it leaves
-	// no partial import for applying again to finish.
-	if len(o.Take) > 0 {
-		refused := make([]string, len(o.Take))
-		for i, name := range o.Take {
-			refused[i] = fmt.Sprintf("--take %s: a delegated apply takes nothing, since setting the pack's version over the yard's change is the operator's, at a terminal or on a pack apply card", name)
+	// replaces nothing. Refused here, before the record and the first object,
+	// it leaves no partial import for applying again to finish.
+	if len(o.Replace) > 0 {
+		refused := make([]string, len(o.Replace))
+		for i, name := range o.Replace {
+			refused[i] = fmt.Sprintf("--replace %s: a delegated apply replaces nothing, since overwriting the yard's copy of a file is the operator's, at a terminal or on a pack apply card", name)
 		}
 		return nil, fmt.Errorf("nothing was changed: %s", strings.Join(refused, "; "))
 	}

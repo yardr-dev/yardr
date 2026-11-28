@@ -81,10 +81,11 @@ func TestAPageFrameIsCopiedAsItStandsAndRecorded(t *testing.T) {
 	}
 	rec := record(t, st)
 	if !slices.ContainsFunc(rec.Objects, func(po store.PackObject) bool {
-		return po.Kind == "file" && po.Name == installed && po.SHA256 == hex.EncodeToString(wantSum[:])
+		return po.Kind == "file" && po.Name == installed && po.SHA256 == ""
 	}) {
-		t.Fatalf("record objects = %+v, want the frame's file with the sum of its bytes", rec.Objects)
+		t.Fatalf("record objects = %+v, want the frame's file with no sha256", rec.Objects)
 	}
+	_ = wantSum
 
 	// Again, with nothing changed.
 	before := head(t, st)
@@ -99,43 +100,33 @@ func TestAPageFrameIsCopiedAsItStandsAndRecorded(t *testing.T) {
 		t.Fatalf("the second import logged %v, want pack_unchanged alone", got)
 	}
 
-	// A copy edited in the yard is the operator's: not overwritten unasked.
+	// A copy edited in the yard differs and is left alone until --replace.
 	if err := os.WriteFile(installed, []byte("edited in the yard\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	plan = build(t, st, load(t, dir), o)
-	if f := find(t, plan, "file", "frames/page.html"); f.Action != pack.Change || !f.Edited {
-		t.Fatalf("frame after a hand edit = %+v", f)
+	if f := find(t, plan, "file", "frames/page.html"); f.Action != pack.Differs {
+		t.Fatalf("frame after a hand edit = %+v, want differs", f)
 	}
-	if _, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Actor: "me"}); err == nil || !strings.Contains(err.Error(), installed+" was edited by hand") {
-		t.Fatalf("applying over a hand edit: %v", err)
+	if res, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Actor: "me"}); err != nil || res.Wrote() || res.Differs != 1 {
+		t.Fatalf("applying over a differing frame: %+v, %v", res, err)
 	}
-	if res, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Actor: "me", Overwrite: true}); err != nil || res.Changed != 1 {
-		t.Fatalf("told to overwrite: %+v, %v", res, err)
+	if res, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Actor: "me", Replace: []string{"frames/page.html"}}); err != nil || res.Changed != 1 {
+		t.Fatalf("told to replace: %+v, %v", res, err)
 	}
 
-	// The pack drops its frame: reported, left, and removed only by --prune.
+	// The pack drops its frame: nothing is dropped or removed from disk.
 	edit(t, dir, "frame: frames/page.html\n", "")
 	plan = build(t, st, load(t, dir), o)
 	if plan.Frame != nil {
 		t.Errorf("a pack without the key has plan frame %+v", plan.Frame)
 	}
-	if got := actions(plan, pack.Dropped); !slices.Equal(got, []string{"file frames/page.html"}) {
-		t.Fatalf("dropped = %v", got)
+	if got := actions(plan, pack.Dropped); len(got) != 0 {
+		t.Fatalf("dropped = %v, want none", got)
 	}
-	if res = apply(t, st, plan, nil); len(res.Pruned) != 0 || !slices.Equal(res.Left, []string{"file frames/page.html"}) {
-		t.Fatalf("without --prune: %+v", res)
-	}
+	apply(t, st, plan, nil)
 	if _, err := os.Stat(installed); err != nil {
-		t.Fatalf("the frame was removed without --prune: %v", err)
-	}
-	plan = build(t, st, load(t, dir), o)
-	res, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Actor: "me", Prune: true})
-	if err != nil || !slices.Equal(res.Pruned, []string{"file frames/page.html"}) || len(res.Left) != 0 {
-		t.Fatalf("with --prune: %+v, %v", res, err)
-	}
-	if _, err := os.Stat(installed); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("the pruned frame remains: %v", err)
+		t.Fatalf("the frame was removed: %v", err)
 	}
 }
 
@@ -281,7 +272,7 @@ func TestFrameForResolvesDepotThenYardThenDefault(t *testing.T) {
 	}
 
 	// Edited by hand in the yard: used as it stands, under the sum of the
-	// bytes read, while the record keeps the sum of the bytes imported.
+	// bytes read; the record holds the file's name and no sum.
 	edited := frameVariant("edited by hand")
 	if err := os.WriteFile(installed, []byte(edited), 0o644); err != nil {
 		t.Fatal(err)
@@ -291,9 +282,9 @@ func TestFrameForResolvesDepotThenYardThenDefault(t *testing.T) {
 	}
 	rec := recordOf(t, st, "brand-a", "web")
 	if !slices.ContainsFunc(rec.Objects, func(po store.PackObject) bool {
-		return po.Kind == "file" && po.Name == installed && po.SHA256 == sumOf(frameVariant("brand-a"))
+		return po.Kind == "file" && po.Name == installed && po.SHA256 == ""
 	}) {
-		t.Fatalf("the record's objects = %+v, want the imported sum %s apart from the edited bytes' %s", rec.Objects, sumOf(frameVariant("brand-a")), sumOf(edited))
+		t.Fatalf("the record's objects = %+v, want the frame file with no sha256", rec.Objects)
 	}
 }
 
@@ -332,11 +323,10 @@ func TestFrameForReadsOnlyInsideThePacksDirectory(t *testing.T) {
 	}
 }
 
-// Import frame pack A into a depot, then frame pack B, then re-apply A
-// unchanged: A is active again, the plan says the choice would move and
-// the result says it moved though no file was written. Re-applying the
-// already-active pack unchanged stays pack_unchanged.
-func TestReapplyingADisplacedFramePackMovesTheChoice(t *testing.T) {
+// Applying a second frame pack into a depot that already has an active frame
+// does not displace the standing frame: brand-a stays active, brand-b installs
+// its file inactive, and re-applying brand-a stays pack_unchanged.
+func TestExistingActiveFrameIsNotDisplaced(t *testing.T) {
 	st, o := yard(t)
 	dirA, dirB := framedDir(t, "brand-a"), framedDir(t, "brand-b")
 
@@ -345,39 +335,24 @@ func TestReapplyingADisplacedFramePackMovesTheChoice(t *testing.T) {
 		t.Fatalf("the first plan's frame line = %q, want %q", plan.FrameUse, want)
 	}
 	apply(t, st, plan, nil)
-	apply(t, st, build(t, st, load(t, dirB), o), nil)
-	if rec := recordOf(t, st, "brand-a", "web"); rec.FrameActive {
-		t.Fatalf("brand-a is still the choice after brand-b: %+v", rec)
-	}
-	if f := resolve(t, st, o.Home, "web"); f.Pack != "brand-b" {
-		t.Fatalf("web's frame = %s, want brand-b", f.Pack)
-	}
 
-	// A again, unchanged: no file to write, the choice alone moves.
-	before := head(t, st)
-	plan = build(t, st, load(t, dirA), o)
-	if want := "frame: depot web would use brand-a's frame (was brand-b's)"; plan.FrameUse != want {
-		t.Fatalf("the re-apply plan's frame line = %q, want %q", plan.FrameUse, want)
+	planB := build(t, st, load(t, dirB), o)
+	if planB.FrameUse != "" {
+		t.Fatalf("brand-b plan has FrameUse %q while brand-a is active", planB.FrameUse)
 	}
-	if f := find(t, plan, "file", "frames/page.html"); f.Action != pack.Unchanged {
-		t.Fatalf("brand-a's frame again = %+v, want unchanged", f)
-	}
-	res := apply(t, st, plan, nil)
-	if res.Wrote() || !res.Recorded || !res.FrameMoved {
-		t.Fatalf("re-applying the displaced pack = %+v, want no file written, the record written and the choice moved", res)
-	}
-	if got := kinds(t, st, before); !slices.Equal(got, []string{"pack_applied"}) {
-		t.Fatalf("the re-apply logged %v, want pack_applied alone", got)
-	}
+	apply(t, st, planB, nil)
 	if rec := recordOf(t, st, "brand-a", "web"); !rec.FrameActive {
-		t.Fatalf("brand-a is not the choice again: %+v", rec)
+		t.Fatalf("brand-a lost its active frame after brand-b: %+v", rec)
 	}
 	if rec := recordOf(t, st, "brand-b", "web"); rec.FrameActive {
-		t.Fatalf("brand-b is still the choice: %+v", rec)
+		t.Fatalf("brand-b became active over brand-a: %+v", rec)
+	}
+	if f := resolve(t, st, o.Home, "web"); f.Pack != "brand-a" {
+		t.Fatalf("web's frame = %s, want brand-a", f.Pack)
 	}
 
 	// The already-active pack again: nothing moves, nothing is written.
-	before = head(t, st)
+	before := head(t, st)
 	plan = build(t, st, load(t, dirA), o)
 	if plan.FrameUse != "" {
 		t.Fatalf("the active pack's plan has a frame line %q", plan.FrameUse)
@@ -411,133 +386,39 @@ func TestApplyingAPackWithoutAFrameChangesNoSelection(t *testing.T) {
 }
 
 // When the active pack is next imported without a frame, its scope falls
-// back a step and no other pack is promoted: brand-b displaced brand-a in
-// the depot, drops its frame, and the depot takes the yard's frame, with
-// brand-a inactive still.
+// back a step and no other pack is promoted: brand-a is active in the depot
+// while brand-b is inactive, brand-a drops its frame, and the depot takes the
+// yard's frame, with brand-b inactive still.
 func TestDroppingTheActiveFrameFallsBackWithNoPromotion(t *testing.T) {
 	st, o := yard(t)
 	apply(t, st, build(t, st, load(t, framedDir(t, "brand-yard")), pack.Options{Home: o.Home}), nil)
-	dirB := framedDir(t, "brand-b")
-	apply(t, st, build(t, st, load(t, framedDir(t, "brand-a")), o), nil)
-	apply(t, st, build(t, st, load(t, dirB), o), nil)
-	if f := resolve(t, st, o.Home, "web"); f.Pack != "brand-b" {
-		t.Fatalf("web's frame = %s, want brand-b", f.Pack)
+	dirA := framedDir(t, "brand-a")
+	apply(t, st, build(t, st, load(t, dirA), o), nil)
+	apply(t, st, build(t, st, load(t, framedDir(t, "brand-b")), o), nil)
+	if f := resolve(t, st, o.Home, "web"); f.Pack != "brand-a" {
+		t.Fatalf("web's frame = %s, want brand-a", f.Pack)
 	}
 
-	edit(t, dirB, "frame: frames/page.html\n", "")
-	plan := build(t, st, load(t, dirB), o)
-	if got := actions(plan, pack.Dropped); !slices.Equal(got, []string{"file frames/page.html"}) {
-		t.Fatalf("dropped = %v, want the frame file alone", got)
+	edit(t, dirA, "frame: frames/page.html\n", "")
+	plan := build(t, st, load(t, dirA), o)
+	if got := actions(plan, pack.Dropped); len(got) != 0 {
+		t.Fatalf("dropped = %v, want none", got)
 	}
-	res := apply(t, st, plan, nil)
-	if len(res.Pruned) != 0 || !slices.Equal(res.Left, []string{"file frames/page.html"}) {
-		t.Fatalf("without --prune: %+v", res)
+	apply(t, st, plan, nil)
+	if rec := recordOf(t, st, "brand-a", "web"); rec.Frame != "" || rec.FrameActive {
+		t.Fatalf("brand-a's record after the drop = frame %q, active %v", rec.Frame, rec.FrameActive)
 	}
-	if rec := recordOf(t, st, "brand-b", "web"); rec.Frame != "" || rec.FrameActive {
-		t.Fatalf("brand-b's record after the drop = frame %q, active %v", rec.Frame, rec.FrameActive)
-	}
-	if rec := recordOf(t, st, "brand-a", "web"); rec.FrameActive {
-		t.Fatalf("brand-a was promoted by brand-b's drop: %+v", rec)
+	if rec := recordOf(t, st, "brand-b", "web"); rec.FrameActive {
+		t.Fatalf("brand-b was promoted by brand-a's drop: %+v", rec)
 	}
 	if f := resolve(t, st, o.Home, "web"); f.Pack != "brand-yard" {
 		t.Fatalf("web's frame after the drop = %s, want the yard's brand-yard", f.Pack)
 	}
 }
 
-// prune applies the plan with --prune, as pack apply --prune does.
-func prune(t *testing.T, st store.API, plan *pack.Plan) *pack.Result {
-	t.Helper()
-	res, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Answers: answered(t, plan, nil), Actor: "me", Prune: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return res
-}
-
-// A dropped frame file is one installed copy shared by every scope: a
-// prune in one scope keeps it while another scope's active record names
-// it, the plan naming the holders, and only the last active scope's drop
-// lets it go. The importing scope falls back at once, and the holding
-// scope's next page is still framed. Two depots first, then a depot and
-// the yard.
-func TestPruningADroppedFrameIsHeldByTheScopesStillUsingIt(t *testing.T) {
-	st, o := yard(t)
-	if err := st.PutDepot(ctx, store.Depot{Name: "site", Base: "main"}, "me"); err != nil {
-		t.Fatal(err)
-	}
-	site := pack.Options{Depot: "site", Home: o.Home}
-	yardOpts := pack.Options{Home: o.Home}
-	apply(t, st, build(t, st, load(t, framedDir(t, "brand-yard")), yardOpts), nil)
-
-	// Two depots share brand's one installed copy.
-	dir := framedDir(t, "brand")
-	installed := filepath.Join(config.At(o.Home).Pack("brand"), "frames", "page.html")
-	apply(t, st, build(t, st, load(t, dir), o), nil)
-	apply(t, st, build(t, st, load(t, dir), site), nil)
-
-	edit(t, dir, "frame: frames/page.html\n", "")
-	plan := build(t, st, load(t, dir), o)
-	dropped := find(t, plan, "file", "frames/page.html")
-	if dropped.Action != pack.Dropped || dropped.Held != "still the active frame in depot site" {
-		t.Fatalf("the dropped frame in web's plan = %+v, want held by depot site", dropped)
-	}
-	res := prune(t, st, plan)
-	if !slices.Equal(res.Left, []string{"file frames/page.html"}) || len(res.Pruned) != 0 {
-		t.Fatalf("pruning in web = %+v, want the held file left", res)
-	}
-	if _, err := os.Stat(installed); err != nil {
-		t.Fatalf("the held frame was removed: %v", err)
-	}
-	if f := resolve(t, st, o.Home, "site"); f.Pack != "brand" {
-		t.Fatalf("site's frame = %s, want brand still", f.Pack)
-	}
-	if f := resolve(t, st, o.Home, "web"); f.Pack != "brand-yard" {
-		t.Fatalf("web's frame = %s, want the yard's brand-yard it fell back to", f.Pack)
-	}
-
-	// The last depot drops it: the file goes.
-	plan = build(t, st, load(t, dir), site)
-	if dropped := find(t, plan, "file", "frames/page.html"); dropped.Held != "" {
-		t.Fatalf("the dropped frame in site's plan is held: %+v", dropped)
-	}
-	if res := prune(t, st, plan); !slices.Equal(res.Pruned, []string{"file frames/page.html"}) || len(res.Left) != 0 {
-		t.Fatalf("pruning in site = %+v", res)
-	}
-	if _, err := os.Stat(installed); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("the frame remains after its last scope dropped it: %v", err)
-	}
-	if f := resolve(t, st, o.Home, "site"); f.Pack != "brand-yard" {
-		t.Fatalf("site's frame = %s, want the yard's brand-yard", f.Pack)
-	}
-
-	// One depot and the yard share brand-two's copy the same way.
-	dir = framedDir(t, "brand-two")
-	installed = filepath.Join(config.At(o.Home).Pack("brand-two"), "frames", "page.html")
-	apply(t, st, build(t, st, load(t, dir), o), nil)
-	apply(t, st, build(t, st, load(t, dir), yardOpts), nil)
-	edit(t, dir, "frame: frames/page.html\n", "")
-	plan = build(t, st, load(t, dir), o)
-	if dropped := find(t, plan, "file", "frames/page.html"); dropped.Held != "still the active frame in the yard" {
-		t.Fatalf("the dropped frame in web's plan = %+v, want held by the yard", dropped)
-	}
-	if res := prune(t, st, plan); len(res.Pruned) != 0 {
-		t.Fatalf("pruning in web pruned the held frame: %+v", res)
-	}
-	if f := resolve(t, st, o.Home, ""); f.Pack != "brand-two" {
-		t.Fatalf("the yard's frame = %s, want brand-two still", f.Pack)
-	}
-	plan = build(t, st, load(t, dir), yardOpts)
-	if res := prune(t, st, plan); !slices.Equal(res.Pruned, []string{"file frames/page.html"}) {
-		t.Fatalf("pruning in the yard = %+v", res)
-	}
-	if _, err := os.Stat(installed); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("the frame remains after the yard dropped it: %v", err)
-	}
-}
-
-// Applying a changed version of a pack under the same name replaces the
-// one installed copy every scope that names it reads, and the plan names
-// the other scopes before anything is written.
+// Replacing a changed frame file under the same name updates the one
+// installed copy every scope that names it reads, and removing a shared
+// frame recreates it for every scope.
 func TestAChangedFramePackServesEveryScopeThatNamesIt(t *testing.T) {
 	st, o := yard(t)
 	if err := st.PutDepot(ctx, store.Depot{Name: "site", Base: "main"}, "me"); err != nil {
@@ -554,16 +435,19 @@ func TestAChangedFramePackServesEveryScopeThatNamesIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	plan := build(t, st, load(t, dir), o)
-	if f := find(t, plan, "file", "frames/page.html"); f.Action != pack.Change {
-		t.Fatalf("the changed frame = %+v, want a change", f)
+	if f := find(t, plan, "file", "frames/page.html"); f.Action != pack.Differs {
+		t.Fatalf("the changed frame = %+v, want differs", f)
 	}
 	if plan.FrameUse != "" {
 		t.Fatalf("brand is already web's choice, and its plan has a frame line %q", plan.FrameUse)
 	}
-	if !slices.Equal(plan.FrameShared, []string{"depot site", "the yard"}) {
-		t.Fatalf("the plan's shared scopes = %v, want depot site and the yard", plan.FrameShared)
+	// Without --replace, the yard's copy stands.
+	if res := apply(t, st, plan, nil); res.Wrote() || res.Differs != 1 {
+		t.Fatalf("apply without --replace = %+v", res)
 	}
-	apply(t, st, plan, nil)
+	if res, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Actor: "me", Replace: []string{"frames/page.html"}}); err != nil || res.Changed != 1 {
+		t.Fatalf("replace frame = %+v, %v", res, err)
+	}
 	if text, err := os.ReadFile(installed); err != nil || string(text) != frameVariant("brand v2") {
 		t.Fatalf("the installed copy = %q, %v: want the changed frame", text, err)
 	}
@@ -573,9 +457,7 @@ func TestAChangedFramePackServesEveryScopeThatNamesIt(t *testing.T) {
 		}
 	}
 
-	// The same pack can move its frame key while other scopes still name
-	// its old installed path. Those scopes keep that file and must not be
-	// told that a change to the new path reaches them.
+	// Moving the frame key to a new path creates it and leaves the old file.
 	newRel := "frames/another.html"
 	newInstalled := filepath.Join(config.At(o.Home).Pack("brand"), filepath.FromSlash(newRel))
 	if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(newRel)), []byte(frameVariant("brand v3")), 0o644); err != nil {
@@ -589,29 +471,12 @@ func TestAChangedFramePackServesEveryScopeThatNamesIt(t *testing.T) {
 	if len(plan.FrameShared) != 0 {
 		t.Fatalf("the new path is not used by site or the yard, but shared scopes = %v", plan.FrameShared)
 	}
-	if dropped := find(t, plan, "file", "frames/page.html"); !strings.Contains(dropped.Held, "depot site") || !strings.Contains(dropped.Held, "the yard") {
-		t.Fatalf("the old frame path = %+v, want both scopes still using it", dropped)
-	}
-	apply(t, st, plan, nil)
-
-	// Changing the new path still reaches only its active scopes, even
-	// though all three records name the same pack.
-	if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(newRel)), []byte(frameVariant("brand v4")), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	plan = build(t, st, load(t, dir), o)
-	if f := find(t, plan, "file", newRel); f.Action != pack.Change {
-		t.Fatalf("the changed new frame = %+v, want a change", f)
-	}
-	if len(plan.FrameShared) != 0 {
-		t.Fatalf("site and the yard still name the old path, but shared scopes = %v", plan.FrameShared)
-	}
 	apply(t, st, plan, nil)
 	apply(t, st, build(t, st, load(t, dir), site), nil)
 	apply(t, st, build(t, st, load(t, dir), pack.Options{Home: o.Home}), nil)
 
-	// If the shared installed file has gone missing, restoring it is also
-	// a change for every other scope that names that path.
+	// If the shared installed file has gone missing, restoring it is a create
+	// and names the other scopes that read it.
 	if err := os.Remove(newInstalled); err != nil {
 		t.Fatal(err)
 	}
@@ -624,7 +489,7 @@ func TestAChangedFramePackServesEveryScopeThatNamesIt(t *testing.T) {
 	}
 	apply(t, st, plan, nil)
 	for _, depot := range []string{"web", "site", ""} {
-		if f := resolve(t, st, o.Home, depot); f.SHA256 != sumOf(frameVariant("brand v4")) {
+		if f := resolve(t, st, o.Home, depot); f.SHA256 != sumOf(frameVariant("brand v3")) {
 			t.Fatalf("%q reads frame %s, want the restored copy's sum", depot, f.SHA256)
 		}
 	}

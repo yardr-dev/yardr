@@ -675,7 +675,7 @@ func TestUpgradeStalePackLine(t *testing.T) {
 		want  string
 	}{
 		{"stale names the copy and the first depot's command, and a matching copy is no entry", []string{"pr-ci"},
-			"packs/contributors/scripts/pr-ci is stale until the pack is re-applied: yardr pack apply contributors --depot zebra"},
+			"packs/contributors/scripts/pr-ci is stale until replaced: yardr pack apply contributors --depot zebra --replace scripts/pr-ci"},
 		{"unrefreshed script is no entry", []string{"pr-train"}, ""},
 		{"unknown name is no entry", []string{"nosuch"}, ""},
 		{"no names is no entry", nil, ""},
@@ -687,7 +687,7 @@ func TestUpgradeStalePackLine(t *testing.T) {
 
 	// Two stale copies join on one line, in the order of the names.
 	if got, want := upgradeStalePackLine(checkout, []string{home}, []string{"pr-ci", "merge-local"}, packsOf),
-		"packs/contributors/scripts/pr-ci is stale until the pack is re-applied: yardr pack apply contributors --depot zebra; packs/contributors/scripts/merge-local is stale until the pack is re-applied: yardr pack apply contributors --depot zebra"; got != want {
+		"packs/contributors/scripts/pr-ci is stale until replaced: yardr pack apply contributors --depot zebra --replace scripts/pr-ci; packs/contributors/scripts/merge-local is stale until replaced: yardr pack apply contributors --depot zebra --replace scripts/merge-local"; got != want {
 		t.Errorf("two stale copies: line = %q, want %q", got, want)
 	}
 
@@ -695,7 +695,7 @@ func TestUpgradeStalePackLine(t *testing.T) {
 	linear := scriptsHome(t, map[string]string{"pr-ci": scriptOld})
 	packsCopy(t, linear, "linear", "pr-ci", scriptOld)
 	if got, want := upgradeStalePackLine(checkout, []string{linear}, []string{"pr-ci"}, packsOf),
-		"packs/linear/scripts/pr-ci is stale until the pack is re-applied: yardr pack apply linear"; got != want {
+		"packs/linear/scripts/pr-ci is stale until replaced: yardr pack apply linear --replace scripts/pr-ci"; got != want {
 		t.Errorf("yard-wide pack: line = %q, want %q", got, want)
 	}
 
@@ -756,7 +756,7 @@ func TestUpgradeStalePackLine(t *testing.T) {
 		}
 		return nil, "first-yard", true
 	}
-	want := "yard second-yard: packs/contributors/scripts/pr-ci is stale until the pack is re-applied: yardr pack apply contributors --depot r"
+	want := "yard second-yard: packs/contributors/scripts/pr-ci is stale until replaced: yardr pack apply contributors --depot r --replace scripts/pr-ci"
 	if got := upgradeStalePackLine(checkout, []string{first, second}, []string{"pr-ci"}, packsOfSeveral); got != want {
 		t.Errorf("several yards: line = %q, want %q", got, want)
 	}
@@ -766,7 +766,7 @@ func TestUpgradeStalePackLine(t *testing.T) {
 		}
 		return nil, "yardr", true
 	}
-	want = "yard yardr (2): packs/contributors/scripts/pr-ci is stale until the pack is re-applied: yardr pack apply contributors --depot r"
+	want = "yard yardr (2): packs/contributors/scripts/pr-ci is stale until replaced: yardr pack apply contributors --depot r --replace scripts/pr-ci"
 	if got := upgradeStalePackLine(checkout, []string{first, second}, []string{"pr-ci"}, duplicateNames); got != want {
 		t.Errorf("duplicate yard names: line = %q, want %q", got, want)
 	}
@@ -795,7 +795,7 @@ func testUpgradeRunPrintsStalePackCopies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("upgrade: %v\n%s", err, out)
 	}
-	want := "packscripts  packs/contributors/scripts/merge-local is stale until the pack is re-applied: yardr pack apply contributors --depot yardr\n"
+	want := "packscripts  packs/contributors/scripts/merge-local is stale until replaced: yardr pack apply contributors --depot yardr --replace scripts/merge-local\n"
 	if !strings.Contains(out, want) {
 		t.Fatalf("the output lacks %q:\n%s", want, out)
 	}

@@ -723,13 +723,10 @@ holds the text already. The approval is held to the file as the card saw it,
 so one that appeared, changed, was removed or was emptied since is refused
 with nothing written. Shown whole or not, the text that stands is kept as a
 save keeps it, and the card's take-back names the file: `yardr flow set-stage
-<flow> <stage> -f <home>/stage-history/<sha256>`. For a flow a pack manages
-the card says so: it sets the yard's copy of the stage file and changes
-nothing of the pack, and `yardr pack apply` then keeps the yard's copy,
-whatever the pack moves, and sets the pack's only where it is told to
-(`--take file/<name>`, the name `yardr pack check <pack>` gives the file),
-keeping the yard's text in the stage history first. A pack apply does not
-write a `flow_set` event. A save through `yardr flow set-stage` is recorded
+<flow> <stage> -f <home>/stage-history/<sha256>`. For a flow copied from a line the card says so: it sets the yard's copy of
+the stage file and changes nothing of the line, and `yardr pack apply` writes
+only what the yard lacks, leaving the yard's copy as it is and reporting it as
+`differs`. A pack apply does not write a `flow_set` event. A save through `yardr flow set-stage` is recorded
 as `flow_set`, with the `stage` beside the `flow`, and the `digest` and
 `prev_digest` above.
 

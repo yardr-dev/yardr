@@ -34,36 +34,46 @@ func (b *planner) flows(flows []Flow) error {
 	var ptrObjects []Object
 	for _, f := range flows {
 		sf := f.StoreFlow(FlowName(b.p.Name, f.Name))
-		want[sf.Name] = sf
-		var changes []Diff
 		i := slices.IndexFunc(have, func(h store.Flow) bool { return h.Name == sf.Name })
-		if i >= 0 {
-			changes = flowDiff(have[i], sf)
-		}
-		o := Object{Kind: "flow", Name: sf.Name, Action: action(i >= 0, changes), Changes: changes, Flow: &sf}
-		// A flow the yard changed stays as it is, and what stays is what the
-		// beads that follow it are held to below, not the pack's version.
-		if len(changes) > 0 {
-			if keeps := b.keepFlow(have[i], sf); keeps != nil {
-				o.Action, o.Keeps, want[sf.Name] = Kept, keeps, have[i]
-				o.Have, _ = have[i].Digest()
+		if i < 0 {
+			want[sf.Name] = sf
+			b.add(Object{Kind: "flow", Name: sf.Name, Action: Create, Flow: &sf})
+		} else {
+			// A flow the yard already has stays as it is, and what stays is
+			// what the beads that follow it are held to below.
+			want[sf.Name] = have[i]
+			hd, _ := have[i].Digest()
+			wd, _ := sf.Digest()
+			if hd == wd {
+				b.add(Object{Kind: "flow", Name: sf.Name, Action: Unchanged, Flow: &sf})
+			} else {
+				changes := flowDiff(have[i], sf)
+				if len(changes) == 0 && hd != "" && wd != "" {
+					changes = []Diff{{"flow", "digest " + hd[:min(12, len(hd))], "digest " + wd[:min(12, len(wd))]}}
+				}
+				b.add(Object{Kind: "flow", Name: sf.Name, Action: Differs, Changes: changes, Flow: &sf})
 			}
 		}
-		b.add(o)
 
 		ptr := store.FlowPointer{Depot: b.o.Depot, Type: f.Type, Flow: sf.Name}
-		changes = nil
 		j := slices.IndexFunc(after, func(p store.FlowPointer) bool { return p.Depot == ptr.Depot && p.Type == ptr.Type })
-		if j >= 0 {
-			if after[j].Flow != ptr.Flow {
-				changes = []Diff{{"flow", after[j].Flow, ptr.Flow}}
-			}
-			after[j] = ptr
-		} else {
+		var g Governs
+		if j < 0 {
 			after = append(after, ptr)
+			ptrObjects = append(ptrObjects, Object{Kind: "pointer", Name: ptr.String() + " -> " + ptr.Flow, Action: Create, Pointer: &ptr})
+			g = Governs{Type: f.Type, Flow: sf.Name, Source: "store", Now: now[f.Type], InPack: true}
+		} else {
+			// Where the depot already follows a flow for this type, that
+			// pointer stays and nothing is written.
+			cur := after[j]
+			if cur.Flow == ptr.Flow {
+				ptrObjects = append(ptrObjects, Object{Kind: "pointer", Name: cur.String() + " -> " + cur.Flow, Action: Unchanged, Pointer: &cur})
+				g = Governs{Type: f.Type, Flow: cur.Flow, Source: "store", Now: now[f.Type], InPack: true}
+			} else {
+				ptrObjects = append(ptrObjects, Object{Kind: "pointer", Name: cur.String() + " -> " + cur.Flow, Action: Differs, Changes: []Diff{{"flow", cur.Flow, ptr.Flow}}, Pointer: &cur})
+				g = Governs{Type: f.Type, Flow: cur.Flow, Source: "store", Now: now[f.Type], InPack: false}
+			}
 		}
-		ptrObjects = append(ptrObjects, Object{Kind: "pointer", Name: ptr.String() + " -> " + ptr.Flow, Action: action(j >= 0, changes), Changes: changes, Pointer: &ptr})
-		g := Governs{Type: f.Type, Flow: sf.Name, Source: "store", Now: now[f.Type], InPack: true}
 		if g.Now == "" {
 			g.Now = "none"
 			if f.Type != "" {
@@ -79,7 +89,6 @@ func (b *planner) flows(flows []Flow) error {
 		if p.Depot != b.o.Depot || slices.ContainsFunc(flows, func(f Flow) bool { return f.Type == p.Type }) {
 			continue
 		}
-		b.add(Object{Kind: "pointer", Name: p.String() + " -> " + p.Flow, Action: NotInPack, Pointer: &p})
 		b.plan.Governs = append(b.plan.Governs, Governs{Type: p.Type, Flow: p.Flow, Source: "store", Now: now[p.Type]})
 	}
 	// A depot pointer in the store wins over the repository as a whole: its
@@ -212,33 +221,6 @@ func (b *planner) routes(flows []Flow) error {
 		depot := b.o.Depot
 		return store.MatchRoute(have, store.Bead{Stage: s.Name, Type: f.Type, Depot: &depot, Priority: store.DefaultPriority}, operator, byName)
 	}
-	taken := map[string]bool{}
-	// markTypedTaken hides the depot's existing typed routes for the stage
-	// when the last import brought them and the plan leaves the stage to
-	// its plain route: dropped() then reports the one Dropped, and no
-	// NotInPack stands beside it with the originator in its name. A copy
-	// the yard has without a record stays listed as not in the pack.
-	markTypedTaken := func(stage, typ string) {
-		if b.rec == nil {
-			return
-		}
-		var group string
-		found := false
-		for _, po := range b.rec.Objects {
-			if po.Kind == "route" && po.Stage == stage && po.Type == typ {
-				group, found = po.Group, true
-				break
-			}
-		}
-		if !found {
-			return
-		}
-		for _, r := range have {
-			if r.Stage == stage && r.Depot != nil && *r.Depot == b.o.Depot && !r.ByBead() && deref(r.Type) == typ && !r.Quotaed() && r.Worker() == group {
-				taken[r.ID] = true
-			}
-		}
-	}
 	for _, f := range flows {
 		for _, s := range f.Stages {
 			if s.Group == "" {
@@ -251,7 +233,6 @@ func (b *planner) routes(flows []Flow) error {
 				// stops and says so instead of writing over it.
 				if !s.End {
 					if w := winner(f, s); w != nil && w.Depot == nil {
-						taken[w.ID] = true
 						b.plan.Refused = append(b.plan.Refused, fmt.Sprintf("stage %s of flow %s: the pack routes it to nobody, but yard default %s works it to %s; a pack import may not remove a yard default: remove it by hand (yardr route rm %s), or give the stage a group in the pack", s.Name, f.Name, w.ID, w.GroupList(), w.ID))
 						continue
 					}
@@ -264,7 +245,6 @@ func (b *planner) routes(flows []Flow) error {
 				for _, r := range have {
 					if r.Stage == s.Name && r.Depot != nil && *r.Depot == b.o.Depot && !r.ByBead() && deref(r.Type) == f.Type {
 						old = append(old, r)
-						taken[r.ID] = true
 					}
 				}
 				if len(old) > 0 {
@@ -298,7 +278,6 @@ func (b *planner) routes(flows []Flow) error {
 			// A winner with a condition or further groups is left to its
 			// chain: a pack names one group for a stage and cannot say a
 			// condition, so it writes no route over it, of either scope.
-			// The route is listed below as not in the pack.
 			if w != nil && w.Quotaed() {
 				scope := "own route"
 				if w.Depot == nil {
@@ -312,7 +291,6 @@ func (b *planner) routes(flows []Flow) error {
 			// is written, so a fresh depot inherits the default and a
 			// re-apply resurrects no copy the migration removed.
 			if w != nil && w.Depot == nil && w.Worker() == op.Group && plainRouteForStage(*w, f.Type, operator, op.Originator) {
-				taken[w.ID] = true
 				b.plan.Notes = append(b.plan.Notes, fmt.Sprintf("stage %s of flow %s: worked by yard default %s to %s; no route written", s.Name, f.Name, w.ID, w.Worker()))
 				continue
 			}
@@ -325,13 +303,10 @@ func (b *planner) routes(flows []Flow) error {
 			// covers.
 			if f.Type != "" {
 				if plain := plainOwnForTyped(have, b.o.Depot, s.Name, op.Group, operator, op.Originator); plain != nil {
-					taken[plain.ID] = true
-					markTypedTaken(s.Name, f.Type)
 					b.plan.Notes = append(b.plan.Notes, fmt.Sprintf("stage %s of flow %s: worked by own plain route %s to %s; no route written", s.Name, f.Name, plain.ID, plain.Worker()))
 					continue
 				}
 				if plannedPlainCovers(b.plan.Objects, b.o.Depot, s.Name, op.Group, op.Originator) {
-					markTypedTaken(s.Name, f.Type)
 					b.plan.Notes = append(b.plan.Notes, fmt.Sprintf("stage %s of flow %s: worked by own plain route to %s; no route written", s.Name, f.Name, op.Group))
 					continue
 				}
@@ -343,14 +318,7 @@ func (b *planner) routes(flows []Flow) error {
 			for _, r := range have {
 				if r.Stage == s.Name && r.Depot != nil && *r.Depot == b.o.Depot && !r.ByBead() && deref(r.Type) == f.Type {
 					old = append(old, r)
-					taken[r.ID] = true
 				}
-			}
-			// Only an own route with the same match key sets a default
-			// aside. A typed or originator-filtered default can still work
-			// other beads, so leave it listed when this route has another key.
-			if w != nil && w.Depot == nil && sameStageRouteKey(*w, s.Name, f.Type, operator, op.Originator) {
-				taken[w.ID] = true
 			}
 			var changes []Diff
 			if len(old) > 0 {
@@ -375,39 +343,6 @@ func (b *planner) routes(flows []Flow) error {
 			}
 			b.add(Object{Kind: "route", Name: name + " -> " + op.Group, Action: action(len(old) > 0, changes), Changes: changes, Route: op})
 		}
-	}
-	for _, r := range have {
-		if taken[r.ID] {
-			continue
-		}
-		if r.Depot != nil && *r.Depot != b.o.Depot {
-			continue
-		}
-		// What is left alone is listed with its scope: routes that ask
-		// something of the single bead and routes for stages the pack
-		// lacks, of either scope, and a quota winner left to its chain.
-		// A default handled above (worked by it, or set aside by the
-		// own route just planned) is taken and does not appear here.
-		name := "depot " + b.o.Depot + " stage " + r.Stage
-		depot := b.o.Depot
-		if r.Depot == nil {
-			name = "yard default stage " + r.Stage
-			depot = ""
-		}
-		if r.Type != nil {
-			name += " type " + *r.Type
-		}
-		if l := r.LabelList(); l != "" {
-			name += " label " + l
-		}
-		if p := r.BeadPriorities(); p != "" {
-			name += " beads " + p
-		}
-		if r.Originator != nil {
-			name += " originator " + *r.Originator
-		}
-		b.add(Object{Kind: "route", Name: name + " -> " + r.GroupList(), Action: NotInPack,
-			Route: &RouteOp{Stage: r.Stage, Depot: depot, Type: deref(r.Type), Group: r.Worker()}})
 	}
 	return nil
 }
@@ -485,31 +420,6 @@ func plannedPlainCovers(objects []Object, depot, stage, group, originator string
 		}
 	}
 	return false
-}
-
-// sameStageRouteKey reports whether r has the match key of the own route
-// the pack would write: the same stage and type, no bead filters, and the
-// same resolved originator. Only that own route sets r aside as a default.
-func sameStageRouteKey(r store.Route, stage, typ, operator, originator string) bool {
-	if r.Stage != stage || len(r.Labels()) > 0 || r.BeadPriority != nil {
-		return false
-	}
-	if typ == "" {
-		if r.Type != nil {
-			return false
-		}
-	} else if r.Type == nil || *r.Type != typ {
-		return false
-	}
-	gotOriginator := operator
-	if r.Originator != nil {
-		gotOriginator = *r.Originator
-	}
-	wantOriginator := operator
-	if originator != "" {
-		wantOriginator = originator
-	}
-	return gotOriginator == wantOriginator
 }
 
 func deref(p *string) string {

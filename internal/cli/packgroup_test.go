@@ -67,7 +67,7 @@ func TestPackCheckGroupFlag(t *testing.T) {
 		"  takes            triage (the yard's, for the pack's backlog: nothing of it would be changed)\n",
 		"  create           depot web stage new -> yardr-builders\n",
 		"  create           depot web stage backlog -> triage\n",
-		"0 not in the pack, 2 of the yard's taken\n",
+		"0 unchanged, 2 of the yard's taken\n",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the plan lacks %q:\n%s", want, out)

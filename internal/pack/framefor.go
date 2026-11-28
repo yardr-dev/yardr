@@ -163,29 +163,22 @@ func (b *planner) frameObject() error {
 }
 
 // frameUse settles the plan's frame lines from the scope's active record
-// before anything is written, never from the newest import's At: the line
-// that says whose frame the scope would use, and, where the plan changes
-// the frame's bytes, the other scopes the one installed copy serves.
+// before anything is written, never from the newest import's At: a frame is
+// chosen for the scope only where the scope has none yet, so a second pack
+// with a frame does not take the scope from the one it has.
 func (b *planner) frameUse() {
 	if b.p.Frame == nil {
 		return
 	}
 	scope := b.o.Depot
-	was := packs.PageFrame
 	if rec, ok := activeFrame(b.all, scope); ok {
-		if rec.Pack == b.p.Name {
-			was = "" // already the scope's choice: no move to say
-		} else {
-			was = rec.Pack
-		}
-	}
-	if was != "" {
-		b.plan.FrameUse = fmt.Sprintf("frame: %s would use %s's frame (was %s's)", inDepot(scope), b.p.Name, was)
+		b.plan.frameActive = rec.Pack == b.p.Name
+	} else {
+		b.plan.frameActive = true
+		b.plan.FrameUse = fmt.Sprintf("frame: %s would use %s's frame (was %s's)", inDepot(scope), b.p.Name, packs.PageFrame)
 	}
 	// One installed copy serves every scope whose active record names
-	// this path, so changed or restored bytes reach them together; the
-	// plan names them before anything is written. A pack can change its
-	// frame path between imports, leaving its scopes on different files.
+	// this path, so newly created or replaced bytes reach them together.
 	installed := b.plan.installedFrame()
 	for _, o := range b.plan.Objects {
 		if o.Kind != "file" || o.Name != b.p.Frame.File || (o.Action != Create && o.Action != Change) {

@@ -235,7 +235,8 @@ func upgradeStalePackLine(checkout string, homes, names []string, packsOf func(h
 				if stale.depot != "" {
 					cmd += " --depot " + stale.depot
 				}
-				out = append(out, where+" is stale until the pack is re-applied: "+cmd)
+				cmd += " --replace scripts/" + stale.name
+				out = append(out, where+" is stale until replaced: "+cmd)
 			}
 		}
 	}

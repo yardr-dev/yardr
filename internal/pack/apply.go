@@ -28,20 +28,16 @@ type Answers map[string]string
 // ApplyOptions say how a plan is applied.
 type ApplyOptions struct {
 	Answers Answers
-	// Prune removes the plan's dropped objects, those not held.
+	// Prune removes the plan's dropped objects, those not held (for a
+	// connector's declared sources).
 	Prune bool
-	// Overwrite lets the import replace an installed file that was edited
-	// by hand since the last import; without it such a plan is refused.
-	Overwrite bool
-	// Take names the objects the import sets to the pack's though the yard
-	// changed them (Kept), each as the plan prints it (Object.TakeName):
-	// flow/starter.default, file/roles/builder.md. Overwrite does not take a
-	// flow, a stage file or a role: it only lifts the stop of a script or the
-	// frame. A name that is no kept object of the plan refuses the import
-	// before anything is written, a declared source's among them, and so
-	// does any name at all in a delegated apply, which takes nothing
-	// (beginDelegated): a take is the operator's.
-	Take []string
+	// Replace names the differing files under the line's own directory
+	// (roles, scripts or the page frame) to overwrite with the line's bytes,
+	// each as its path in the pack (scripts/merge-local, roles/builder.md).
+	// A name that is no differing file under the line's directory refuses
+	// the import before anything is written, and so does any name in a
+	// delegated apply (beginDelegated): replacing a file is the operator's.
+	Replace []string
 	// OpenThreads are the operator's answers to what the plan asks under
 	// OpenThreads: the yard's crew member -> source -> yes or no. A yes lets
 	// the crew member open threads in the source, a no is recorded so the next
@@ -128,7 +124,7 @@ func (p *Plan) Missing(a Answers) []Question {
 // not folded in leaves the import applied and recorded, and the error
 // names the source.
 func Apply(ctx context.Context, st store.API, p *Plan, o ApplyOptions) (res *Result, err error) {
-	res = &Result{Pack: p.Pack, Depot: p.Depot, Pruned: []string{}, Left: []string{}, PruneErrors: []string{}, Restart: []string{}, Granted: []Grant{}, Calls: []CallGrant{}, Exposed: []Exposed{}, Mapped: []MapOp{}, Declared: []string{}, Folds: []Fold{}, Kept: []string{}}
+	res = &Result{Pack: p.Pack, Depot: p.Depot, Pruned: []string{}, Left: []string{}, PruneErrors: []string{}, Restart: []string{}, Granted: []Grant{}, Calls: []CallGrant{}, Exposed: []Exposed{}, Mapped: []MapOp{}, Declared: []string{}, Folds: []Fold{}}
 	ck, err := check(p, o)
 	if err != nil {
 		return nil, err
@@ -158,18 +154,17 @@ func Apply(ctx context.Context, st store.API, p *Plan, o ApplyOptions) (res *Res
 		case Unchanged:
 			res.Unchanged++
 			continue
-		case NotInPack, Dropped, Takes:
+		case Dropped, Takes:
 			continue
-		case Kept:
-			// Left as the yard has it, and said so, unless told to take the
-			// pack's: it is then written as the change it is.
-			if !o.takes(*obj) {
-				res.Kept = append(res.Kept, obj.keptWords())
+		case Differs:
+			// Left as the yard has it unless --replace names this file.
+			if !o.replaces(*obj, p.Install) {
+				res.Differs++
 				continue
 			}
-			taken := *obj
-			taken.Action = Change
-			obj = &taken
+			replaced := *obj
+			replaced.Action = Change
+			obj = &replaced
 		}
 		if obj.refused(o) {
 			continue
@@ -333,12 +328,10 @@ func (p *Plan) ImportRecord(o ApplyOptions) store.PackImport {
 		}
 		rec.Objects = append(rec.Objects, po)
 	}
-	// The frame the import brought, and its choice for the scope: a plan
-	// carrying a frame makes its record the scope's active one, which
-	// RecordPack writes by clearing the scope's others; a plan with none
-	// is built inactive and leaves the scope's choice untouched.
+	// The frame the import brought, and its choice for the scope: chosen
+	// only where the scope had none yet or this pack was already active.
 	if p.Frame != nil {
-		rec.Frame, rec.FrameActive = p.installedFrame(), true
+		rec.Frame, rec.FrameActive = p.installedFrame(), p.frameActive
 	}
 	// A pack in no directory (one yardr embeds) has no commit of its own:
 	// its source names the build it came in.
@@ -470,10 +463,11 @@ func check(p *Plan, o ApplyOptions) (*checked, error) {
 	if v := o.Answers[FlowQuestion]; v != "" && v != p.Flow {
 		problems = append(problems, fmt.Sprintf("the plan is for flow %s, not %s: make it again with that flow", p.Flow, v))
 	}
-	if !o.Overwrite {
-		problems = append(problems, p.EditedFiles()...)
+	if len(o.Replace) > 0 && p.Kind == KindSource {
+		problems = append(problems, fmt.Sprintf("pack %s is of kind source: --replace sets the original's version of a differing file under a line's directory, and a pack of kind source has none", p.Pack))
+	} else {
+		problems = append(problems, p.replaceProblems(o.Replace)...)
 	}
-	problems = append(problems, p.takeProblems(o.Take)...)
 	// An answer is to a question of the plan: a source the yard lacks, or
 	// one the pack does not name, is granted to nobody.
 	for _, name := range slices.Sorted(maps.Keys(o.OpenThreads)) {
@@ -504,10 +498,10 @@ func check(p *Plan, o ApplyOptions) (*checked, error) {
 	}
 	ck := &checked{files: map[string][]byte{}, commands: map[string]map[string][]byte{}}
 	for _, obj := range p.Objects {
-		if o.takes(obj) {
-			taken := obj
-			taken.Action = Change // a taken object is checked as the change it is
-			obj = taken
+		if o.replaces(obj, p.Install) {
+			replaced := obj
+			replaced.Action = Change // a replaced file is checked as the change it is
+			obj = replaced
 		}
 		if v := o.Answers["crew."+obj.Name+".crew"]; obj.Kind == "crew" && v != "" && v != obj.Name {
 			problems = append(problems, fmt.Sprintf("the plan gives the pack's %s to crew member %s, not %s: make it again with that crew member", obj.CrewMember.Pack, obj.Name, v))
@@ -518,10 +512,6 @@ func check(p *Plan, o ApplyOptions) (*checked, error) {
 		answer := func(field string) string { return o.Answers[obj.Kind+"."+obj.Name+"."+field] }
 		asks := func(field string) bool { return slices.Contains(obj.Asks, obj.Kind+"."+obj.Name+"."+field) }
 		switch {
-		case obj.Action == Dropped && obj.Kind == "file":
-			if !p.Removable(obj.File.To) {
-				problems = append(problems, fmt.Sprintf("file %s is neither under %s nor a stage file of the pack's flows under %s: it is not removed", obj.File.To, p.Install, p.StageFiles))
-			}
 		case obj.Action != Create && obj.Action != Change:
 		case obj.Kind == "file":
 			text, err := p.read(obj.File)
@@ -617,16 +607,6 @@ func write(ctx context.Context, st store.API, p *Plan, obj *Object, o ApplyOptio
 	answer := func(field string) (string, bool) { return answerOf(obj, field) }
 	switch obj.Kind {
 	case "file":
-		// A stage file with text in it is kept first, in the history a save of it
-		// keeps its text in, and the import stops here where that cannot be
-		// done: a text is never replaced unkept. It holds for every write of a
-		// stage file, not for a take alone, since the pack's own change goes
-		// over the text the last import wrote.
-		if obj.File.StageFile() {
-			if _, err := store.KeepStageFile(p.Home, obj.File.Flow, obj.File.Stage, ck.files[obj.File.To]); err != nil {
-				return fmt.Errorf("keep the text it replaces: %w", err)
-			}
-		}
 		return install(obj.File, ck.files[obj.File.To])
 	case "group":
 		g := *obj.Group
@@ -840,30 +820,25 @@ func installFile(op *FileOp, text []byte, once bool) error {
 }
 
 // pruneOrder is the order dropped objects are removed in: a route before
-// the group it leads to, a pointer before the flow it points at, a flow
-// before its stage files.
-var pruneOrder = []string{"route", "pointer", "flow", "group", "subscription", "map", "source", "file"}
+// the group it leads to.
+var pruneOrder = []string{"route", "group", "subscription", "map", "source"}
 
 // prune removes the plan's dropped objects, or with no prune asked for
 // only lists them as left. It returns the keys of those removed.
 func prune(ctx context.Context, st store.API, p *Plan, o ApplyOptions, res *Result) map[string]bool {
 	gone := map[string]bool{}
-	// kept are the flows whose removal failed: their stage files stay with
-	// them, for the beads that still follow the flow.
-	kept := map[string]bool{}
 	for _, kind := range pruneOrder {
 		for _, obj := range p.Objects {
 			if obj.Action != Dropped || obj.Kind != kind {
 				continue
 			}
 			what := obj.Kind + " " + obj.Name
-			if !o.Prune || obj.Held != "" || (obj.Kind == "file" && obj.File != nil && kept[obj.File.Flow]) {
+			if !o.Prune || obj.Held != "" {
 				res.Left = append(res.Left, what)
 				continue
 			}
 			note, err := remove(ctx, st, p, obj, o.Actor)
 			if err != nil {
-				kept[obj.Name] = obj.Kind == "flow"
 				res.Left = append(res.Left, what)
 				res.PruneErrors = append(res.PruneErrors, what+": "+err.Error())
 				continue
@@ -886,10 +861,6 @@ func remove(ctx context.Context, st store.API, p *Plan, obj Object, actor string
 				return "", err
 			}
 		}
-	case "pointer":
-		err = st.SetFlowPointer(ctx, obj.Pointer.Depot, obj.Pointer.Type, "", actor)
-	case "flow":
-		err = st.DeleteFlow(ctx, obj.Name, actor)
 	case "group":
 		var released int
 		if released, err = st.DeleteGroup(ctx, obj.Name, actor); released > 0 {
@@ -915,8 +886,6 @@ func remove(ctx context.Context, st store.API, p *Plan, obj Object, actor string
 		if err == nil {
 			err = source.RemoveCommandFiles(p.Home, obj.Name)
 		}
-	case "file":
-		err = os.Remove(obj.File.To)
 	}
 	if errors.Is(err, store.ErrNotFound) || errors.Is(err, os.ErrNotExist) {
 		err = nil // gone already

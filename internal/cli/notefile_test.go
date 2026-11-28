@@ -590,17 +590,21 @@ func TestBeadNoteDressesAFragment(t *testing.T) {
 	// meeting the contract, is used as it stands: the page records the sum of
 	// the bytes read, apart from the sum the import recorded.
 	installed := a.installFrame(t, "brand", brandFrame("Classes: .meta"), "")
-	imported := ""
+	imported := sum256([]byte(brandFrame("Classes: .meta")))
 	recs, err := a.st.Packs(ctx)
+	var recordedFrame bool
 	for _, r := range recs {
 		for _, o := range r.Objects {
-			if r.Pack == "brand" && o.Kind == "file" {
-				imported = o.SHA256
+			if r.Pack == "brand" && o.Kind == "file" && o.Name == installed {
+				recordedFrame = true
+				if o.SHA256 != "" {
+					t.Fatalf("the import recorded sha256 %q on a frame file, want empty", o.SHA256)
+				}
 			}
 		}
 	}
-	if err != nil || imported != sum256([]byte(brandFrame("Classes: .meta"))) {
-		t.Fatalf("the import recorded %q, %v", imported, err)
+	if err != nil || !recordedFrame {
+		t.Fatalf("the import did not record %s: %v", installed, err)
 	}
 	edited := strings.Replace(brandFrame("Classes: .meta"), "</style>", "p{margin:0}</style>", 1)
 	if err := os.WriteFile(installed, []byte(edited), 0o644); err != nil {

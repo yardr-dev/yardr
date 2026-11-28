@@ -590,23 +590,23 @@ func blankHeld(q *store.AskQueue) {
 }
 
 // A pack card's mappings name the people, grants and sources its plan was
-// shaped by, as its sentences do, and its take names the flows and files of
-// the yard it sets to the pack's: a device that is no operator's keeps the
+// shaped by, as its sentences do, and its replace names the files of the yard
+// it overwrites with the pack's: a device that is no operator's keeps the
 // pack's name and depot and is told none of them, and the card it was cut
 // from is left as it was.
 func TestWithoutRunWordsHoldsAPackCardsMappings(t *testing.T) {
 	mappings := store.Mappings{Flow: "default", Members: []string{"decisions=sam"}, Calls: []string{"builders=linear:read"}}
 	run := &store.RunAsked{Argv: []string{"pack", "apply", "starter"},
 		Pack: &store.AskPack{Name: "starter", Depot: "web", Mappings: mappings, Plan: &store.AskPlan{},
-			Digest: "abc", Summary: true, Files: []store.AskPackFile{{Name: "roles/builder.md", Line: 2}}, Take: []string{"flow/starter.default"}}}
+			Digest: "abc", Summary: true, Files: []store.AskPackFile{{Name: "roles/builder.md", Line: 2}}, Replace: []string{"scripts/merge-local"}}}
 	bare, _ := withoutRunWords(run, nil)
 	if bare.Pack.Name != "starter" || bare.Pack.Depot != "web" {
 		t.Errorf("the device lost the pack's name or depot: %+v", bare.Pack)
 	}
-	if !bare.Pack.Mappings.IsZero() || bare.Pack.Plan != nil || bare.Pack.Files != nil || bare.Pack.Digest != "" || bare.Pack.Summary || bare.Pack.Take != nil {
-		t.Errorf("the device is told the card's mappings, plan, files, digest or take: %+v", bare.Pack)
+	if !bare.Pack.Mappings.IsZero() || bare.Pack.Plan != nil || bare.Pack.Files != nil || bare.Pack.Digest != "" || bare.Pack.Summary || bare.Pack.Replace != nil {
+		t.Errorf("the device is told the card's mappings, plan, files, digest or replace: %+v", bare.Pack)
 	}
-	if run.Pack.Mappings.IsZero() || run.Pack.Plan == nil || len(run.Pack.Take) != 1 {
+	if run.Pack.Mappings.IsZero() || run.Pack.Plan == nil || len(run.Pack.Replace) != 1 {
 		t.Errorf("the cut changed the card it was given: %+v", run.Pack)
 	}
 	path := "/home/jo/projects/yardr/packs/team"

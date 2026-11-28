@@ -45,8 +45,8 @@ func TestImportAfterAGroupWasRenamedBringsTheOldNameBackNowhere(t *testing.T) {
 	}
 
 	plan := build(t, st, load(t, dir), o)
-	if c, ch, n := actions(plan, pack.Create), actions(plan, pack.Change), actions(plan, pack.NotInPack); len(c)+len(ch)+len(n) != 0 {
-		t.Fatalf("an import after the rename would create %v, change %v, and finds %v not in the pack", c, ch, n)
+	if c, ch, d := actions(plan, pack.Create), actions(plan, pack.Change), actions(plan, pack.Differs); len(c)+len(ch)+len(d) != 0 {
+		t.Fatalf("an import after the rename would create %v, change %v, differs %v", c, ch, d)
 	}
 	if len(plan.Questions) != 0 {
 		t.Fatalf("the import asks %v", plan.Questions)

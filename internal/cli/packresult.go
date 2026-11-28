@@ -12,7 +12,7 @@ import (
 )
 
 // printResult says what an import did, after pack apply wrote it: its counts,
-// what was pruned, left and kept, and then what is still owed for each of its
+// what was pruned and left, and then what is still owed for each of its
 // answers, sources and stage maps.
 func printResult(w io.Writer, plan *pack.Plan, res *pack.Result, pruning bool, answers pack.Answers, open *openAnswers, calls *callAnswers, expose *exposeAnswers, refused map[string]string, sets *notifySets) {
 	fmt.Fprintln(w)
@@ -21,8 +21,8 @@ func printResult(w io.Writer, plan *pack.Plan, res *pack.Result, pruning bool, a
 		if len(res.Pruned) > 0 {
 			fmt.Fprintf(w, ", %d pruned", len(res.Pruned))
 		}
-		if len(res.Kept) > 0 {
-			fmt.Fprintf(w, ", %d kept", len(res.Kept))
+		if res.Differs > 0 {
+			fmt.Fprintf(w, ", %d differs", res.Differs)
 		}
 		fmt.Fprintln(w)
 	} else {
@@ -30,11 +30,6 @@ func printResult(w io.Writer, plan *pack.Plan, res *pack.Result, pruning bool, a
 	}
 	for _, s := range res.Pruned {
 		fmt.Fprintln(w, "  pruned  "+s)
-	}
-	// What the yard changed is left as it is, and the way to the pack's
-	// version is in each line.
-	for _, s := range res.Kept {
-		fmt.Fprintln(w, "  kept: "+s)
 	}
 	if len(res.Left) > 0 {
 		hint := "yardr pack apply … --prune removes them"

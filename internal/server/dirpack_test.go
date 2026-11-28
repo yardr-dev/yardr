@@ -103,6 +103,7 @@ func TestDirectoryPackApplyEndToEnd(t *testing.T) {
 	}
 	writeMiniPack(t, dir, "build v2\n", "review v2\n")
 	ask := packAskOf(dir)
+	ask.Run.Argv = []string{"pack apply " + dir + " --replace roles/builder.md --replace roles/reviewer.md"}
 	seq, err := st.AddAsk(ctx, bead, ask, "yardmaster")
 	if err != nil {
 		t.Fatal(err)

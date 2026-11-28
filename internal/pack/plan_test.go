@@ -289,7 +289,7 @@ func TestStarterIntoAnEmptyYard(t *testing.T) {
 	}
 	if len(plan.Objects) != len(want) {
 		t.Fatalf("an empty yard has only things to create; the plan also has %v %v %v",
-			actions(plan, pack.Change), actions(plan, pack.Unchanged), actions(plan, pack.NotInPack))
+			actions(plan, pack.Change), actions(plan, pack.Unchanged), actions(plan, pack.Differs))
 	}
 	var ids []string
 	for _, q := range plan.Questions {
@@ -780,8 +780,8 @@ func TestSecondImportChangesNothing(t *testing.T) {
 	apply(t, st, build(t, st, load(t, dir), o), answers)
 
 	plan := build(t, st, load(t, dir), o)
-	if c, ch, n := actions(plan, pack.Create), actions(plan, pack.Change), actions(plan, pack.NotInPack); len(c)+len(ch)+len(n) != 0 {
-		t.Fatalf("a second import would create %v, change %v, and finds %v not in the pack", c, ch, n)
+	if c, ch, d := actions(plan, pack.Create), actions(plan, pack.Change), actions(plan, pack.Differs); len(c)+len(ch)+len(d) != 0 {
+		t.Fatalf("a second import would create %v, change %v, differs %v", c, ch, d)
 	}
 	if len(plan.Objects) != 39 || len(plan.Questions) != 0 {
 		t.Fatalf("%d objects, questions %v", len(plan.Objects), plan.Questions)
@@ -840,11 +840,14 @@ func TestSecondImportChangesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	plan = build(t, st, load(t, dir), o)
-	if got, want := actions(plan, pack.Change), []string{"file roles/reviewer.md", "group web-builders"}; !reflect.DeepEqual(got, want) {
+	if got, want := actions(plan, pack.Change), []string{"group web-builders"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("change = %v, want %v", got, want)
 	}
-	if c, n := actions(plan, pack.Create), actions(plan, pack.NotInPack); len(c)+len(n) != 0 {
-		t.Fatalf("create %v, not in the pack %v", c, n)
+	if got, want := actions(plan, pack.Differs), []string{"file roles/reviewer.md"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("differs = %v, want %v", got, want)
+	}
+	if c := actions(plan, pack.Create); len(c) != 0 {
+		t.Fatalf("create %v", c)
 	}
 	if got, want := find(t, plan, "group", "web-builders").Changes, []pack.Diff{{Field: "limit", Old: 5, New: 2}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("web-builders changes = %v", got)
@@ -852,8 +855,10 @@ func TestSecondImportChangesNothing(t *testing.T) {
 	if got := find(t, plan, "file", "roles/reviewer.md").Changes; len(got) != 1 || got[0].Field != "content" {
 		t.Fatalf("reviewer.md changes = %v", got)
 	}
-	// And applying those two brings the yard level again.
-	apply(t, st, plan, nil)
+	// Applying the group change and replacing the role brings the yard level again.
+	if _, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Answers: answered(t, plan, nil), Actor: "me", Replace: []string{"roles/reviewer.md"}}); err != nil {
+		t.Fatal(err)
+	}
 	plan = build(t, st, load(t, dir), o)
 	if got := actions(plan, pack.Unchanged); len(got) != 39 {
 		t.Fatalf("after applying the change: %d unchanged of %d", len(got), len(plan.Objects))
@@ -908,12 +913,6 @@ func TestYardSetUpByHand(t *testing.T) {
 	}
 	if got, want := actions(plan, pack.Change), []string{"subscription boss linear involved"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("change = %v\nwant %v", got, want)
-	}
-	// The hand-made typed copies for stages both flows share are left
-	// alone: the plain route covers them (yardr-3jst). The routes were
-	// added from maps, so their order is the store's, not the test's.
-	if got, want := slices.Sorted(slices.Values(actions(plan, pack.NotInPack))), slices.Sorted(slices.Values([]string{"group web-mergers", "route depot web stage backlog type train originator any -> backlog", "route depot web stage review type train -> web-reviewers", "route depot web stage review-security type train -> web-security-reviewers", "route depot web stage approved type train originator any -> web-assembly", "route depot web stage decide type train originator any -> decisions", "route depot web stage merge -> web-mergers", "subscription boss yardr all label=ui"})); !reflect.DeepEqual(got, want) {
-		t.Fatalf("not in the pack = %v\nwant %v", got, want)
 	}
 	b := find(t, plan, "group", "web-builders")
 	if b.Action != pack.Unchanged || len(b.Changes) != 0 || b.Group.Config["prompt"] != "roles/builder.md" {
@@ -1136,9 +1135,6 @@ func TestStageWithoutGroupRemovesExistingRoute(t *testing.T) {
 	if route.Route.Group != "" || !slices.Equal(route.Route.Delete, []string{old.ID}) || route.Changes[0].New != "(no route)" {
 		t.Fatalf("route operation = %+v", route)
 	}
-	if got := actions(plan, pack.NotInPack); slices.Contains(got, "route depot web stage triage -> old") {
-		t.Fatalf("old route also shown as left alone: %v", got)
-	}
 	apply(t, st, plan, nil)
 	routes, err := st.Routes(ctx)
 	if err != nil {
@@ -1185,10 +1181,7 @@ func TestOpenBeadInAStageTheFlowLacks(t *testing.T) {
 	if len(plan.Refused) != 1 || !strings.Contains(plan.Refused[0], "flow starter.default lacks the stage of open beads that would follow it: "+stray+" (triage);") {
 		t.Fatalf("refused = %q", plan.Refused)
 	}
-	if got, want := actions(plan, pack.NotInPack), []string{}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("not in the pack = %v", got)
-	}
-	if g := plan.Governs; len(g) != 2 || g[1].Type != "train" || g[1].Flow != "starter.train" || g[1].Now != "trains (store, type train)" || !g[1].InPack {
+	if g := plan.Governs; len(g) != 2 || g[1].Type != "train" || g[1].Flow != "trains" || g[1].Now != "trains (store, type train)" || g[1].InPack {
 		t.Fatalf("governs = %+v", g)
 	}
 	// The store agrees: it refuses the pointer for the same bead.
@@ -1273,16 +1266,11 @@ func TestChangedFlowIsShownByStage(t *testing.T) {
 	}
 	plan := build(t, st, load(t, dir), o)
 	f := find(t, plan, "flow", "starter.default")
-	if want := []pack.Diff{{Field: "stage decide", Old: "-> backlog | new", New: "-> backlog"}}; f.Action != pack.Change || !reflect.DeepEqual(f.Changes, want) {
+	if want := []pack.Diff{{Field: "stage decide", Old: "-> backlog | new", New: "-> backlog"}}; f.Action != pack.Differs || !reflect.DeepEqual(f.Changes, want) {
 		t.Fatalf("flow = %s %v", f.Action, f.Changes)
 	}
-	// The yard has the flow as the import left it, so the pack moving alone
-	// is no change of the yard's to keep: the import brings it.
-	if len(f.Keeps) != 0 {
-		t.Fatalf("flow the pack moved alone keeps %q", f.Keeps)
-	}
-	if res := apply(t, st, plan, nil); res.Changed != 1 || len(res.Kept) != 0 {
-		t.Fatalf("applying the moved flow: %+v", res)
+	if res := apply(t, st, plan, nil); res.Wrote() || res.Differs != 1 {
+		t.Fatalf("applying over a differing flow: %+v", res)
 	}
 
 	// The train's review, where the starter sets no limit: its changes go
@@ -1298,7 +1286,7 @@ func TestChangedFlowIsShownByStage(t *testing.T) {
 	}
 	limited := func(rounds int) string { return fmt.Sprintf("{ to: open, max: %d, then: decide }", rounds) }
 	added := review(limited(3))
-	if want := []pack.Diff{{Field: "stage review", Old: line(""), New: line(" max 3 then decide")}}; added.Action != pack.Change || !reflect.DeepEqual(added.Changes, want) {
+	if want := []pack.Diff{{Field: "stage review", Old: line(""), New: line(" max 3 then decide")}}; added.Action != pack.Differs || !reflect.DeepEqual(added.Changes, want) {
 		t.Fatalf("a limit added: train = %s %v, want %v", added.Action, added.Changes, want)
 	}
 	if _, err := st.PutFlow(ctx, *added.Flow, "me"); err != nil {
@@ -1703,15 +1691,6 @@ func TestRoutesByBeadPriorityOrLabelsAreLeftAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 	plan := build(t, st, load(t, dir), o)
-	got := actions(plan, pack.NotInPack)
-	for _, want := range []string{
-		"route depot web stage triage beads P0-P1 originator any -> old",
-		"route depot web stage triage label difficulty:3, size:large originator any -> old",
-	} {
-		if !slices.Contains(got, want) {
-			t.Errorf("left alone = %v, want %q among them", got, want)
-		}
-	}
 	apply(t, st, plan, nil)
 	routes, err := st.Routes(ctx)
 	if err != nil {
@@ -1854,8 +1833,8 @@ func TestSecondPackKeepsTheFirstPacksGroups(t *testing.T) {
 		t.Fatal(err)
 	}
 	planD := build(t, st, load(t, dir), o)
-	if got := find(t, planD, "file", "roles/builder.md").Action; got != pack.Change {
-		t.Errorf("design's edited role = %s, want change", got)
+	if got := find(t, planD, "file", "roles/builder.md").Action; got != pack.Differs {
+		t.Errorf("design's edited role = %s, want differs", got)
 	}
 	kept(planD)
 }

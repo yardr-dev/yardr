@@ -159,14 +159,12 @@ func (b *planner) crew() error {
 			}
 			want = append(want, store.Subscription{Source: s.Name, Scope: s.Scope})
 		}
-		taken := make([]bool, len(old.Subscriptions))
 		hears := len(changes) > 0
 		for _, w := range want {
 			so := Object{Kind: "subscription", Name: name + " " + w.String(), Action: Create, Subscription: &SubscriptionOp{CrewMember: name, Add: &w}}
 			if j := slices.IndexFunc(old.Subscriptions, func(s store.Subscription) bool { return reflect.DeepEqual(s.Where, w.Where) && s.Source == w.Source }); j >= 0 {
 				// The same source and filters: it is this subscription,
 				// whatever its scope is now.
-				taken[j] = true
 				so.Action = Unchanged
 				if have := old.Subscriptions[j]; have.Scope != w.Scope {
 					so.Action, so.Changes, so.Subscription.Remove = Change, []Diff{{"scope", have.Scope, w.Scope}}, &have
@@ -178,11 +176,6 @@ func (b *planner) crew() error {
 		if old.Live() && hears {
 			op.Restart = true
 			b.plan.Notes = append(b.plan.Notes, fmt.Sprintf("crew member %s is running and its role or what it hears changes: the import does not restart it, so restart it afterwards (yardr crew restart %s)", name, name))
-		}
-		for j, s := range old.Subscriptions {
-			if !taken[j] {
-				subs = append(subs, Object{Kind: "subscription", Name: name + " " + s.String(), Action: NotInPack, Subscription: &SubscriptionOp{CrewMember: name}})
-			}
 		}
 		for _, s := range pr.Subscribe {
 			if need, ok := skipped[s.Name]; ok {

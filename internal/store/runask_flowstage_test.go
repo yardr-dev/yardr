@@ -355,7 +355,7 @@ func TestRunAskFlowSetStageIsStaleWhereTheFileMoved(t *testing.T) {
 	if _, err := y.RecordPack(y.ctx, PackImport{Pack: "starter", Depot: "web", Objects: []PackObject{{Kind: "flow", Name: "code"}}}, true, "mckean"); err != nil {
 		t.Fatal(err)
 	}
-	y.refusedStale(t, seq, `the yard would say "The flow is the pack starter's`)
+	y.refusedStale(t, seq, `the yard would say "The flow was copied from the line starter`)
 	y.stageIs(t, "work", "Mine.\n", 0o640)
 }
 
@@ -442,26 +442,21 @@ func TestRunAskFlowSetStageSaysWhatPackApplyDoes(t *testing.T) {
 	if len(r.Ask.Run.Does) < 3 || !strings.HasPrefix(r.Ask.Run.Does[0], "replaces the stage file of stage work") {
 		t.Fatalf("the card says %q", r.Ask.Run.Does)
 	}
-	if want := "The flow is the pack starter's, imported into depot web: this sets the yard's copy of the stage file, and changes nothing of the pack."; r.Ask.Run.Does[1] != want {
+	if want := "The flow was copied from the line starter into depot web: this sets the yard's copy of the stage file, and changes nothing of the line."; r.Ask.Run.Does[1] != want {
 		t.Errorf("line 1 = %q, want %q", r.Ask.Run.Does[1], want)
 	}
-	if want := "yardr pack apply then keeps the yard's copy of it, whatever the pack moves, and sets the pack's again only where it is told to (--take file/<name>, the name yardr pack check starter --depot web gives the file)."; r.Ask.Run.Does[2] != want {
+	if want := "yardr pack apply writes only what the yard lacks: the yard's copy stays, and the plan reports it as differs."; r.Ask.Run.Does[2] != want {
 		t.Errorf("line 2 = %q, want %q", r.Ask.Run.Does[2], want)
 	}
-	for _, want := range []string{
-		"yardr flow set-stage code work -f " + y.historyPath("Old.\n"),
-		"; or, for the pack's own copy instead, yardr pack apply starter --depot web --take file/<name> in a terminal",
-	} {
-		if !strings.Contains(r.Ask.Run.Back, want) {
-			t.Errorf("taken back by %q, want it to say %q", r.Ask.Run.Back, want)
-		}
+	if want := "yardr flow set-stage code work -f " + y.historyPath("Old.\n"); !strings.Contains(r.Ask.Run.Back, want) {
+		t.Errorf("taken back by %q, want it to say %q", r.Ask.Run.Back, want)
 	}
 	// A flow of no depot's import has none of those words.
 	if _, err := y.PutFlow(y.ctx, Flow{Name: "plain", Stages: []string{"in", "done"}, Transitions: map[string][]string{"in": {"done"}}, Terminal: []string{"done"}}, "mckean"); err != nil {
 		t.Fatal(err)
 	}
 	plain := y.ask(t, stageAsk("New.\n", "plain", "in"), "yardmaster")
-	strongLacks(t, y.asked(t, plain).Ask.Run.Does, "The flow is the pack")
+	strongLacks(t, y.asked(t, plain).Ask.Run.Does, "The flow was copied from the line")
 }
 
 // A card whose text breaks the ## Ask section of its stage says so; one that

@@ -194,9 +194,7 @@ func (w *wtx) flowSetStageCard(run AskRun, asking bool) (AskRun, error) {
 	if pack, depot, err := w.flowPackManaged(spec.flow); err != nil {
 		return AskRun{}, err
 	} else if pack != "" {
-		lines, door := stagePackWords(pack, depot)
-		does = slices.Insert(does, 1, lines...)
-		back += "; or, for the pack's own copy instead, " + door + " in a terminal"
+		does = slices.Insert(does, 1, stagePackWords(pack, depot)...)
 	}
 	return AskRun{
 		Argv:   run.Argv,
@@ -208,25 +206,20 @@ func (w *wtx) flowSetStageCard(run AskRun, asking bool) (AskRun, error) {
 	}, nil
 }
 
-// stagePackWords are the card's lines for a stage file of a flow a pack
-// manages, which stand after its first line, and the terminal command that
-// sets the pack's copy: pack apply of that pack into the depot whose import
-// lists the flow, taking the file by the name yardr pack check prints it by.
-// The card changes the yard's copy only, never the pack where it is kept; the
-// lines say what pack apply then does with it, so an approver reads it before
-// approving.
-func stagePackWords(pack, depot string) (lines []string, door string) {
-	into, check, door := "the yard", "yardr pack check "+pack, "yardr pack apply "+pack
+// stagePackWords are the card's lines for a stage file of a flow copied from
+// a line, which stand after its first line. The card changes the yard's copy
+// only, never the line's original, and says what yardr pack apply then does
+// (writes only what the yard lacks, leaving the yard's copy as it is), so an
+// approver reads it before approving.
+func stagePackWords(pack, depot string) []string {
+	into := "the yard"
 	if depot != "" {
 		into = "depot " + depot
-		check += " --depot " + depot
-		door += " --depot " + depot
 	}
-	door += " --take file/<name>"
 	return []string{
-		fmt.Sprintf("The flow is the pack %s's, imported into %s: this sets the yard's copy of the stage file, and changes nothing of the pack.", pack, into),
-		fmt.Sprintf("yardr pack apply then keeps the yard's copy of it, whatever the pack moves, and sets the pack's again only where it is told to (--take file/<name>, the name %s gives the file).", check),
-	}, door
+		fmt.Sprintf("The flow was copied from the line %s into %s: this sets the yard's copy of the stage file, and changes nothing of the line.", pack, into),
+		"yardr pack apply writes only what the yard lacks: the yard's copy stays, and the plan reports it as differs.",
+	}
 }
 
 // flowSetStageStale says why the ask seq for flow set-stage is approved no

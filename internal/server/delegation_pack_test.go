@@ -165,23 +165,25 @@ func delegatedDepotPackApplyRecordsWhatItDid(t *testing.T) {
 	if first.Flow != "default" || first.Source != reading.Label || first.Groups["builders"] != "web-builders" || len(first.Objects) == 0 {
 		t.Fatalf("the first install's record = %+v, want flow default from %q with the groups mapped", first, reading.Label)
 	}
-	// Its objects are held to the reading's too, and carry what a later plan
-	// starts from: the hash of each file, the binding of the group that binds
-	// as another, and the tables and crew member of the two hooks' maps.
+	// Its objects are held to the reading's too: files carry names and no sums,
+	// bound groups carry their bindings, and hook maps carry their tables.
 	hooked := map[string]store.PackObject{}
-	var hashed, bound int
+	var files, bound int
 	for _, o := range first.Objects {
 		switch {
 		case o.Kind == "map":
 			hooked[o.Name] = o
-		case o.Kind == "file" && o.SHA256 != "":
-			hashed++
+		case o.Kind == "file":
+			if o.SHA256 != "" {
+				t.Errorf("file object %s carries sha256 %q, want empty", o.Name, o.SHA256)
+			}
+			files++
 		case o.Kind == "group" && o.Binds != "":
 			bound++
 		}
 	}
-	if hashed == 0 || bound == 0 || len(hooked["linear"].Map) == 0 || len(hooked["github"].Says) == 0 || hooked["linear"].CrewMember != "yardmaster" || hooked["github"].CrewMember != "yardmaster" {
-		t.Errorf("the first install's objects = %+v, want files with their hashes, a bound group and the maps of the linear and github hooks", first.Objects)
+	if files == 0 || bound == 0 || len(hooked["linear"].Map) == 0 || len(hooked["github"].Says) == 0 || hooked["linear"].CrewMember != "yardmaster" || hooked["github"].CrewMember != "yardmaster" {
+		t.Errorf("the first install's objects = %+v, want files, a bound group and the maps of the linear and github hooks", first.Objects)
 	}
 	again := apply(store.Mappings{})
 	if again.Flow != first.Flow || again.Source != first.Source || !reflect.DeepEqual(again.Groups, first.Groups) || !reflect.DeepEqual(again.Crew, first.Crew) {

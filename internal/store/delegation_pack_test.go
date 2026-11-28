@@ -321,7 +321,6 @@ func TestDelegatedPackAskingPlanRefusesInTheStore(t *testing.T) {
 		"a question unanswered": {Objects: fakePackReaderObjects(), Missing: []string{"group.web-builders.kind: which agent?"}},
 		"a grant unmapped":      {Objects: fakePackReaderObjects(), Asks: []string{"let clerk open threads in linear"}},
 		"a refusal":             {Objects: fakePackReaderObjects(), Refused: []string{"flow starter.default lacks the stage of open beads"}},
-		"a hand-edited file":    {Objects: fakePackReaderObjects(), Edited: []string{"roles/builder.md"}},
 		"a non-text file":       {Objects: fakePackReaderObjects(), NonText: []string{"roles/builder.md"}},
 	} {
 		y.own.SetPackReader(func(_ context.Context, pack string, depot string, _ store.Mappings, _ store.API) (*store.PackReading, error) {
@@ -729,16 +728,13 @@ func TestDelegatedPackFlowPointerRouteAndRecordWrites(t *testing.T) {
 		}
 		return &imp.Objects[i]
 	}
-	editedRole, editedDeclaration := store.TextSum("the role as someone edited it"), store.TextSum("the declaration as someone edited it")
+	editedDeclaration := store.TextSum("the declaration as someone edited it")
 	for name, tc := range map[string]struct {
 		of    string
 		edit  func(*store.PackObject)
 		field string
 	}{
-		"the hash of a hand-edited file":                      {"file", func(o *store.PackObject) { o.SHA256 = editedRole }, "sha256"},
-		"no hash for a file":                                  {"file", func(o *store.PackObject) { o.SHA256 = "" }, "sha256"},
 		"the hash of a hand-edited source":                    {"source", func(o *store.PackObject) { o.SHA256 = editedDeclaration }, "sha256"},
-		"a hash for a flow":                                   {"flow", func(o *store.PackObject) { o.SHA256 = "forged" }, "sha256"},
 		"a binding the pack never asked":                      {"group", func(o *store.PackObject) { o.Binds = "forged" }, "binds"},
 		"no binding":                                          {"group", func(o *store.PackObject) { o.Binds = "" }, "binds"},
 		"a map the pack never set":                            {"map linear", func(o *store.PackObject) { o.Map = map[string]string{"new": "forged"} }, "map"},
@@ -758,7 +754,7 @@ func TestDelegatedPackFlowPointerRouteAndRecordWrites(t *testing.T) {
 			t.Errorf("an import record with %s: %v", name, err)
 			continue
 		}
-		for _, given := range []string{"forged", editedRole, editedDeclaration} {
+		for _, given := range []string{"forged", editedDeclaration} {
 			if strings.Contains(err.Error(), given) {
 				t.Errorf("an import record with %s: the refusal repeats the value given: %v", name, err)
 			}

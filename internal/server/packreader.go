@@ -138,10 +138,10 @@ func readPack(ctx context.Context, p *pack.Pack, read func(rel string) ([]byte, 
 	if err != nil {
 		return nil, err
 	}
-	// What a card is asked to take is held to the plan before the card shows
+	// What a card is asked to replace is held to the plan before the card shows
 	// or asks anything, in the words the terminal refuses it in.
-	take := store.PackTakeOf(ctx)
-	if err := plan.CheckTake(take); err != nil {
+	replace := store.PackReplaceOf(ctx)
+	if err := plan.CheckReplace(replace); err != nil {
 		return nil, err
 	}
 	// No mappings read exactly as a re-apply always has, byte for byte;
@@ -153,7 +153,7 @@ func readPack(ctx context.Context, p *pack.Pack, read func(rel string) ([]byte, 
 		}
 	}
 	reading.Depot = target
-	reading.Plan = askPlanFrom(read, plan, answers, open, calls, take)
+	reading.Plan = askPlanFrom(read, plan, answers, open, calls, replace)
 	reading.Digest, reading.Programs = plan.Digest, plan.Programs
 	reading.Grants = packGrantsOf(open, calls)
 	// The record the apply of this plan, answered by these mappings, leaves
@@ -194,9 +194,7 @@ func packGrantsOf(open, calls map[string]map[string]bool) []string {
 // each as JSON of the object as the plan and its answers make it: a
 // delegated write under the plan's record is held to them in the
 // store. A file is installed by its bytes, and a declared source by
-// its text, so neither stands here. A kept object is one an import writes
-// only where told to take it, as the pack has it: its target is the pack's
-// whole, which a card that takes it reads before it asks (packTakeStrays).
+// its text, so neither stands here.
 func packTargetsOf(ctx context.Context, yard store.API, plan *pack.Plan, answers pack.Answers) (map[string]string, error) {
 	out := map[string]string{}
 	put := func(kind, name string, v any) error {
@@ -209,7 +207,7 @@ func packTargetsOf(ctx context.Context, yard store.API, plan *pack.Plan, answers
 	}
 	for i := range plan.Objects {
 		o := &plan.Objects[i]
-		if o.Action != pack.Create && o.Action != pack.Change && o.Action != pack.Kept {
+		if o.Action != pack.Create && o.Action != pack.Change {
 			continue
 		}
 		switch o.Kind {
@@ -365,22 +363,20 @@ func declDirOf(file string) string {
 }
 
 // askPlanOf is askPlanFrom for the files of an embedded pack, sub.
-func askPlanOf(sub fs.FS, plan *pack.Plan, answers pack.Answers, open, calls map[string]map[string]bool, take []string) *store.AskPlan {
-	return askPlanFrom(func(rel string) ([]byte, error) { return fs.ReadFile(sub, rel) }, plan, answers, open, calls, take)
+func askPlanOf(sub fs.FS, plan *pack.Plan, answers pack.Answers, open, calls map[string]map[string]bool, replace []string) *store.AskPlan {
+	return askPlanFrom(func(rel string) ([]byte, error) { return fs.ReadFile(sub, rel) }, plan, answers, open, calls, replace)
 }
 
-// askPlanFrom is a pack plan as a card or delegated record holds it, with each created or
-// changed file's text as the import would install it (filled) and its
-// unified diff against the installed text, computed here from the two
-// texts the file's hashes already name. What the mappings already
-// answer, in answers, open and calls, is no part of what it still asks.
-// read reads a file of the pack by its path in it. A kept object that take
-// names is the one a card sets to the pack's: it stays kept here, since the
-// card's plan is the plan the import makes, and is carried whole as the
-// change it will be, a file with both its hashes, its text and its diff, a
-// flow with the digest of the yard's, so that a card, and the hold of its
-// carrying out, pin what approval overwrites.
-func askPlanFrom(read func(rel string) ([]byte, error), plan *pack.Plan, answers pack.Answers, open, calls map[string]map[string]bool, take []string) *store.AskPlan {
+// askPlanFrom is a pack plan as a card or delegated record holds it, with each
+// created or changed file's text as the import would install it (filled) and
+// its unified diff against the installed text, computed here from the two
+// texts the file's hashes already name. What the mappings already answer, in
+// answers, open and calls, is no part of what it still asks. read reads a file
+// of the pack by its path in it. A differing file under the line's directory
+// that replace names is carried as a change on the wire, with both its hashes,
+// its text and its diff, so clients draw it as a change and the hold of its
+// carrying out pins what approval overwrites.
+func askPlanFrom(read func(rel string) ([]byte, error), plan *pack.Plan, answers pack.Answers, open, calls map[string]map[string]bool, replace []string) *store.AskPlan {
 	out := &store.AskPlan{}
 	for _, q := range plan.Missing(answers) {
 		out.Missing = append(out.Missing, q.ID+": "+q.Ask)
@@ -405,25 +401,15 @@ func askPlanFrom(read func(rel string) ([]byte, error), plan *pack.Plan, answers
 		}
 	}
 	out.Refused = plan.Refused
-	out.Edited = plan.EditedFiles()
 	for _, o := range plan.Objects {
 		ao := store.AskPlanObject{Kind: o.Kind, Name: o.Name, Action: o.Action, Keeps: o.Keeps, Shadows: o.Shadows, Env: o.Env}
-		taken := o.Action == pack.Kept && slices.Contains(take, o.TakeName())
-		if taken && o.Kind == "flow" {
-			ao.FlowOldSHA = o.Have
-		}
-		if o.Kind == "file" && o.File != nil {
-			ao.Edited = o.Edited
-			// A program, a role or a script the yard runs: not a stage
-			// file, and not the page frame, which only a reader's
-			// browser runs.
-			ao.Runs = o.File.Flow == "" && (plan.Frame == nil || o.Name != plan.Frame.File)
-			ao.StageFile = o.File.StageFile()
+		if o.Action == pack.Differs && o.Kind == "file" && o.File != nil && !o.File.StageFile() && slices.Contains(replace, o.Name) {
+			ao.Action = pack.Change
 		}
 		for _, ch := range o.Changes {
 			ao.Changes = append(ao.Changes, store.AskChange{Field: ch.Field, Old: planValue(ch.Old), New: planValue(ch.New)})
 		}
-		if o.Kind == "file" && o.File != nil && (o.Action == pack.Create || o.Action == pack.Change || taken) {
+		if o.Kind == "file" && o.File != nil && (ao.Action == pack.Create || ao.Action == pack.Change) {
 			ao.FileNewSHA = o.File.SHA256
 			oldText, hasOld := "", false
 			if data, err := os.ReadFile(o.File.To); err == nil {
@@ -431,11 +417,16 @@ func askPlanFrom(read func(rel string) ([]byte, error), plan *pack.Plan, answers
 				sum := sha256.Sum256(data)
 				ao.FileOldSHA = hex.EncodeToString(sum[:])
 			}
+			if slices.Contains(replace, o.Name) && hasOld {
+				ao.OldText = &oldText
+			}
 			if raw, err := read(o.Name); err == nil {
 				if o.File.Fill {
 					raw = pack.Fill(raw, plan.Fill)
 				}
 				ao.Text = string(raw)
+			} else if slices.Contains(replace, o.Name) {
+				out.Refused = append(out.Refused, fmt.Sprintf("file %s cannot be read to show the pack's text whole", o.Name))
 			}
 			if !utf8.ValidString(ao.Text) || hasOld && !utf8.ValidString(oldText) {
 				out.NonText = append(out.NonText, o.Name)

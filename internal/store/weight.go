@@ -677,11 +677,10 @@ func packApplyWeight(w *wtx, run AskRun) ([]AskWeight, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Over edited files and taken objects the card shows whole, with or
+	// Over files --replace overwrites, shown whole on the card, with or
 	// without a depot.
-	out = append(out, packYesWeight(run)...)
-	out = append(out, packTakeWeight(run)...)
-	_, depot, m, _, _, _, err := packApplyWords(run.Argv[2:])
+	out = append(out, packReplaceWeight(run)...)
+	_, depot, m, _, _, err := packApplyWords(run.Argv[2:])
 	if err != nil || depot == "" || run.Pack == nil {
 		return out, err
 	}

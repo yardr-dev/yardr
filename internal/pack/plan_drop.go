@@ -4,10 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"yardr.dev/yardr/internal/depotfile"
 	"yardr.dev/yardr/internal/store"
@@ -81,12 +79,14 @@ func Ident(o Object) (po store.PackObject, ok bool) {
 		}
 		return *o.Owned, true
 	}
-	if o.Action == NotInPack || o.Action == Takes {
+	if o.Action == Takes {
 		return po, false
 	}
 	switch {
 	case o.Kind == "file" && o.File != nil:
-		return store.PackObject{Kind: o.Kind, Name: o.File.To, SHA256: o.File.SHA256}, true
+		// A line's record holds names and no sums; only a connector's
+		// declared source keeps its declaration's sum.
+		return store.PackObject{Kind: o.Kind, Name: o.File.To}, true
 	case o.Kind == "group":
 		// What this import binds, or what the last one did and still stands.
 		binds := o.bindsKept
@@ -95,7 +95,7 @@ func Ident(o Object) (po store.PackObject, ok bool) {
 		}
 		return store.PackObject{Kind: o.Kind, Name: o.Name, Binds: binds}, true
 	case o.Kind == "flow":
-		return flowRecord(o), true
+		return store.PackObject{Kind: o.Kind, Name: o.Name}, true
 	case o.Kind == "pointer" && o.Pointer != nil:
 		return store.PackObject{Kind: o.Kind, Type: o.Pointer.Type, Flow: o.Pointer.Flow}, true
 	case o.Kind == "route" && o.Route != nil:
@@ -142,87 +142,15 @@ func (b *planner) dropped() error {
 			continue // the yard no longer has it
 		}
 		o.Action, o.Owned = Dropped, &po
-		b.plan.Objects = slices.DeleteFunc(b.plan.Objects, func(h Object) bool {
-			return h.Action == NotInPack && h.Kind == o.Kind && h.Name == o.Name && (o.File == nil || h.File == nil || h.File.To == o.File.To)
-		})
 		b.add(*o)
-	}
-	// A type-flow pointer held to protect its beads keeps the flow it points
-	// at too; otherwise pruning would report a store error for that flow.
-	for _, pointer := range b.plan.Objects {
-		if pointer.Kind != "pointer" || pointer.Action != Dropped || pointer.Held == "" || pointer.Pointer == nil {
-			continue
-		}
-		for i := range b.plan.Objects {
-			flow := &b.plan.Objects[i]
-			if flow.Kind == "flow" && flow.Action == Dropped && flow.Name == pointer.Pointer.Flow {
-				flow.Held = "a type-flow pointer is kept: " + pointer.Held
-			}
-		}
-	}
-	// A flow that stays keeps its stage files: whoever still follows it
-	// reads them.
-	for i := range b.plan.Objects {
-		file := &b.plan.Objects[i]
-		if file.Kind != "file" || file.Action != Dropped || file.File == nil || file.File.Flow == "" {
-			continue
-		}
-		for _, flow := range b.plan.Objects {
-			if flow.Kind == "flow" && flow.Action == Dropped && flow.Held != "" && flow.Name == file.File.Flow {
-				file.Held = "flow " + flow.Name + " is kept: " + flow.Held
-			}
-		}
 	}
 	return nil
 }
 
 // gone is the object an earlier import recorded as po, as the yard has it
-// now and with what removing it takes; nil when the yard no longer has it,
-// or has it in a state that import did not leave (a pointer since set by
-// hand to another flow).
+// now and with what removing it takes; nil when the yard no longer has it.
 func (b *planner) gone(po store.PackObject) (*Object, error) {
 	switch po.Kind {
-	case "file":
-		// Never a file outside the pack's own directory and its flows' stage
-		// files. A stage file is named by where it is in the home: the pack
-		// has no path for it any more.
-		rel, err := filepath.Rel(b.plan.Install, po.Name)
-		file := &FileOp{To: po.Name, From: joinName(b.p.Dir, filepath.ToSlash(rel))}
-		if err != nil || !filepath.IsLocal(rel) {
-			flow, ok := b.plan.stageFlow(po.Name)
-			if !ok {
-				return nil, nil
-			}
-			rel = stageFileName(flow, filepath.Base(po.Name))
-			file = &FileOp{To: po.Name, From: b.p.Dir, Flow: flow}
-		}
-		if info, err := os.Lstat(po.Name); err != nil || !info.Mode().IsRegular() {
-			return nil, nil
-		}
-		var edited bool
-		if have, err := os.ReadFile(po.Name); err == nil {
-			was := b.installedSums(po.Name)
-			edited = len(was) > 0 && !slices.Contains(was, sum(have))
-		}
-		o := &Object{Kind: po.Kind, Name: filepath.ToSlash(rel), File: file, Edited: edited}
-		// A dropped frame file is one installed copy shared by every
-		// scope: while another scope's active record still names this
-		// path, a prune keeps the file and the plan names the scopes that
-		// hold it, exactly as a group or a source another import names is
-		// held. The importing scope still falls back at once, since
-		// holding the bytes is not holding the choice; only the last
-		// active scope's drop lets the file go.
-		var holders []string
-		for _, r := range b.all {
-			if r.FrameActive && r.Frame == po.Name && !(r.Pack == b.p.Name && r.Depot == b.o.Depot) && !slices.Contains(holders, inDepot(r.Depot)) {
-				holders = append(holders, inDepot(r.Depot))
-			}
-		}
-		if len(holders) > 0 {
-			slices.Sort(holders)
-			o.Held = "still the active frame in " + strings.Join(holders, ", ")
-		}
-		return o, nil
 	case "group":
 		if _, err := b.st.GetGroup(b.ctx, po.Name); errors.Is(err, store.ErrNotFound) {
 			return nil, nil
@@ -247,48 +175,6 @@ func (b *planner) gone(po store.PackObject) (*Object, error) {
 			}
 		}
 		return o, nil
-	case "flow":
-		f, err := b.st.GetFlow(b.ctx, po.Name)
-		if errors.Is(err, store.ErrNotFound) {
-			return nil, nil
-		} else if err != nil {
-			return nil, err
-		}
-		o := &Object{Kind: po.Kind, Name: po.Name}
-		// A flow the yard changed since an import wrote it is its own: a
-		// prune would remove the change with it, so the import stops, as it
-		// does for a file edited by hand, and takes its pointer and stage
-		// files with it. No record of it says nothing, as for a file.
-		if was := b.recordedSums("flow", po.Name); len(was) > 0 {
-			d, _ := f.Digest()
-			o.Edited = !slices.Contains(was, d)
-		}
-		ptrs, err := b.st.FlowPointers(b.ctx)
-		if err != nil {
-			return nil, err
-		}
-		for _, p := range ptrs {
-			if p.Flow == po.Name && p.Depot != b.o.Depot {
-				o.Held = p.String() + " follows it"
-			}
-		}
-		return o, nil
-	case "pointer":
-		ptrs, err := b.st.FlowPointers(b.ctx)
-		if err != nil {
-			return nil, err
-		}
-		p := store.FlowPointer{Depot: b.o.Depot, Type: po.Type, Flow: po.Flow}
-		if !slices.Contains(ptrs, p) {
-			return nil, nil
-		}
-		held := ""
-		if p.Type != "" {
-			if held, err = b.strandedTypePointer(&p); err != nil {
-				return nil, err
-			}
-		}
-		return &Object{Kind: po.Kind, Name: p.String() + " -> " + p.Flow, Pointer: &p, Held: held}, nil
 	case "route":
 		routes, err := b.st.Routes(b.ctx)
 		if err != nil {
@@ -380,42 +266,4 @@ func (b *planner) gone(po store.PackObject) (*Object, error) {
 		return o, nil
 	}
 	return nil, nil
-}
-
-// strandedTypePointer keeps a dropped type-flow pointer when clearing
-// it would make the type's open beads follow the depot's newly chosen default
-// flow at stages that flow lacks. Clearing a pointer does not itself check
-// for stranded beads, so the import has to protect them before pruning.
-func (b *planner) strandedTypePointer(p *store.FlowPointer) (string, error) {
-	var fallback string
-	for _, g := range b.plan.Governs {
-		if g.Type == "" {
-			fallback = g.Flow
-			break
-		}
-	}
-	if fallback == "" {
-		return "", nil
-	}
-	f, err := b.st.GetFlow(b.ctx, fallback)
-	if err != nil {
-		return "", err
-	}
-	beads, err := b.st.ListBeads(b.ctx, store.BeadFilter{})
-	if err != nil {
-		return "", err
-	}
-	var stranded []string
-	for _, bead := range beads {
-		if bead.Status == "closed" || bead.Depot == nil || *bead.Depot != p.Depot || bead.Type != p.Type || store.PinnedFlow(&bead) != "" {
-			continue
-		}
-		if !slices.Contains(f.Stages, bead.Stage) {
-			stranded = append(stranded, fmt.Sprintf("%s (%s)", bead.ID, bead.Stage))
-		}
-	}
-	if len(stranded) > 0 {
-		return fmt.Sprintf("clearing it would strand open beads under flow %s: %s", fallback, strings.Join(stranded, ", ")), nil
-	}
-	return "", nil
 }

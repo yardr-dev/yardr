@@ -6,21 +6,18 @@ import "yardr.dev/yardr/internal/store"
 type Result struct {
 	Pack  string `json:"pack"`
 	Depot string `json:"depot"`
-	// Created, Changed and Unchanged count the plan's objects by what was
-	// done to them.
+	// Created, Changed, Unchanged and Differs count the plan's objects by
+	// what was done to them.
 	Created   int `json:"created"`
 	Changed   int `json:"changed"`
 	Unchanged int `json:"unchanged"`
+	Differs   int `json:"differs"`
 	// Pruned are the dropped objects removed, Left those still there: no
 	// prune was asked for, the object is held, or its removal failed (then
 	// PruneErrors says why).
 	Pruned      []string `json:"pruned"`
 	Left        []string `json:"left"`
 	PruneErrors []string `json:"prune_errors"`
-	// Kept are the objects the import left as the yard has them, each as
-	// "<kind> <name>: <why>" (Object.keptWords): the yard changed them, the
-	// pack's version waits for --take, and none of them counts as written.
-	Kept []string `json:"kept"`
 	// Restart are the running crew members whose role or subscriptions
 	// changed: the import does not restart them.
 	Restart []string `json:"restart"`
