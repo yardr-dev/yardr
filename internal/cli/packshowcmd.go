@@ -77,7 +77,7 @@ words, which yardr does not check.
 				base = string(pack.YardmasterBase())
 				v["yardmaster_base"] = base
 			}
-			if p.Setup == "" && secFile == "" && len(p.Presets) == 0 && len(env) == 0 && base == "" {
+			if p.Setup == "" && secFile == "" && len(p.Presets) == 0 && len(env) == 0 && len(p.Needs) == 0 && base == "" {
 				return a.out(c.OutOrStdout(), v, func(w io.Writer) {
 					printPublisher(w, p)
 					fmt.Fprintf(w, "pack %s carries no setup notes\n", p.Name)
@@ -94,6 +94,9 @@ words, which yardr does not check.
 			}
 			if len(env) > 0 {
 				v["env"] = env
+			}
+			if len(p.Needs) > 0 {
+				v["needs"] = p.Needs
 			}
 			return a.out(c.OutOrStdout(), v, func(w io.Writer) {
 				printPublisher(w, p)
@@ -113,6 +116,10 @@ words, which yardr does not check.
 				if len(env) > 0 {
 					fmt.Fprintln(w)
 					printEnv(w, p)
+				}
+				if len(p.Needs) > 0 {
+					fmt.Fprintln(w)
+					printPackNeeds(w, p)
 				}
 				if base != "" {
 					fmt.Fprintln(w)

@@ -1,0 +1,33 @@
+name: visuals-needs
+api: 9
+kind: git
+
+needs:
+  - name: chrome
+    any:
+      - google-chrome
+      - google-chrome-stable
+      - chromium
+      - chromium-browser
+      - "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    env: SHOT_CHROME
+  - name: python3
+    check:
+      - python3
+      - -c
+      - "import sys; print(sys.version.split()[0]); sys.exit(sys.version_info < (3, 9))"
+
+flows:
+  visual:
+    stages:
+      directions:
+        group: designers
+        file: flows/visual/directions.md
+        outcomes: { done: picked }
+      picked:
+        end: true
+
+groups:
+  designers:
+    agent: roles/designer.md
+    limit: 1

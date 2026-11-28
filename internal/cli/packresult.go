@@ -160,6 +160,11 @@ func printResult(w io.Writer, plan *pack.Plan, res *pack.Result, pruning bool, a
 	}
 	// After the sources: a call is granted of one the yard has.
 	printCallResult(w, plan, res, calls)
+	for _, n := range res.LineNeeds {
+		if n.Status == pack.NeedMissing {
+			fmt.Fprintln(w, pack.FormatLineNeedLine(res.Pack, res.Depot, n, "yardr"))
+		}
+	}
 	for _, r := range res.Restart {
 		fmt.Fprintf(w, "crew member %s is running and was not restarted: its role or subscriptions changed, so restart it (yardr crew restart %s)\n", r, r)
 	}

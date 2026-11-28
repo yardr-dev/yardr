@@ -190,6 +190,10 @@ type Plan struct {
 	// Refused is why this plan must not be applied as it is; empty when it
 	// may be.
 	Refused []string `json:"refused"`
+	// LineNeeds are the checked needs of a line (pack.yaml's needs).
+	LineNeeds     []LineNeedStatus `json:"line_needs,omitempty"`
+	needs         []LineNeed
+	recordedNeeds string
 }
 
 // Object is one thing in the yard and what the import would do to it. One
@@ -750,6 +754,7 @@ func Build(ctx context.Context, st store.API, p *Pack, o Options) (*Plan, error)
 		b.declared,
 		b.calls,
 		b.dropped,
+		b.lineNeeds,
 	} {
 		if err := step(); err != nil {
 			return nil, err
@@ -840,6 +845,7 @@ func buildWithoutDepot(ctx context.Context, st store.API, p *Pack, o Options) (*
 		b.declared,
 		b.calls,
 		b.dropped,
+		b.lineNeeds,
 	} {
 		if err := step(); err != nil {
 			return nil, err

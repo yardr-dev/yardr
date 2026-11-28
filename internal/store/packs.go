@@ -105,6 +105,9 @@ type PackImport struct {
 	// next import takes them as the default unless told anew, as it does
 	// the crew and the groups, so a re-apply keeps the region.
 	SourceBase map[string]string `json:"source_base,omitempty"`
+	// Needs holds the line's needs list as JSON text: package pack reads it,
+	// and the store reads no part of it.
+	Needs string `json:"needs,omitempty"`
 }
 
 // PackObject is one object of the yard that came from a pack, with what it

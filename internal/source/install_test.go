@@ -54,6 +54,39 @@ func TestNeedPresent(t *testing.T) {
 	if !NeedPresent(tool) {
 		t.Fatal("fake-tool on PATH is not present")
 	}
+	// Any entries are tried after Env and before Program: both bare names
+	// on PATH and absolute executable paths, in order.
+	absDir := t.TempDir()
+	absNonExec := filepath.Join(absDir, "non-exec")
+	writeProgram(t, absNonExec, "not executable\n")
+	if err := os.Chmod(absNonExec, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	absExec := filepath.Join(absDir, "Chrome App")
+	writeProgram(t, absExec, "#!/bin/sh\nexit 0\n")
+	anyTool := Need{Program: "fake-tool", Env: "FAKE_ANY_BIN", Any: []string{"no-such-bin", absNonExec, absExec}}
+	if path, ok := NeedPath(anyTool); !ok || path != absExec {
+		t.Fatalf("NeedPath(any abs) = %q, %v; want %q", path, ok, absExec)
+	}
+	// A bare name earlier in Any wins over later entries and Program.
+	writeProgram(t, filepath.Join(bin, "alt-tool"), "#!/bin/sh\nexit 0\n")
+	anyTool.Any = []string{"alt-tool", absExec}
+	if path, ok := NeedPath(anyTool); !ok || path != filepath.Join(bin, "alt-tool") {
+		t.Fatalf("NeedPath(any PATH) = %q, %v; want %q", path, ok, filepath.Join(bin, "alt-tool"))
+	}
+	// Env still wins over Any.
+	envExec := filepath.Join(absDir, "from-env")
+	writeProgram(t, envExec, "#!/bin/sh\nexit 0\n")
+	t.Setenv("FAKE_ANY_BIN", envExec)
+	if path, ok := NeedPath(anyTool); !ok || path != envExec {
+		t.Fatalf("NeedPath(env over any) = %q, %v; want %q", path, ok, envExec)
+	}
+	// When neither Env nor Any matches, Program on PATH is tried last.
+	t.Setenv("FAKE_ANY_BIN", "")
+	anyTool.Any = []string{"no-such-bin", absNonExec}
+	if path, ok := NeedPath(anyTool); !ok || path != filepath.Join(bin, "fake-tool") {
+		t.Fatalf("NeedPath(fallback Program) = %q, %v; want %q", path, ok, filepath.Join(bin, "fake-tool"))
+	}
 }
 
 func TestInstallNeed(t *testing.T) {

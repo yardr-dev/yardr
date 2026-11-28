@@ -286,6 +286,15 @@ func Apply(ctx context.Context, st store.API, p *Plan, o ApplyOptions) (res *Res
 			res.Folds = append(res.Folds, Fold{From: from, To: d.Source, Links: links, SourceMove: *moved})
 		}
 	}
+	// Check the line's needs after the import is recorded, running any check
+	// commands now that the operator has applied the line.
+	if rec.Needs != "" {
+		if needs, nerr := UnmarshalLineNeeds(rec.Needs); nerr == nil && len(needs) > 0 {
+			if statuses, cerr := CheckLineNeeds(ctx, st, needs, planGroupsPeerOnly(p.Objects), true); cerr == nil {
+				res.LineNeeds = statuses
+			}
+		}
+	}
 	return res, nil
 }
 
@@ -341,6 +350,13 @@ func (p *Plan) ImportRecord(o ApplyOptions) store.PackImport {
 	rec.OpenThreads = p.openAnswers(o.OpenThreads)
 	rec.Calls = p.callAnswers(o.Calls)
 	rec.Expose = p.exposeAnswers(o.Expose)
+	// Write the pack's needs only when the record has none yet (first apply
+	// or a record from before the field); a later apply keeps the yard's list.
+	if p.recordedNeeds != "" {
+		rec.Needs = p.recordedNeeds
+	} else if len(p.needs) > 0 {
+		rec.Needs, _ = MarshalLineNeeds(p.needs)
+	}
 	return rec
 }
 

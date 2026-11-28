@@ -39,6 +39,7 @@ func sourcesPart(ctx context.Context, cfg *config.Config, st store.API, try bool
 	}
 	part.Notes = append(part.Notes, aiquokkaOffer(yardr, srcs)...)
 	if len(srcs) == 0 {
+		part.Notes = append(part.Notes, missingLineNeedNotes(ctx, st, srcs, yardr)...)
 		return part, nil
 	}
 	grants, err := st.SourceGrants(ctx, "")
@@ -157,8 +158,43 @@ func sourcesPart(ctx context.Context, cfg *config.Config, st store.API, try bool
 		}
 	}
 	part.Notes = append(part.Notes, missingProgramNotes(ctx, st, srcs, yardr)...)
+	part.Notes = append(part.Notes, missingLineNeedNotes(ctx, st, srcs, yardr)...)
 	part.Configured, part.Detail = true, strings.Join(names, ", ")
 	return part, nil
+}
+
+// missingLineNeedNotes are doctor's lines for the tools and connectors
+// recorded on applied lines that are missing on this machine (or undeclared
+// in this yard), one note per missing need, worded as yardr pack needs words
+// it through the same formatter in internal/pack.
+func missingLineNeedNotes(ctx context.Context, st store.API, srcs []store.Source, yardr string) []string {
+	recs, err := st.Packs(ctx)
+	if err != nil {
+		return nil
+	}
+	if !slices.ContainsFunc(recs, func(r store.PackImport) bool { return r.Needs != "" }) {
+		return nil
+	}
+	groups, err := st.Groups(ctx)
+	if err != nil {
+		return nil
+	}
+	var notes []string
+	for _, rec := range recs {
+		if rec.Needs == "" {
+			continue
+		}
+		statuses, err := pack.CheckRecordNeeds(ctx, srcs, groups, rec)
+		if err != nil {
+			continue
+		}
+		for _, s := range statuses {
+			if s.Status == pack.NeedMissing {
+				notes = append(notes, pack.FormatLineNeedLine(rec.Pack, rec.Depot, s, yardr))
+			}
+		}
+	}
+	return notes
 }
 
 // missingProgramNotes are doctor's lines for the programs the yard's

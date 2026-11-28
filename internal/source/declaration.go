@@ -147,6 +147,7 @@ type Declaration struct {
 // one is the operator's own and stays in a terminal.
 type Need struct {
 	Program string   `json:"program"`
+	Any     []string `json:"any,omitempty"`
 	Env     string   `json:"env,omitempty"`
 	Install []string `json:"install"`
 }

@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"yardr.dev/yardr/internal/pack"
 	"yardr.dev/yardr/internal/store"
 	"yardr.dev/yardr/internal/storetest"
 )
@@ -517,10 +518,11 @@ func TestPackCheckFileCallAPI8(t *testing.T) {
 	if !strings.Contains(out, "content (file)") {
 		t.Fatalf("pack check does not mark the file call:\n%s", out)
 	}
-	writePack(9)
-	if _, err := run(t, a.packCmd(), "check", dir); err == nil ||
-		!strings.Contains(err.Error(), "this pack is written for pack API 9, and this yardr reads up to 8: upgrade yardr (yardr upgrade)") {
-		t.Fatalf("a pack at api 9 = %v", err)
+	next := pack.API + 1
+	writePack(next)
+	want := fmt.Sprintf("this pack is written for pack API %d, and this yardr reads up to %d: upgrade yardr (yardr upgrade)", next, pack.API)
+	if _, err := run(t, a.packCmd(), "check", dir); err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("a pack at api %d = %v, want %q", next, err, want)
 	}
 }
 

@@ -17,8 +17,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"go.yaml.in/yaml/v3"
 
@@ -36,7 +34,7 @@ const File = "pack.yaml"
 // key is read, since an older yardr that read on would call a newer key
 // unknown instead of saying that it is too old. It rises by one in the
 // release that adds anything to what the page lists as stable.
-const API = 8
+const API = 9
 
 // Pack is a pack as written. Everything that has an order in the file
 // keeps it: flows, a flow's stages (the first is where a bead starts), a
@@ -84,6 +82,9 @@ type Pack struct {
 	// Frame is the pack's page frame, the one HTML file pages are made in
 	// (frame), nil for a pack without one.
 	Frame *FrameFile `json:"frame,omitempty"`
+	// Needs are the tools and connectors a line says it needs (pack.yaml's
+	// needs, API 9), in file order.
+	Needs []LineNeed `json:"needs,omitempty"`
 	// fsys is the pack's directory: every path in the pack is a slash path
 	// in it. Its files are read through reads, once each.
 	fsys  fs.FS
@@ -575,9 +576,9 @@ func (r *reader) later(root *yaml.Node) (Error, bool) {
 }
 
 func (r *reader) pack(p *Pack, root *yaml.Node) {
-	var flows, groups, crew, sources, presets, frame *entry
+	var flows, groups, crew, sources, presets, frame, needs *entry
 	named := false
-	for _, e := range r.entries(root, "", "name", "author", "id", "api", "kind", "setup", "frame", "flows", "groups", "crew", "sources", "presets") {
+	for _, e := range r.entries(root, "", "name", "author", "id", "api", "kind", "setup", "frame", "needs", "flows", "groups", "crew", "sources", "presets") {
 		switch e.key {
 		case "api":
 			// Not above API: later has refused the pack before this.
@@ -590,6 +591,8 @@ func (r *reader) pack(p *Pack, root *yaml.Node) {
 			p.Setup, p.SetupText = r.setupFile(e.v, e.path)
 		case "frame":
 			frame = &e
+		case "needs":
+			needs = &e
 		case "name":
 			named = true
 			if s, ok := r.str(e.v, e.path); ok {
@@ -660,6 +663,9 @@ func (r *reader) pack(p *Pack, root *yaml.Node) {
 				r.errf(e.e.k, e.e.path, "a pack of kind source carries sources alone, and no %s", e.what)
 			}
 		}
+		if needs != nil {
+			r.errf(needs.k, needs.path, "a pack of kind source carries sources alone, and no needs: a connector keeps its declaration's own needs")
+		}
 		if sources == nil && root.Kind == yaml.MappingNode {
 			r.errf(root, "sources", "missing: a pack of kind source declares its sources (sources: <name>: declaration: <file>)")
 		} else if sources != nil && sources.v.Kind == yaml.MappingNode && len(sources.v.Content) == 0 {
@@ -720,6 +726,7 @@ func (r *reader) pack(p *Pack, root *yaml.Node) {
 	}
 	// Last: the frame's path may be none of the files read above.
 	p.Frame = r.frame(p, frame)
+	p.Needs = r.needs(p, needs)
 }
 
 // calls reads what a group or a crew member asks to call: a mapping of a
@@ -1306,120 +1313,6 @@ func stageNames(flows []Flow) []string {
 		}
 	}
 	return out
-}
-
-func (r *reader) group(e entry) Group {
-	g := Group{Name: e.key}
-	var kinds []string
-	var calls, env *entry
-	for _, f := range r.entries(e.v, e.path, "agent", "run", "people", "limit", "binds_as", "calls", "env") {
-		switch f.key {
-		case "binds_as":
-			if as, ok := r.str(f.v, f.path); ok {
-				g.BindsAs = as
-				r.binds = append(r.binds, boundAs{n: f.v, key: f.path, group: g.Name, as: as})
-			}
-		case "calls":
-			calls = &f
-			g.Calls = r.calls(f)
-		case "env":
-			env = &f
-			g.Env = r.env(f)
-		case "agent":
-			kinds = append(kinds, f.key)
-			g.Agent = r.rel(f.v, f.path, "role")
-		case "run":
-			kinds = append(kinds, f.key)
-			g.Run = r.rel(f.v, f.path, "script")
-		case "people":
-			// A value that is no boolean has its own error; it still counts
-			// as the kind, so the group is not also said to have none.
-			var ok bool
-			if g.People, ok = r.boolean(f.v, f.path); g.People || !ok {
-				kinds = append(kinds, f.key)
-			}
-		case "limit":
-			if n, ok := r.count(f.v, f.path, "beads"); ok {
-				g.Limit = n
-			}
-		}
-	}
-	if e.v.Kind == yaml.MappingNode && len(kinds) != 1 {
-		got := "none"
-		if len(kinds) > 0 {
-			got = strings.Join(kinds, " and ")
-		}
-		r.errf(e.k, e.path, "a group is exactly one of agent: <role file>, run: <script>, people: true; this one has %s", got)
-	}
-	// The variables are set in the cmd that runs the script. A group of no
-	// kind has its own error, and an empty mapping says nothing.
-	if env != nil && env.v.Kind == yaml.MappingNode && len(env.v.Content) > 0 && len(kinds) > 0 && !slices.Contains(kinds, "run") {
-		r.errf(env.k, env.path, "an agent group or a people group has no cmd to set variables in: env is for a group with run: <script>")
-		g.Env = nil
-	}
-	// A person's call is told by who they are, never by the group whose
-	// stage they work in (store.sourceCallerIn): a grant to a people group
-	// would let nobody call.
-	if calls != nil && g.People {
-		r.errf(calls.k, calls.path, "a people group makes no call: a person calls as who they are. calls is for a group with agent: or run:")
-		g.Calls = nil
-	}
-	return g
-}
-
-// env reads a script group's env: variable names to the strings the import
-// sets them to before the script. A name is what the shell takes for one,
-// since setScript tells a cmd's assignments from its command by that rule.
-// A value is a printable string of one line: pack check prints these words
-// for the operator to judge what the pack sets, and a terminal would act on
-// an escape or a line break in them. An empty mapping is no env.
-func (r *reader) env(e entry) map[string]string {
-	var out map[string]string
-	for _, f := range r.entriesMatching(e.v, e.path, func(string) bool { return true }) {
-		if !envName.MatchString(f.key) {
-			r.errf(f.k, f.path, "name %q: use letters, digits and '_', and no digit first", f.key)
-			continue
-		}
-		v, ok := r.str(f.v, f.path)
-		if !ok {
-			continue
-		}
-		if i := strings.IndexFunc(v, func(c rune) bool { return !unicode.IsPrint(c) }); i >= 0 {
-			c, _ := utf8.DecodeRuneInString(v[i:])
-			r.errf(f.v, f.path, "the value holds %U, which is not printable: a variable set before a script is one line of text", c)
-			continue
-		}
-		if out == nil {
-			out = map[string]string{}
-		}
-		out[f.key] = v
-	}
-	return out
-}
-
-// checkBindsAs holds each binds_as to the groups read: it names an agent
-// group of the pack that comes before the one that says it, so the import has
-// settled the named group's agent, model and arguments when it comes to this
-// one, and no group binds as itself or in a circle.
-func (r *reader) checkBindsAs(groups []Group) {
-	for _, b := range r.binds {
-		i := slices.IndexFunc(groups, func(g Group) bool { return g.Name == b.group })
-		j := slices.IndexFunc(groups, func(g Group) bool { return g.Name == b.as })
-		switch {
-		case i >= 0 && groups[i].Agent == "":
-			r.errf(b.n, b.key, "a group binds as another only with agent: it is the agent, model and arguments that are taken")
-		case j < 0:
-			names := make([]string, len(groups))
-			for k, g := range groups {
-				names[k] = g.Name
-			}
-			r.errf(b.n, b.key, "the pack has no group %s (it has: %s)", b.as, strings.Join(names, ", "))
-		case j >= i:
-			r.errf(b.n, b.key, "group %s is not declared before %s: declare it first, so it is bound when the import comes to this group", b.as, b.group)
-		case groups[j].Agent == "":
-			r.errf(b.n, b.key, "group %s is not an agent group: nothing of it is taken", b.as)
-		}
-	}
 }
 
 // rel reads a role or script path and checks the file: always relative

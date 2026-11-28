@@ -159,6 +159,8 @@ func TestGeneralAskFiles(t *testing.T) {
 		{"crew env_command", []string{"crew", "add", "jo2", "--set", "env_command=make env"}},
 		{"an absolute file word", []string{"group", "set", "builders", "log=/tmp/x.log"}},
 		{"literal mail text", []string{"mail", "ada", "hello there"}},
+		{"pack needs add", []string{"pack", "needs", "visuals", "add", "ffmpeg"}},
+		{"pack needs rm", []string{"pack", "needs", "visuals", "rm", "ffmpeg"}},
 	} {
 		seq := y.ask(t, generalAsk(tc.words...), "yardmaster")
 		run := y.asked(t, seq).Ask.Run

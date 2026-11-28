@@ -45,6 +45,9 @@ type Result struct {
 	// unchanged re-apply of a displaced frame pack is pack_applied with
 	// Wrote false, and this is how the result says so.
 	FrameMoved bool `json:"frame_moved,omitempty"`
+	// LineNeeds are the line's needs checked after applying, with check
+	// commands run.
+	LineNeeds []LineNeedStatus `json:"line_needs,omitempty"`
 }
 
 // Grant is a crew member and the sources an import let it open threads in.

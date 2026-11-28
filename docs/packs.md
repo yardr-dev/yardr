@@ -224,6 +224,7 @@ sources:
 | `kind` | optional: the kind of depot the line is for, `git` (a repository: beads are built on branches and landed on a base) or `dir` (a plain directory: nothing is committed and nothing merges), or `source`: the pack is a connector, imported into the yard itself and into no depot ([An integration pack](#an-integration-pack-kind-source)). `yardr depot init` refuses the pack for a depot of the other kind ([below](#yardr-depot-init)). A pack without the key fits either depot |
 | `setup` | optional, for a pack of any kind: the pack's setup notes, its author's words about what a setup takes — where in the service a webhook is made and which events it needs, what an identity wants, how to test. A file of the pack, markdown (`setup: SETUP.md`), at most 64 KB, with something in it. `pack check` prints it after the plan, `pack apply` after what it did (or names `pack show <pack>` when nothing changed), `pack show <pack>` prints it later, and a crew member's prime names it by that command, so the one who helps with a setup reads it first. The notes are marked as the pack's, not checked by yardr. Text only: the pack still carries no secret, sets no identity and grants nothing |
 | `frame` | optional, for a pack of any kind but `source` ([`api: 4`](pack-api.md#api-4)): the pack's page frame, one HTML file of the pack that pages made under it are made in (`frame: frames/page.html`). A path as a role's is, to a regular file with something in it and at most 256 KiB, that is no other file of the pack. It is read as a browser reads HTML, and it has one `<title>` element in its head, one `<!--yardr:title-->` where the page's title block stands in its body (where text can stand, in an `<h1>` for one), and one `<!--yardr:content-->` where the page's content stands (where a heading, tiles and a table can: not in a paragraph, a button, a link, a heading, a list or the rows and cells of a table). Each marker is a comment of its own: the same bytes in a tag or an attribute, in a longer comment, or in the text of a `<script>`, `<style>`, `<textarea>`, `<title>`, `<iframe>`, `<xmp>`, `<noembed>`, `<noframes>`, `<noscript>` or `<plaintext>` are none, and the pack is refused for them. Nor may a marker stand in the head, after the body, or inside an `<svg>`, a `<math>` or a `<template>`, and a frame nests no more than 512 elements deep. The import copies the frame as it stands to `<home>/packs/<pack>/<its path>`, at mode 0644: nothing is filled in it, and it is no program, since only a reader's browser runs its script. The digest pins it, and `pack check` names it on a line of its own ([below](#yardr-pack-check)) |
+| `needs` | optional, for a line of any kind but `source` ([`api: 9`](pack-api.md#api-9)): a non-empty list of tools and connectors the line needs. Each entry is a bare tool name (`gh`), a mapping with `name` and optional `any` (program names or absolute paths tried in order), `env` (variable name checked first) and `check` (argv list run without a shell to verify the tool), or `{ connector: <source> }` alone. Checked on this machine (or `not checked here` when every group of the line the yard has is worked by `peer`), shown in `pack check`, `pack apply`, `pack needs` and `doctor`, and copied once to the yard's record so the operator can edit it with `yardr pack needs` ([below](#yardr-pack-needs)) |
 | `flows.<flow>.stages` | the flow's stages, **in file order**: the first is where a bead starts |
 | `flows.<flow>.type` | optional: the flow is for beads of this type, beside the depot's flow (a train flow beside the task flow). A type follows one flow |
 | `…stages.<stage>.group` | who works the stage: a key of `groups`. A stage without one is routed to nobody |
@@ -1533,6 +1534,7 @@ starter in depot web  2026-10-03 18:40 by mckean
 | `open_threads` | the answers about opening threads: yard's crew member -> source -> `true` or `false`; absent when nothing was answered. `yardr pack list` prints them as `may open   boss: github no, linear yes` |
 | `expose_to_peers` | the answers about exposing a crew member to peers: yard's crew member -> the peer's public key -> `true` or `false`; absent when nothing was answered. `yardr pack check` says them by the peer's name, as `has` and `declined` |
 | `calls` | the answers about the calls of declared sources: the yard's group or crew member (`group web-builders`, `crew member boss`) -> `<source>:<read or a call's name>` -> `true` or `false`; absent when nothing was answered. `yardr pack list` prints them as `may call   group web-builders: crm:read yes`. A yes whose grant was revoked since is forgotten, so the next import asks |
+| `needs` | the line's needs list as JSON text, copied from `pack.yaml`'s `needs` on the first apply (or when empty) and left as the yard holds it on later applies; edited with `yardr pack needs <line> add` and `rm` |
 
 An import that changes nothing leaves the record as it is, its commit and
 time included: it is the record of the last import that did something. The
@@ -1569,6 +1571,52 @@ Pruning happens after the import, before the record. A removal the store
 refuses does not undo the rest: what could be removed is, the record keeps
 the source so the next `--prune` tries again, and the command exits 1 naming
 it.
+
+## yardr pack needs
+
+```sh
+yardr pack needs [<line>] [--depot <depot>] [--json]
+yardr pack needs <line> add <need> [--depot <depot>] [--json]
+yardr pack needs <line> rm <need> [--depot <depot>] [--json]
+```
+
+A line can declare the tools and connectors it needs under `needs` at the root
+of `pack.yaml` (`api: 9`):
+
+```yaml
+needs:
+  - gh
+  - name: chrome
+    any: [google-chrome, google-chrome-stable, chromium, chromium-browser,
+          "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"]
+    env: SHOT_CHROME
+  - name: python3
+    check: [python3, -c, "import sys; print(sys.version.split()[0]); sys.exit(sys.version_info < (3, 9))"]
+  - connector: github
+```
+
+A bare string is a tool name looked up on `PATH`. A mapping with `name` may add
+`env` (checked first for an executable path), `any` (program names or absolute
+executable paths tried in order before `name`), and `check` (an argv list run
+without a shell, with no credential, a 30-second timeout and an 8 KiB output
+cap; exit 0 is `ok` with stdout's first line, any other exit is `missing` with
+stderr's first line). A mapping with `connector` names a declared source, met
+when the yard declares it and otherwise printed as `missing connector <name>:
+yardr pack apply <name>`.
+
+Checks run only for a line the yard has applied: during `pack apply` after
+confirmation, in `yardr pack needs`, and in `yardr doctor`. `pack check`,
+`pack show` and a card's plan run no check command and print `its check runs
+when the line is applied` beside any need with `check`. When every group of the
+line that the yard has is worked by the `peer` runner, its needs are reported
+as `not checked here`.
+
+The yard copies `needs` into its import record on the first apply and keeps the
+yard's list on later applies. `yardr pack needs <line> add <need>` and `rm
+<need>` edit that list (on every depot the line is applied to, or only the one
+`--depot` names), where `<need>` is a tool name or `connector:<source>`. A tool
+with `any`, `env` or `check` can be removed with `rm` by its name; `add` takes
+only a bare tool name or `connector:<source>`.
 
 ## yardr pack export
 

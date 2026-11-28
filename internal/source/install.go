@@ -25,10 +25,15 @@ const MaxInstallOutput = 8 << 20
 
 // NeedPath is the path a need's program is found at on this machine:
 // the path its env variable names, where that is set and stands as a
-// program to run, else the program on PATH. A leading ~/ in the env
-// path is the user's home, as the mint that reads the same variable
-// expands it.
+// program to run, then each entry of Any in order (an absolute path as
+// an executable file, a bare name on PATH), else Program on PATH. A
+// leading ~/ in the env path is the user's home, as the mint that reads
+// the same variable expands it.
 func NeedPath(n Need) (string, bool) {
+	executable := func(p string) bool {
+		info, err := os.Stat(p)
+		return err == nil && !info.IsDir() && info.Mode().Perm()&0o111 != 0
+	}
 	if n.Env != "" {
 		if p := strings.TrimSpace(os.Getenv(n.Env)); p != "" {
 			if p == "~" {
@@ -40,10 +45,24 @@ func NeedPath(n Need) (string, bool) {
 					p = filepath.Join(home, p[2:])
 				}
 			}
-			if info, err := os.Stat(p); err == nil && !info.IsDir() && info.Mode().Perm()&0o111 != 0 {
+			if executable(p) {
 				return p, true
 			}
 		}
+	}
+	for _, cand := range n.Any {
+		if filepath.IsAbs(cand) {
+			if executable(cand) {
+				return cand, true
+			}
+			continue
+		}
+		if p, err := exec.LookPath(cand); err == nil {
+			return p, true
+		}
+	}
+	if n.Program == "" {
+		return "", false
 	}
 	p, err := exec.LookPath(n.Program)
 	if err != nil {

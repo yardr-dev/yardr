@@ -501,6 +501,20 @@ written, and how many bytes it holds), and `yardr call --note` notes the
 marking line and the file line, with no bytes. A pack whose declaration
 declares a file call says `api: 8`.
 
+### API 9
+
+The `needs` key at the root of `pack.yaml` on a line (refused on a pack of
+kind `source`, which keeps its declaration's own `needs`): one non-empty list
+of tools and connectors the line needs. Each entry is a bare tool name, a
+mapping with `name` and optional `any` (list of program names on PATH or
+absolute executable paths), `env` (variable name checked first) and `check`
+(argv list of at least one word, run without a shell with no credential, a
+30-second timeout and an 8 KiB output cap), or a mapping with `connector:
+<source name>` and no other key. A `check` runs only for an applied line (in
+`pack apply` after confirmation, in `pack needs`, and in `doctor`); `pack
+check`, `pack show` and a card's plan run nothing and print `its check runs
+when the line is applied`. A pack that uses `needs` says `api: 9`.
+
 ## Left out
 
 These are not in the API, and each can join it by a rise of the number if a
