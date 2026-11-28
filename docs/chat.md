@@ -264,7 +264,10 @@ off in a terminal. The card shows the command whole and unchecked, one
 word a line with its length, says the yard has not checked it and that no
 way back is shown, and is good for one hour. It always weighs `code`, so
 it is strong. Approving runs the words as typed, as the operator, once,
-and what the command prints is told to the asker.
+and what the command prints is told to the asker. A `pack install --tool`
+command is launched detached and answers `started` at once so other cards
+do not wait for it; it may run up to 15 minutes, and its result is a note
+on the card's bead.
 
 The view draws the `WEIGHTY` lines in the style it gives a crew member that
 is `blocked`, `failed to start` or `not logged in`, the one for what a

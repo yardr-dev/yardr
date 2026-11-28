@@ -2,14 +2,20 @@ package server
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
 	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/store"
+	"yardr.dev/yardr/internal/testload"
 )
 
 // generalYard is a carry yard with general cards on.
@@ -161,6 +167,39 @@ func TestCarryGeneralFailures(t *testing.T) {
 		!strings.Contains(rec.Result, "printed more than 65536 bytes") {
 		t.Fatalf("the loud carrying record = %+v", rec)
 	}
+
+	// A tool install whose launch fails (executable error or missing
+	// binary) fails the card with failWords.
+	for _, tc := range []struct {
+		name string
+		exec func() (string, error)
+		want string
+	}{
+		{"executable error", func() (string, error) { return "", errors.New("no binary here") }, "no binary here"},
+		{"spawn error", func() (string, error) { return filepath.Join(t.TempDir(), "missing-yardr"), nil }, "missing-yardr"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			st3, home3, bead3 := generalCarrierYard(t)
+			old := executable
+			executable = tc.exec
+			t.Cleanup(func() { executable = old })
+			seq3, err := st3.AddAsk(ctx, bead3, generalAskOf("pack", "install", "l", "--tool", "t", "--", "sh", "-c", "x"), "yardmaster")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := st3.ApproveAsk(ctx, bead3, seq3, "mckean", true, nil); err != nil {
+				t.Fatal(err)
+			}
+			if did, err := testCarrier(st3, home3, "boot-one").carryNext(ctx); err != nil || !did {
+				t.Fatalf("carryNext = %v, %v", did, err)
+			}
+			rec := carryState(t, st3, bead3, seq3)
+			if rec.State != store.CarryFailed || !strings.Contains(rec.Result, tc.want) ||
+				!strings.Contains(rec.Result, "Finish it with yardr pack install l --tool t -- sh -c x in a terminal") {
+				t.Fatalf("failed launch record = %+v", rec)
+			}
+		})
+	}
 }
 
 // A full cap of output still completes: the answer note holds it
@@ -236,5 +275,203 @@ func TestCarryGeneralLegAndNoLock(t *testing.T) {
 	}
 	if rec := carryState(t, st, bead, seq); rec.State != store.CarryDone || !strings.Contains(rec.Result, "carried") {
 		t.Fatalf("the carrying record = %+v", rec)
+	}
+}
+
+// A general tool install launches detached with --bead inserted before
+// --, completes at once with the started words so a following ordinary
+// general card runs while the install still sleeps, and finishes its
+// work afterwards.
+func TestCarryGeneralToolInstallDetached(t *testing.T) {
+	ctx := context.Background()
+	st, home, bead := generalCarrierYard(t)
+	tmp := t.TempDir()
+	pidFile := filepath.Join(tmp, "install.pid")
+	outFile := filepath.Join(tmp, "install.out")
+	t.Setenv("TEST_INSTALL_PID", pidFile)
+	t.Setenv("TEST_INSTALL_OUT", outFile)
+	t.Setenv("GENERAL_KEEP", "kept")
+	t.Setenv("YARDR_SESSION", "pane-1")
+	t.Setenv("YARDR_BEAD", "yardr-other")
+	t.Setenv("YARDR_ACTOR", "yardmaster")
+	t.Setenv("YARDR_HOME", "/elsewhere")
+	t.Setenv("YARDR_CREW", "yardmaster")
+	generalScript(t, `case " $* " in
+  *" --tool "*)
+    echo $$ > "$TEST_INSTALL_PID"
+    sleep 5
+    printf 'args:%s\ndir:%s\nkeep:%s\nsession:%s bead:%s actor:%s home:%s crew:%s card:%s\n' \
+      "$*" "$(pwd)" "${GENERAL_KEEP-}" "${YARDR_SESSION-UNSET}" "${YARDR_BEAD-UNSET}" \
+      "${YARDR_ACTOR-UNSET}" "${YARDR_HOME-UNSET}" "${YARDR_CREW-UNSET}" "${YARDR_GENERAL_CARD-UNSET}" \
+      > "$TEST_INSTALL_OUT.tmp"
+    mv "$TEST_INSTALL_OUT.tmp" "$TEST_INSTALL_OUT"
+    ;;
+  *)
+    printf 'ordinary:%s\n' "$*"
+    ;;
+esac
+`)
+	t.Cleanup(func() {
+		if _, err := os.Stat(outFile); err == nil {
+			return
+		}
+		if b, err := os.ReadFile(pidFile); err == nil {
+			if pid, err := strconv.Atoi(strings.TrimSpace(string(b))); err == nil && pid > 0 {
+				_ = syscall.Kill(-pid, syscall.SIGKILL)
+			}
+		}
+	})
+
+	seq1, err := st.AddAsk(ctx, bead, generalAskOf("pack", "install", "l", "--tool", "t", "--", "sh", "-c", "x"), "yardmaster")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.ApproveAsk(ctx, bead, seq1, "mckean", true, nil); err != nil {
+		t.Fatal(err)
+	}
+	c := testCarrier(st, home, "boot-one")
+	began := time.Now()
+	if did, err := c.carryNext(ctx); err != nil || !did {
+		t.Fatalf("carryNext = %v, %v", did, err)
+	}
+	if took := time.Since(began); took >= time.Second {
+		t.Fatalf("detached tool install carry took %v, want under 1s", took)
+	}
+	if _, err := os.Stat(outFile); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("install output appeared before sleep finished: %v", err)
+	}
+	rec1 := carryState(t, st, bead, seq1)
+	wantResult := fmt.Sprintf("started yardr pack install l --tool t -- sh -c x; the result is noted on %s within 15 minutes", bead)
+	if rec1.State != store.CarryDone || rec1.Result != wantResult {
+		t.Fatalf("tool install carry = %+v, want done with %q", rec1, wantResult)
+	}
+
+	// A second, ordinary general record approved after it is carried
+	// while the first stand-in still sleeps.
+	seq2, err := st.AddAsk(ctx, bead, generalAskOf("bead", "create", "While", "sleeping"), "yardmaster")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.ApproveAsk(ctx, bead, seq2, "mckean", true, nil); err != nil {
+		t.Fatal(err)
+	}
+	if did, err := c.carryNext(ctx); err != nil || !did {
+		t.Fatalf("second carryNext = %v, %v", did, err)
+	}
+	if _, err := os.Stat(outFile); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("install output appeared before second carry finished: %v", err)
+	}
+	rec2 := carryState(t, st, bead, seq2)
+	if rec2.State != store.CarryDone || !strings.Contains(rec2.Result, "ordinary:--home "+home+" --actor mckean bead create While sleeping") {
+		t.Fatalf("ordinary carry = %+v", rec2)
+	}
+
+	// The detached install finishes afterwards and wrote what it got.
+	deadline := time.Now().Add(testload.Scale(10 * time.Second))
+	var got []byte
+	for {
+		b, err := os.ReadFile(outFile)
+		if err == nil {
+			got = b
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("detached install never wrote %s: %v", outFile, err)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	dir, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := string(got)
+	for _, want := range []string{
+		"args:--home " + home + " --actor mckean pack install l --tool t --bead " + bead + " -- sh -c x",
+		"dir:" + dir,
+		"keep:kept",
+		"session:UNSET bead:UNSET actor:UNSET home:UNSET crew:UNSET card:1",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("detached install did not hold %q:\n%s", want, out)
+		}
+	}
+}
+
+// isToolInstall matches only `pack install ... --tool ...` with --tool
+// before any --, withBead puts --bead just before the first --, and a
+// pack install without --tool (or with --tool only after --) still runs
+// in the lane under generalTimeout.
+func TestIsToolInstallAndNonToolStayInLane(t *testing.T) {
+	for _, tc := range []struct {
+		argv []string
+		want bool
+	}{
+		{[]string{"pack", "install", "l", "--tool", "t", "--", "sh", "-c", "x"}, true},
+		{[]string{"pack", "install", "l", "--tool=t", "--", "sh", "-c", "x"}, true},
+		{[]string{"pack", "install", "--tool", "t", "l", "--", "sh", "-c", "x"}, true},
+		{[]string{"pack", "install", "l", "--tool", "t"}, true},
+		{[]string{"pack", "install", "l"}, false},
+		{[]string{"pack", "install", "l", "--", "--tool", "t"}, false},
+		{[]string{"pack", "install", "l", "--", "--tool=t"}, false},
+		{[]string{"pack", "install", "l", "--toolkit", "t", "--", "sh"}, false},
+		{[]string{"pack", "apply", "l", "--tool", "t", "--", "sh"}, false},
+		{[]string{"pack", "install"}, false},
+		{nil, false},
+	} {
+		if got := isToolInstall(tc.argv); got != tc.want {
+			t.Errorf("isToolInstall(%q) = %v, want %v", tc.argv, got, tc.want)
+		}
+	}
+	for _, tc := range []struct {
+		in, want []string
+	}{
+		{
+			[]string{"pack", "install", "l", "--tool", "t", "--", "sh", "-c", "x"},
+			[]string{"pack", "install", "l", "--tool", "t", "--bead", "yardr-1234", "--", "sh", "-c", "x"},
+		},
+		{
+			[]string{"pack", "install", "l", "--tool=t", "--", "sh", "--", "x"},
+			[]string{"pack", "install", "l", "--tool=t", "--bead", "yardr-1234", "--", "sh", "--", "x"},
+		},
+		{
+			[]string{"pack", "install", "l", "--tool", "t"},
+			[]string{"pack", "install", "l", "--tool", "t", "--bead", "yardr-1234"},
+		},
+	} {
+		if got := withBead(tc.in, "yardr-1234"); !slices.Equal(got, tc.want) {
+			t.Errorf("withBead(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+
+	ctx := context.Background()
+	st, home, bead := generalCarrierYard(t)
+	generalScript(t, "sleep 30\n")
+	old := generalTimeout
+	generalTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { generalTimeout = old })
+	c := testCarrier(st, home, "boot-one")
+
+	// --tool only after -- runs in the lane and hits generalTimeout.
+	seq, err := st.AddAsk(ctx, bead, generalAskOf("pack", "install", "l", "--", "--tool", "t"), "yardmaster")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.ApproveAsk(ctx, bead, seq, "mckean", true, nil); err != nil {
+		t.Fatal(err)
+	}
+	if did, err := c.carryNext(ctx); err != nil || !did {
+		t.Fatalf("carryNext = %v, %v", did, err)
+	}
+	if rec := carryState(t, st, bead, seq); rec.State != store.CarryFailed || !strings.Contains(rec.Result, "no answer within") {
+		t.Fatalf("pack install with --tool after -- = %+v, want in-lane timeout", rec)
+	}
+
+	// pack install without --tool also runs in the lane under generalTimeout.
+	res, failure := c.carryGeneral(ctx, &store.Carry{
+		Bead: bead, Ask: seq + 1, Actor: "mckean", General: true,
+		Argv: []string{"pack", "install", "l"},
+	})
+	if res != "" || !strings.Contains(failure, "no answer within") {
+		t.Fatalf("pack install without --tool = (%q, %q), want in-lane timeout", res, failure)
 	}
 }
