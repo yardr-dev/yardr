@@ -444,6 +444,9 @@
           ]
         }
       ],
+      "yard_text": "",
+      "original_text": "# Keeper\n\nYou keep the yard: beads that reach decide, and what keeper hears\nfrom outside. me is the person you answer to.\n",
+      "diff": "--- was\n+++ is\n@@ -0,0 +1,4 @@\n+# Keeper\n+\n+You keep the yard: beads that reach decide, and what keeper hears\n+from outside. me is the person you answer to.\n",
       "crew": {
         "pack": "keeper",
         "crew": "keeper",

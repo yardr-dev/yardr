@@ -10,11 +10,13 @@ import (
 	"yardr.dev/yardr/internal/store"
 )
 
-// checkFlags are what pack check takes: where the pack goes and what
-// answers its plan.
+// checkFlags are what pack check takes: where the pack goes, what answers
+// its plan, and whether to print both texts and unified diffs for differing
+// objects.
 type checkFlags struct {
 	packFlags
 	answerFlags
+	diff bool
 }
 
 // answered reports whether any flag that answers the plan was given.
@@ -132,9 +134,13 @@ pack's flow lacks). A pack given as a directory is read and checked before
 the yard is asked anything, so its mistakes are named on a home with no yard
 too; a valid one stops there for the yard its plan is made against. After the plan
 come the pack's setup notes (pack.yaml's setup), when it has any: its author's words
-about what a setup takes, marked as the pack's, not checked by yardr. --json prints the plan as data. See docs/packs.md.
+about what a setup takes, marked as the pack's, not checked by yardr. --diff
+prints, for each differing object, the yard's version, the pack's original
+and their unified diff. --json prints the plan as data, carrying yard_text,
+original_text and diff on each differing object. See docs/packs.md.
 ` + naming,
 		Example: `  yardr pack check starter --depot yardr
+  yardr pack check starter --depot yardr --diff
   yardr pack check ~/packs/starter --depot yardr --crew yardmaster=boss
   yardr pack check contributors --depot signalbox --group builders=yardr-builders
   yardr pack check starter --depot yardr --bind builders=claude --members backlog=ada
@@ -170,7 +176,14 @@ about what a setup takes, marked as the pack's, not checked by yardr. --json pri
 			if f.answerFlags.answered() {
 				data = map[string]any{"plan": plan, "answers": answers, "open_threads": open, "calls": calls}
 			}
-			if err := a.out(c.OutOrStdout(), data, func(w io.Writer) { printPlan(w, plan, answers, openAnswers, callAnswers, nil, true) }); err != nil {
+			if err := a.out(c.OutOrStdout(), data, func(w io.Writer) {
+				printPlan(w, plan, answers, openAnswers, callAnswers, nil, true)
+				if f.diff {
+					printPlanDiffs(w, plan)
+				} else {
+					printPlanDiffHint(w, plan, args[0])
+				}
+			}); err != nil {
 				return err
 			}
 			if len(plan.Refused) > 0 {
@@ -181,5 +194,6 @@ about what a setup takes, marked as the pack's, not checked by yardr. --json pri
 	}
 	f.packFlags.register(check, "would be")
 	f.answerFlags.register(check)
+	check.Flags().BoolVar(&f.diff, "diff", false, "for each differing object, print the yard's version, the pack's original and their unified diff")
 	return check
 }

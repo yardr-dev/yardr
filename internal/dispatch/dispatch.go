@@ -1049,10 +1049,10 @@ func runnerName(s store.Session, groups map[string]store.Group) string {
 }
 
 // end ends s in state; its error is the store's, the session still running.
-func (d *Dispatcher) end(ctx context.Context, s store.Session, state, reason string) error {
+func (d *Dispatcher) end(ctx context.Context, s store.Session, state, reason string) (err error) {
+	reason = d.packScriptReason(ctx, s, state, reason)
 	d.Log.Info("session ended", "session", s.ID, "bead", s.Bead, "state", state, "reason", reason)
-	err := d.Store.EndSession(ctx, s.ID, state, reason)
-	if err != nil {
+	if err = d.Store.EndSession(ctx, s.ID, state, reason); err != nil {
 		d.Log.Error("end session", "session", s.ID, "err", err)
 	}
 	d.retryAfter[s.Bead] = d.now().Add(d.Backoff)

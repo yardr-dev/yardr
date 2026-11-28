@@ -122,6 +122,7 @@ func (b *planner) crew() error {
 					changes = append(changes, Diff{"on", old.On, wantOn})
 				}
 				o.Action, o.Changes = kept(true, changes), changes
+				b.setCrewDiff(&o, pr, old)
 			}
 		} else {
 			if pr.Name != "yardmaster" && pr.Role != "" {

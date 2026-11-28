@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/store"
 )
 
@@ -187,6 +188,7 @@ func (b *planner) groups() error {
 				changes = append(changes, Diff{"limit", old.Limit, g.Limit})
 			}
 			o.Action, o.Changes = kept(true, changes), changes
+			b.setGroupDiff(&o, g, old)
 			// A group the yard has keeps the last import's binding in the
 			// record while the pack still says binds_as: the import binds
 			// nothing anew, so the record must not change either, or no
@@ -263,40 +265,14 @@ func (b *planner) groups() error {
 // puts it.
 const envNamePattern = `[A-Za-z_][A-Za-z0-9_]*`
 
-var (
-	envName    = regexp.MustCompile(`^` + envNamePattern + `$`)
-	assignment = regexp.MustCompile(`^` + envNamePattern + `=`)
-)
-
-// splitCmd finds the command in a group's cmd: the words before it are
-// variable assignments, which is how a script's options are set
-// (YARDR_PUSH=origin /path/to/merge-local). It returns those words as
-// written and the command's place, cmd[i:end], which is empty (i == end)
-// for a cmd that holds assignments alone, or nothing.
-func splitCmd(cmd string) (assigns []string, i, end int) {
-	for i < len(cmd) {
-		for i < len(cmd) && (cmd[i] == ' ' || cmd[i] == '\t') {
-			i++
-		}
-		end = wordEnd(cmd, i)
-		if i == end {
-			break
-		}
-		if !assignment.MatchString(cmd[i:end]) {
-			return assigns, i, end
-		}
-		assigns = append(assigns, cmd[i:end])
-		i = end
-	}
-	return assigns, i, i
-}
+var envName = regexp.MustCompile(`^` + envNamePattern + `$`)
 
 // setScript puts script in place of the command a group's cmd runs and
 // keeps the rest: the variable assignments before it and any arguments
 // after it. An empty cmd becomes the script alone.
 func setScript(cmd, script string) string {
 	script = shellQuote(script)
-	if _, i, end := splitCmd(cmd); i < end {
+	if _, i, end := config.SplitCmd(cmd); i < end {
 		return cmd[:i] + script + cmd[end:]
 	}
 	if strings.TrimSpace(cmd) == "" {
@@ -307,7 +283,7 @@ func setScript(cmd, script string) string {
 
 // EnvWords are the group's env as the assignment words of a cmd, names
 // sorted: a map has no order, and a plan is the same every time it is
-// made. A value is quoted as a script's path is, which wordEnd reads back.
+// made. A value is quoted as a script's path is, which config.WordEnd reads back.
 func (g Group) EnvWords() []string {
 	var words []string
 	for _, name := range slices.Sorted(maps.Keys(g.Env)) {
@@ -323,7 +299,7 @@ func (g Group) EnvWords() []string {
 // an import of the same pack with another env must flip no yard. So the
 // import never writes one, and the plan says what it leaves.
 func keptEnv(g Group, cmd string) []string {
-	assigns, _, _ := splitCmd(cmd)
+	assigns, _, _ := config.SplitCmd(cmd)
 	have := map[string]string{}
 	for _, w := range assigns {
 		name, value, _ := strings.Cut(w, "=")
@@ -406,26 +382,6 @@ func shellLiteral(word string) (string, bool) {
 		}
 	}
 	return out.String(), quote == 0
-}
-
-// wordEnd is where the shell word starting at i ends: at the first blank
-// outside quotes.
-func wordEnd(s string, i int) int {
-	var quote byte
-	for ; i < len(s); i++ {
-		c := s[i]
-		switch {
-		case quote == 0 && (c == ' ' || c == '\t'):
-			return i
-		case c == '\\' && quote != '\'' && i+1 < len(s):
-			i++
-		case quote == 0 && (c == '\'' || c == '"'):
-			quote = c
-		case c == quote:
-			quote = 0
-		}
-	}
-	return i
 }
 
 var shellSafe = regexp.MustCompile(`^[A-Za-z0-9_@%+=:,./-]+$`)

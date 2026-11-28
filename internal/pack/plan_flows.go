@@ -51,7 +51,9 @@ func (b *planner) flows(flows []Flow) error {
 				if len(changes) == 0 && hd != "" && wd != "" {
 					changes = []Diff{{"flow", "digest " + hd[:min(12, len(hd))], "digest " + wd[:min(12, len(wd))]}}
 				}
-				b.add(Object{Kind: "flow", Name: sf.Name, Action: Differs, Changes: changes, Flow: &sf})
+				obj := Object{Kind: "flow", Name: sf.Name, Action: Differs, Changes: changes, Flow: &sf}
+				setTextDiff(&obj, have[i].String(), sf.String())
+				b.add(obj)
 			}
 		}
 
@@ -70,7 +72,9 @@ func (b *planner) flows(flows []Flow) error {
 				ptrObjects = append(ptrObjects, Object{Kind: "pointer", Name: cur.String() + " -> " + cur.Flow, Action: Unchanged, Pointer: &cur})
 				g = Governs{Type: f.Type, Flow: cur.Flow, Source: "store", Now: now[f.Type], InPack: true}
 			} else {
-				ptrObjects = append(ptrObjects, Object{Kind: "pointer", Name: cur.String() + " -> " + cur.Flow, Action: Differs, Changes: []Diff{{"flow", cur.Flow, ptr.Flow}}, Pointer: &cur})
+				obj := Object{Kind: "pointer", Name: cur.String() + " -> " + cur.Flow, Action: Differs, Changes: []Diff{{"flow", cur.Flow, ptr.Flow}}, Pointer: &cur}
+				setChangesDiff(&obj)
+				ptrObjects = append(ptrObjects, obj)
 				g = Governs{Type: f.Type, Flow: cur.Flow, Source: "store", Now: now[f.Type], InPack: false}
 			}
 		}
@@ -254,8 +258,10 @@ func (b *planner) routes(flows []Flow) error {
 					if len(old) > 1 {
 						changes = append(changes, Diff{"routes", fmt.Sprintf("%d for this stage", len(old)), "0"})
 					}
-					b.add(Object{Kind: "route", Name: name + " -> (no route)", Action: Differs, Changes: changes,
-						Route: &RouteOp{Stage: s.Name, Depot: b.o.Depot, Type: f.Type}})
+					obj := Object{Kind: "route", Name: name + " -> (no route)", Action: Differs, Changes: changes,
+						Route: &RouteOp{Stage: s.Name, Depot: b.o.Depot, Type: f.Type}}
+					setChangesDiff(&obj)
+					b.add(obj)
 				}
 				continue
 			}
@@ -334,7 +340,9 @@ func (b *planner) routes(flows []Flow) error {
 			if f.Type != "" {
 				name += " type " + f.Type
 			}
-			b.add(Object{Kind: "route", Name: name + " -> " + op.Group, Action: kept(len(old) > 0, changes), Changes: changes, Route: op})
+			obj := Object{Kind: "route", Name: name + " -> " + op.Group, Action: kept(len(old) > 0, changes), Changes: changes, Route: op}
+			setChangesDiff(&obj)
+			b.add(obj)
 		}
 	}
 	return nil

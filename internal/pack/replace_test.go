@@ -93,6 +93,14 @@ func TestEditedObjectsDifferAndAreNotOverwritten(t *testing.T) {
 			if obj.Action != pack.Differs || len(obj.Changes) == 0 {
 				t.Fatalf("attempt %d: %s %s = %+v, want differs with changes", attempt, want[0], want[1], obj)
 			}
+			if obj.YardText == nil || obj.OriginalText == nil || obj.Diff == nil || *obj.Diff == "" {
+				t.Fatalf("attempt %d: %s %s lacks compare texts/diff: yard=%v orig=%v diff=%v", attempt, want[0], want[1], obj.YardText != nil, obj.OriginalText != nil, obj.Diff)
+			}
+		}
+		for _, obj := range plan.Objects {
+			if obj.Action == pack.Unchanged && (obj.YardText != nil || obj.OriginalText != nil || obj.Diff != nil) {
+				t.Fatalf("attempt %d: unchanged %s %s carries compare texts/diff", attempt, obj.Kind, obj.Name)
+			}
 		}
 		before := head(t, st)
 		res := apply(t, st, plan, nil)
@@ -132,6 +140,42 @@ func TestEditedObjectsDifferAndAreNotOverwritten(t *testing.T) {
 	}
 	if got := storedDigest(t, st, "starter.default"); got != yardFlow {
 		t.Fatalf("flow overwritten: got %s, want %s", got, yardFlow)
+	}
+
+	// A group whose prompt points to a card-written role file shows that
+	// file's text beside the line's filled role; a group differing only in
+	// limit shows its setting diff.
+	customRole := filepath.Join(o.Home, "roles", "web-builders.custom.md")
+	if err := os.MkdirAll(filepath.Dir(customRole), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(customRole, []byte("# Custom builder\n\nYard-specific rule.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bg, err := st.GetGroup(ctx, "web-builders")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bg.Config["prompt"] = customRole
+	if err := st.PutGroup(ctx, *bg, "me"); err != nil {
+		t.Fatal(err)
+	}
+	rg, err := st.GetGroup(ctx, "web-reviewers")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rg.Limit = 7
+	if err := st.PutGroup(ctx, *rg, "me"); err != nil {
+		t.Fatal(err)
+	}
+	gp := build(t, st, load(t, dir), o)
+	bObj := find(t, gp, "group", "web-builders")
+	if bObj.Action != pack.Differs || bObj.YardText == nil || *bObj.YardText != "# Custom builder\n\nYard-specific rule.\n" || bObj.OriginalText == nil || !strings.Contains(*bObj.OriginalText, "# Builder") || bObj.Diff == nil || !strings.Contains(*bObj.Diff, "-# Custom builder") {
+		t.Fatalf("differing group prompt compare = %+v", bObj)
+	}
+	rObj := find(t, gp, "group", "web-reviewers")
+	if rObj.Action != pack.Differs || rObj.YardText == nil || *rObj.YardText != "limit: 7\n" || rObj.OriginalText == nil || !strings.Contains(*rObj.OriginalText, "limit:") || rObj.Diff == nil || !strings.Contains(*rObj.Diff, "-limit: 7") {
+		t.Fatalf("differing group limit compare = %+v", rObj)
 	}
 }
 

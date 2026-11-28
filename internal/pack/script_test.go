@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"yardr.dev/yardr/internal/config"
 )
 
 // A script group's cmd keeps its options (the assignments before the
@@ -47,7 +49,7 @@ func TestGroupEnvWords(t *testing.T) {
 		// A group made of them is the words, then the script, and the
 		// words are the cmd's assignments, each name with its value.
 		cmd := setScript(strings.Join(words, " "), "/new/land")
-		assigns, i, end := splitCmd(cmd)
+		assigns, i, end := config.SplitCmd(cmd)
 		if !slices.Equal(assigns, c.want) || cmd[i:end] != "/new/land" {
 			t.Errorf("cmd %q splits into %q and the command %q, want %q and /new/land", cmd, assigns, cmd[i:end], c.want)
 		}

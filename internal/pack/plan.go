@@ -229,6 +229,16 @@ type Object struct {
 	Owned *store.PackObject `json:"owned,omitempty"`
 	Held  string            `json:"held,omitempty"`
 
+	// Of a differing object (Action == Differs): YardText is what the yard
+	// holds, OriginalText what the line carries now (filled, for a role or
+	// stage file), and Diff their unified diff (store.Unified(YardText,
+	// OriginalText)). Nil/empty on every object that does not differ, and
+	// for non-UTF-8 files; a pointer to "" distinguishes an empty yard copy
+	// from an omitted field.
+	YardText     *string `json:"yard_text,omitempty"`
+	OriginalText *string `json:"original_text,omitempty"`
+	Diff         *string `json:"diff,omitempty"`
+
 	File         *FileOp            `json:"file,omitempty"`
 	Group        *store.Group       `json:"group,omitempty"`
 	Flow         *store.Flow        `json:"flow,omitempty"`

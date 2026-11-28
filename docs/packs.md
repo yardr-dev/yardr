@@ -499,7 +499,7 @@ yard has imported and the ones yardr embeds.
 ## yardr pack check
 
 ```sh
-yardr pack check <pack> [--depot <depot>] [--crew <pack's>=<yard's>]… [--group <pack's>=<yard's>]…
+yardr pack check <pack> [--depot <depot>] [--diff] [--crew <pack's>=<yard's>]… [--group <pack's>=<yard's>]…
     [--flow <flow>] [--bind <group>=<kind>[:<model>][,<preset>]]… [--members <group>=a,b]…
     [--open-threads <pack's>=<source>,…]… [--calls <group>=<source>:<call>,…]…
     [--depot-roles] [--auth <name>] [--json]
@@ -546,9 +546,12 @@ its script runs in a reader's browser only when the reader chooses run`. The
 frame is no program, so it is not counted among them, and the digest above
 pins it. After the plan
 come the pack's setup notes (`setup`), when it has any: its author's words
-about what a setup takes, marked as the pack's, not checked by yardr. `--json` prints the
-same plan as data ([below](#the-plan-as-data)). It exits 1 on an invalid
-pack and on a plan an import would refuse.
+about what a setup takes, marked as the pack's, not checked by yardr. `--diff`
+prints, for each differing object, the yard's version, the pack's original and
+their unified diff ([below](#comparing-a-line-with-its-original)). `--json`
+prints the same plan as data ([below](#the-plan-as-data)), carrying
+`yard_text`, `original_text` and `diff` on each differing object. It exits 1
+on an invalid pack and on a plan an import would refuse.
 
 The flags that answer what an import asks may be given here too, and the
 plan is printed with their answers filled in: `--bind`, `--members`,
@@ -567,6 +570,68 @@ yet. A valid one stops there, since the plan is made against a yard: `no
 yard in <home> yet`, with how to create one, and exit 2 (in a terminal, the
 onboarding). A pack given by name is the yard's to resolve and needs the
 yard from the start.
+
+### Comparing a line with its original
+
+Because a line copies once and then belongs to the yard, applying it again
+never overwrites what the yard has. To see how the yard's copy differs from
+its original as it stands now, run:
+
+```sh
+yardr pack check <line> --depot <depot> --diff
+```
+
+A bare line name is read again from the place its record names: an embedded
+line from the running binary, a folder as it stands, or a URL fetched with
+the credential the record names (`--auth` overrides it). If that folder or
+URL is gone, `pack check` refuses with the same reason `pack apply <name>`
+gives. Without `--diff`, `pack check` prints one line at the end pointing at
+`--diff` when any object differs.
+
+With `--diff`, `pack check` prints, for each differing object, the yard's
+text, the original's text (with placeholders filled for roles and stage
+files) and their unified diff (`--- was` for the yard, `+++ is` for the
+original). For a group or crew member whose `prompt` differs, the yard's text
+is the file its `prompt` points at (such as a role written by a prompt card)
+and the original's is the line's filled role. With `--json`, each differing
+object carries `yard_text`, `original_text` and `diff`, and objects that
+match or create omit all three. For a line copied from a git folder whose
+record holds a commit, `git diff <commit>` in that folder shows what changed
+in the original since it was imported.
+
+**Which card takes what.** No code merges a line's changes onto a copy the
+yard edited: the yardmaster reads the compare and proposes each change on its
+own card (one per object, weighty `code`), so the operator reads the diff
+before approving:
+
+| what differs | card to file |
+|---|---|
+| a stage file (`flows/<flow>/<stage>.md`) | `flow set-stage <line>.<flow> <stage>` with the merged text (`--run-flow <file>`) |
+| one group's role (`group` with differing `prompt`) | `group set <group> prompt=<file>` with the merged role text |
+| a flow's stages, outcomes or round limits | `flow set <line>.<flow>` with the proposed flow (`--run-flow <file>`) |
+| a script, a line's shared role copy or the page frame under `~/.yardr/packs/<line>/` | `pack apply <line> --depot <depot> --replace <file>` (takes the original's bytes; shows both texts whole; a script has no merged-text card) |
+
+**When a script fails.** When an `exec` script group's run ends in `died` or
+`failed` and its `cmd` runs a script under `<home>/packs/<line>/scripts/`,
+the daemon checks it before writing the `session_died` or `session_failed`
+event:
+
+- For an embedded line, it compares the on-disk script against the copy in
+  the running binary. If they differ, the event's `reason` adds a line naming
+  the script, saying it differs from yardr's, and giving the `yardr pack
+  apply <line>[ --depot <depot>] --replace scripts/<script>` command so the
+  yardmaster can file the take card. If the copy is missing, the event names
+  it and gives `yardr pack apply <line>[ --depot <depot>]`, which copies it.
+  If the files match, no line is added.
+- For a line that is not embedded, there is no original in the binary: the
+  event's `reason` adds a line naming the script and says no more.
+- Scripts outside `<home>/packs/<line>/scripts/` (including `<home>/scripts/`,
+  which `yardr upgrade` refreshes on its own) get no extra line.
+
+`yardr doctor` also reports each differing script of an embedded line as a
+plain `note packs` with its `--replace` command, keeps `pack apply` advice
+for files not yet copied, and counts other differing files with `pack check
+--diff`.
 
 ## How a pack maps to the yard
 
@@ -2251,7 +2316,9 @@ pointers, routes, crew members, subscriptions, stage maps, declared sources; dro
 `action` is `create`, `change`, `unchanged`, `differs`, `dropped` or
 `takes`: `differs` is an existing file, flow, pointer, group, route, crew
 member or hook line that reads otherwise than the pack and is left alone
-(carrying its `changes`), and `takes` is a group of the yard that takes one
+(carrying its `changes`, plus `yard_text`, `original_text` and `diff` for
+UTF-8 text objects, omitted on objects that match or create), and `takes` is
+a group of the yard that takes one
 of the pack's, which carries the group as it is and stays, and under `keeps`
 what of the pack's is not set on it.
 Each object carries what the import would write (for a dropped one, what a

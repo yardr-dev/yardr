@@ -18,6 +18,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
+	"yardr.dev/yardr/internal/config"
 	"yardr.dev/yardr/internal/depotfile"
 	"yardr.dev/yardr/internal/runner"
 	"yardr.dev/yardr/internal/store"
@@ -539,7 +540,7 @@ func (e *exporter) groups() error {
 		case "exec":
 			carried, eg.Kind = "cmd", "script"
 			cmd, _ := g.Config["cmd"].(string)
-			script, alone := scriptOf(cmd)
+			script, alone := config.ScriptOf(cmd)
 			info, err := os.Stat(script)
 			if script == "" || !filepath.IsAbs(script) || err != nil || !info.Mode().IsRegular() {
 				return fmt.Errorf("group %s runs %q, whose command names no file by its full path: a pack carries a script as a file, and this command has none to carry", name, cmd)
@@ -737,41 +738,6 @@ func (e *exporter) role(prompt string) (text []byte, from string, err error) {
 	}
 	text, err = os.ReadFile(src.Path)
 	return text, src.Path, err
-}
-
-// scriptOf is the script a group's command runs, the inverse of setScript:
-// its first word that is no variable assignment, unquoted. alone is false
-// for a command with assignments before the script or arguments after it.
-// Only that word is looked at: what follows it may name any file of the
-// machine, and none of those is the pack's to copy.
-func scriptOf(cmd string) (script string, alone bool) {
-	_, i, end := splitCmd(cmd)
-	if i == end {
-		return "", false
-	}
-	return shellUnquote(cmd[i:end]), strings.TrimSpace(cmd[:i]) == "" && strings.TrimSpace(cmd[end:]) == ""
-}
-
-// shellUnquote is a shell word without its quotes, the inverse of
-// shellQuote for the words setScript writes.
-func shellUnquote(w string) string {
-	var out strings.Builder
-	var quote byte
-	for i := 0; i < len(w); i++ {
-		c := w[i]
-		switch {
-		case c == '\\' && quote != '\'' && i+1 < len(w):
-			i++
-			out.WriteByte(w[i])
-		case quote == 0 && (c == '\'' || c == '"'):
-			quote = c
-		case c == quote:
-			quote = 0
-		default:
-			out.WriteByte(c)
-		}
-	}
-	return out.String()
 }
 
 // names turns the role and stage files back into a pack's: the operator's

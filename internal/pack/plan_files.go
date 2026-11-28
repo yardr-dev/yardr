@@ -84,7 +84,9 @@ func (b *planner) file(rel string, op *FileOp) error {
 			act = Differs
 		}
 	}
-	b.add(Object{Kind: "file", Name: rel, Action: act, Changes: changes, File: op})
+	obj := Object{Kind: "file", Name: rel, Action: act, Changes: changes, File: op}
+	setFileDiff(&obj, have, text)
+	b.add(obj)
 	return nil
 }
 

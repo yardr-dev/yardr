@@ -186,7 +186,9 @@ func (b *planner) maps() error {
 			default:
 				mp.Action = Unchanged
 			}
-			b.add(Object{Kind: "map", Name: mapName(h.Name, op.As), Action: mp.Action, Changes: changes, Map: op})
+			obj := Object{Kind: "map", Name: mapName(h.Name, op.As), Action: mp.Action, Changes: changes, Map: op}
+			setChangesDiff(&obj)
+			b.add(obj)
 		}
 		b.plan.Maps = append(b.plan.Maps, mp)
 	}

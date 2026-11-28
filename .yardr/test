@@ -2111,7 +2111,7 @@ sleepbudget() {
 filesizes='
 internal/cli/beads.go 1040 the bead show, list and history commands and their printing
 internal/cli/crew.go 1950 the crew, inbox, mail and memory commands
-internal/cli/doctor.go 1243 the doctor examinations and its report
+internal/cli/doctor.go 1184 the doctor examinations and its report
 internal/cli/init.go 1597 yard init, onboarding and settings
 internal/cli/ops.go 1693 the server, daemon, depot, group, route and session commands
 internal/cli/pack.go 1801 pack loading, import planning and its question rounds
@@ -2122,7 +2122,7 @@ internal/cli/subscriptions.go 1148 the identity, subscribe and thread commands
 internal/cli/updown.go 1302 yard up and down with their handoffs
 internal/dispatch/dispatch.go 1479 the daemon routing pass and its runners
 internal/dispatch/harnesslogin.go 1094 harness login leading and onboarding marks
-internal/pack/export.go 1047 pack export and its object shapes
+internal/pack/export.go 1013 pack export and its object shapes
 internal/pack/pack.go 1776 pack reading, checking and its shapes
 internal/rpc/user.go 1053 the user server and callers (pairing is userpair.go, envelopes usere2e.go)
 internal/standin/standin.go 1508 the fake Linear, GitHub and edge APIs
