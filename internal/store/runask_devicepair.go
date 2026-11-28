@@ -69,6 +69,11 @@ func devicePairOf(argv []string) (user, device, address string) {
 // --qr on the row: drawing the code is the approving client's work on
 // approval, and --end ends a standing pairing at a terminal.
 func parseDevicePair(rest []string) ([]string, error) {
+	for _, word := range rest {
+		if word == "--qr" || strings.HasPrefix(word, "--qr=") {
+			return nil, fmt.Errorf("--run takes %s: a pairing card takes no --qr, since its approval shows the QR code and the code to the approver; ask it without --qr", devicePairUse)
+		}
+	}
 	args, values, err := runWords(devicePairUse, "user device pair", "the operator's", rest, map[string]bool{"--url": true})
 	if err != nil {
 		return nil, err

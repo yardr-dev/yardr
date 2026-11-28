@@ -91,11 +91,15 @@ func TestEdgeValue(t *testing.T) {
 	if got := e.HooksURL(); got != "https://my.yardr.dev/hooks/mckean/airy" {
 		t.Errorf("HooksURL = %q, want the address the edge takes this yard's webhooks at", got)
 	}
+	if got := (store.Edge{URL: "https://my.yardr.dev", Key: key, Handle: "mckean", Name: "mac"}).MCPURL(); got != "https://my.yardr.dev/mcp/mckean/mac" {
+		t.Errorf("MCPURL = %q, want https://my.yardr.dev/mcp/mckean/mac", got)
+	}
 	// A value written before yards had names holds none, and reads as named
 	// as its account.
 	old := store.Edge{URL: e.URL, Key: key, Handle: "mckean"}
 	if got, err := store.ParseEdge(old.String()); err != nil || got.Name != "mckean" ||
-		got.HooksURL() != "https://my.yardr.dev/hooks/mckean/mckean" {
+		got.HooksURL() != "https://my.yardr.dev/hooks/mckean/mckean" ||
+		got.MCPURL() != "https://my.yardr.dev/mcp/mckean/mckean" {
 		t.Errorf("ParseEdge(%s) = %+v, %v; want it named as its account", old.String(), got, err)
 	}
 	// The name a yard proposes is the edge's own rule, one segment of a path

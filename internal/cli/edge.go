@@ -74,10 +74,12 @@ type edgeView struct {
 	Handle string `json:"handle,omitempty"`
 	Name   string `json:"name,omitempty"`
 	// HooksURL is where the edge takes this yard's webhooks, a hook's name
-	// after it. HookPublicURL is the setting as it is now, which is HooksURL
+	// after it, and MCPURL is the address an MCP client takes for this yard at
+	// the edge. HookPublicURL is the setting as it is now, which is HooksURL
 	// unless it was changed after connecting, and Replaced the one connecting
 	// replaced, which disconnecting puts back.
 	HooksURL      string `json:"hooks_url,omitempty"`
+	MCPURL        string `json:"mcp_url,omitempty"`
 	HookPublicURL string `json:"hook_public_url,omitempty"`
 	Replaced      string `json:"replaced_hook_public_url,omitempty"`
 	// ApprovedBy is who approved the yard at the edge, said when connecting.
@@ -117,7 +119,7 @@ func edgeLinkLine(s edgelink.State, known bool, yardr string) string {
 
 func viewOf(e store.Edge, settings map[string]string) edgeView {
 	return edgeView{Connected: true, URL: e.URL, Key: e.Key, Handle: e.Handle, Name: e.Name, HooksURL: e.HooksURL(),
-		HookPublicURL: settings[store.HookPublicURLSetting], Replaced: e.HookPublicURL}
+		MCPURL: e.MCPURL(), HookPublicURL: settings[store.HookPublicURLSetting], Replaced: e.HookPublicURL}
 }
 
 // edgeOf is the edge the yard is connected to, or a refusal that says so.
@@ -337,9 +339,9 @@ func (a *app) edgeStatusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use: "status", Short: "Say which edge this yard is connected to", Args: cobra.NoArgs,
 		Long: `Says which edge this yard is connected to: its address, the key this yard
-pinned, the account's handle and this yard's name at the edge, and where
-webhooks reach it through the edge. It reads what yardr edge connect wrote
-and does not call the edge.`,
+pinned, the account's handle and this yard's name at the edge, where
+webhooks reach it through the edge, and its MCP address there. It reads
+what yardr edge connect wrote and does not call the edge.`,
 		RunE: func(c *cobra.Command, _ []string) error {
 			ctx := c.Context()
 			st, err := a.store(ctx)
@@ -375,6 +377,7 @@ and does not call the edge.`,
 				}
 				fmt.Fprintf(w, "link      %s\n", edgeLinkLine(s, known, yardrAt(cfg.Home)))
 				fmt.Fprintf(w, "hooks     %s/<hook>\n", view.HooksURL)
+				fmt.Fprintf(w, "mcp       %s\n", view.MCPURL)
 				if view.HookPublicURL != view.HooksURL {
 					now := "unset"
 					if view.HookPublicURL != "" {

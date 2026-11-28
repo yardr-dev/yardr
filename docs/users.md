@@ -1649,14 +1649,14 @@ linked](peers.md#pairing), with what a device has no use for left out.
 A pairing is opened from a card too: `user device pair <user> <device>
 [--url <address>]` as a run ask, asked of the user it names or of the
 operator, and either approves it (strong, `trust`). Asking opens
-nothing; approval opens the pairing and answers its code once, to the
-approver alone — at a terminal, in chat's sitting, on a device the user
-already holds, or in the hosted web under a fresh sign-in, where the
-approval's own response shows the QR code and the code and is kept
-nowhere. The code stands in no card, note, answer or event, and no
-later read answers it. While a pairing stands, an approval that would
-open another is refused in the pairing's words and the ask stays open.
-The user whose pairing it is ends it from their own device
+nothing; approval opens the pairing and answers the code and the QR code
+once, to the approver alone — at a terminal, in chat's sitting, on a device
+the user already holds, or in the hosted web under a fresh sign-in — and is
+kept nowhere. Footplate, the phone apps and the hosted web each draw the QR
+code; a phone that scans it pairs sealed. The code stands in no card, note,
+answer or event, and no later read answers it. While a pairing stands, an
+approval that would open another is refused in the pairing's words and the
+ask stays open. The user whose pairing it is ends it from their own device
 (`DevicePairCloseSelf`), as they end it from their own yard screen;
 `yardr user device add`, whose token has nowhere lawful to rest, stays
 in a terminal.
@@ -1726,7 +1726,9 @@ This is your own device: sealed, it may give the yard any secret a setup asks fo
 
 **What the QR code holds.** With `--qr` the command also draws a QR code in
 the terminal, for a phone to read in place of the address and the code
-being typed. It holds one line of text and nothing else:
+being typed; a pairing card takes no `--qr`, because its approval returns
+the same QR string for footplate, the phone apps and the hosted web to draw.
+It holds one line of text and nothing else:
 
 ```text
 <address>#<code>               https://mac.example.net#K7QM-2XPD

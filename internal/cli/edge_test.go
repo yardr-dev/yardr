@@ -595,7 +595,7 @@ func TestEdgeConnectJSON(t *testing.T) {
 		t.Errorf("the first document has no expiry: %v", first)
 	}
 	want := edgeView{Connected: true, URL: srv.URL, Key: edge.PublicKey(), Handle: "mckean", Name: "mckean", HooksURL: srv.URL + "/hooks/mckean/mckean",
-		HookPublicURL: srv.URL + "/hooks/mckean/mckean", ApprovedBy: "chris@mckean.co"}
+		MCPURL: srv.URL + "/mcp/mckean/mckean", HookPublicURL: srv.URL + "/hooks/mckean/mckean", ApprovedBy: "chris@mckean.co"}
 	if result != want {
 		t.Errorf("result = %+v, want %+v", result, want)
 	}
@@ -660,13 +660,14 @@ func TestEdgeStatus(t *testing.T) {
 	edgeLines(t, out,
 		"edge      "+srv.URL+"  (key ed25519:"+edge.PublicKey()+", as mckean/mckean)",
 		"hooks     "+srv.URL+"/hooks/mckean/mckean/<hook>",
+		"mcp       "+srv.URL+"/mcp/mckean/mckean",
 		"          hook_public_url was https://hooks.example.net/hooks before connecting; yardr edge disconnect puts it back")
 	if strings.Contains(out, "note ") {
 		t.Errorf("status of a connected yard whose hook_public_url is the edge's has a note:\n%s", out)
 	}
 	out, _ = mustEdge(t, st, nothing, "edge", "status", "--json")
 	want := edgeView{Connected: true, URL: srv.URL, Key: edge.PublicKey(), Handle: "mckean", Name: "mckean", HooksURL: srv.URL + "/hooks/mckean/mckean",
-		HookPublicURL: srv.URL + "/hooks/mckean/mckean", Replaced: "https://hooks.example.net/hooks"}
+		MCPURL: srv.URL + "/mcp/mckean/mckean", HookPublicURL: srv.URL + "/hooks/mckean/mckean", Replaced: "https://hooks.example.net/hooks"}
 	if err := json.Unmarshal([]byte(out), &view); err != nil || view != want {
 		t.Errorf("status --json = %+v, %v; want %+v", view, err, want)
 	}

@@ -61,6 +61,9 @@ func CheckEdgeName(name string) error {
 // what hook_public_url is while connected: a hook's URL is it plus /<name>.
 func (e Edge) HooksURL() string { return e.URL + "/hooks/" + e.Handle + "/" + e.Name }
 
+// MCPURL is the router's path and the address an MCP client is given for this yard.
+func (e Edge) MCPURL() string { return e.URL + "/mcp/" + e.Handle + "/" + e.Name }
+
 // HandleName is this yard as the edge tells its account's yards apart:
 // handle/name, the spelling a device pairs with and calls with
 // (X-Edge-Yard). A value that holds no name reads as named as its account

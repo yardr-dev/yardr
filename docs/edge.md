@@ -15,7 +15,7 @@ serves them for ([below](#previews-through-the-edge)).
 
 ```sh
 yardr edge connect https://my.yardr.dev   # fetch the edge's key, show it, enrol by a code
-yardr edge status                          # what this yard is connected to, and how its link is
+yardr edge status                          # what this yard is connected to, how its link is, and its MCP address
 yardr edge disconnect                      # leave the edge, and put back the hook address from before
 ```
 
@@ -44,6 +44,9 @@ Connected: webhooks reach this yard at https://my.yardr.dev/hooks/mckean/airy/<h
 hook_public_url set to https://my.yardr.dev/hooks/mckean/airy
 The server opens the link to the edge now: yardr edge status says when it is up.
 ```
+
+`yardr edge status` also prints the address an MCP client takes for this yard,
+`<edge>/mcp/<handle>/<yard>`.
 
 **The first step is trust.** The yard has no edge key yet, so the command
 fetches it over HTTPS, with the system's certificate checks, before anything
