@@ -1124,7 +1124,7 @@ func TestDifferingRoutesStayInsteadOfBeingReplaced(t *testing.T) {
 		t.Fatalf("differs = %v, want %v", got, want)
 	}
 	rt := find(t, plan, "route", "depot web stage new -> web-builders")
-	if want := []pack.Diff{{Field: "group", Old: "others", New: "web-builders"}, {Field: "routes", Old: "2 for this stage", New: "1"}}; !reflect.DeepEqual(rt.Changes, want) {
+	if want := []pack.Diff{{Field: "group", Old: "others", New: "web-builders"}, {Field: "originator", Old: "any", New: "operator"}, {Field: "routes", Old: "2 for this stage", New: "1"}}; !reflect.DeepEqual(rt.Changes, want) {
 		t.Fatalf("changes = %v", rt.Changes)
 	}
 	if res := apply(t, st, plan, nil); res.Wrote() || res.Differs != 1 {

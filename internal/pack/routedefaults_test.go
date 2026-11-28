@@ -201,11 +201,11 @@ func TestPackTreatsOperatorOnlyRouteAsNarrowerThanPeopleStage(t *testing.T) {
 	}
 	t.Run("own route with the same group", func(t *testing.T) {
 		st, o := yard(t)
-		mustGroup(t, st, store.Group{Name: "web-people", Runner: "manual"})
+		mustGroup(t, st, store.Group{Name: "people", Runner: "manual"})
 		operator, depot := "me", "web"
-		old := mustDefaultRoute(t, st, store.Route{Stage: "decide", Depot: &depot, Group: "web-people", Originator: &operator})
+		old := mustDefaultRoute(t, st, store.Route{Stage: "decide", Depot: &depot, Group: "people", Originator: &operator})
 		plan := build(t, st, load(t, writePack(t, smallFiles(small))), o)
-		route := find(t, plan, "route", "depot web stage decide -> web-people")
+		route := find(t, plan, "route", "depot web stage decide -> people")
 		want := []pack.Diff{{Field: "originator", Old: "operator", New: "any"}}
 		if route.Action != pack.Differs || !slices.Equal(route.Changes, want) {
 			t.Fatalf("route = %+v, want differs by originator: %v", route, want)
