@@ -1720,64 +1720,7 @@ func printPlan(w io.Writer, p *pack.Plan, answers pack.Answers, open, calls map[
 			}
 		}
 	}
-	for _, m := range p.Maps {
-		if optional[m.Source] {
-			continue
-		}
-		if m.Pack != "" {
-			fmt.Fprintf(w, "\nstage map of source %s, as crew member %s\n", m.Source, m.As)
-			fmt.Fprintf(w, "  the pack says %s\n", strings.Join(pack.MapLines(m.Map), " "))
-		} else {
-			fmt.Fprintf(w, "\nwhat the events of source %s say of a bead, and make\n", m.Source)
-		}
-		for _, l := range store.SayLines(m.Says) {
-			fmt.Fprintf(w, "  the pack says %s\n", l)
-		}
-		for _, l := range store.MakeLines(m.Makes) {
-			fmt.Fprintf(w, "  the pack makes %s\n", l)
-		}
-		switch {
-		case refused[m.Source] != "":
-			fmt.Fprintf(w, "  not set on hook %s: %s\n", m.Hook, refused[m.Source])
-		case m.Skipped != "":
-			fmt.Fprintf(w, "  skipped: %s\n", m.Skipped)
-		case m.Action == pack.Create:
-			fmt.Fprintf(w, "  would be set on hook %s, which has none\n", m.Hook)
-		case m.Action == pack.Change:
-			// The crew member and the map are replaced whole; the tables are
-			// not: the pack's lines go among the hook's, whose others stay.
-			told := false
-			if m.Pack != "" && (m.Was.As != m.As || (len(m.Map) > 0 && !maps.Equal(m.Was.Map, m.Map))) {
-				told = true
-				fmt.Fprintf(w, "  would replace what hook %s has: as %s, %s\n", m.Hook, or(m.Was.As, "(none)"), or(strings.Join(pack.MapLines(m.Was.Map), " "), "(no map)"))
-			}
-			for _, l := range store.SayLines(m.Says) {
-				if !slices.Contains(store.SayLines(m.Was.Says), l) {
-					told = true
-					fmt.Fprintf(w, "  would add the says line %q to hook %s\n", l, m.Hook)
-				}
-			}
-			for _, l := range store.MakeLines(m.Makes) {
-				if !slices.Contains(store.MakeLines(m.Was.Makes), l) {
-					told = true
-					fmt.Fprintf(w, "  would add the makes line %q to hook %s\n", l, m.Hook)
-				}
-			}
-			if !told && len(m.Drops) == 0 {
-				fmt.Fprintf(w, "  would put the pack's lines of hook %s in the pack's order\n", m.Hook)
-			}
-		case m.Action == pack.Unchanged:
-			fmt.Fprintf(w, "  hook %s has it\n", m.Hook)
-		default:
-			fmt.Fprintln(w, "  nothing would be set: the import goes through without it, and the next one sets it once the yard has what is missing")
-		}
-		for _, d := range m.Drops {
-			fmt.Fprintf(w, "  would drop the %s line %q from hook %s: the pack set it at its last import and no longer gives it\n", d.Table, d.Line, m.Hook)
-		}
-		for _, n := range m.Needs {
-			fmt.Fprintf(w, "  %-8s %-12s %s\n", n.Status, strings.ReplaceAll(n.What, "_", " "), n.Detail)
-		}
-	}
+	printPlanMaps(w, p, optional, refused)
 	if len(p.Optional) > 0 {
 		fmt.Fprintln(w, "\nsources the import goes through without (optional)")
 		for _, o := range p.Optional {

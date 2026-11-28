@@ -171,6 +171,14 @@ func TestPackAPI1Plans(t *testing.T) {
 	}
 	lagain := build(t, st, load(t, api1+"/api1-line"), pack.Options{Depot: "web", Home: home})
 	for _, o := range lagain.Objects {
+		// Pre-existing crew member keeper had no prompt or event kinds before
+		// the apply, so it stays untouched and reads as differs.
+		if o.Kind == "crew" && o.Name == "keeper" {
+			if o.Action != pack.Differs {
+				t.Errorf("line second plan: crew keeper = %s, want differs", o.Action)
+			}
+			continue
+		}
 		if o.Action != pack.Unchanged {
 			t.Errorf("line second plan: %s %s %s", o.Action, o.Kind, o.Name)
 		}

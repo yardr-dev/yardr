@@ -583,6 +583,9 @@ func TestYardmasterPromptMigratesToTheLocalRole(t *testing.T) {
 	if got := roleOf(t, st); got != local {
 		t.Fatalf("prompt after the import = %q, want %q", got, local)
 	}
+	if r, err := st.GetCrew(ctx, "yardmaster"); err != nil || !slices.Equal(r.On, []string{"held"}) {
+		t.Fatalf("yardmaster.On after local role move = %v, %v; want [held] preserved", r, err)
+	}
 	if b, err := os.ReadFile(local); err != nil || !reflect.DeepEqual(b, running) {
 		t.Fatalf("the seeded local role = %q, %v, want the running role's exact bytes", b, err)
 	}
@@ -807,8 +810,8 @@ func TestSecondImportChangesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The pack's env is set on a group the import creates and on no other:
-	// with another env the group made from the pack stays as it is, the
-	// plan says what it keeps, and applying writes nothing.
+	// with another env the group made from the pack stays unchanged and
+	// applying writes nothing.
 	envChanged := strings.Replace(string(text), "env: { YARDR_LAND: squash }", "env: { YARDR_LAND: rebase, YARDR_PUSH: origin }", 1)
 	if envChanged == string(text) {
 		t.Fatal("the starter's assembly env is not what this test replaces")
@@ -819,16 +822,18 @@ func TestSecondImportChangesNothing(t *testing.T) {
 	cmd := "YARDR_LAND=squash " + filepath.Join(config.At(o.Home).Pack("starter"), "scripts", "merge-local")
 	plan = build(t, st, load(t, dir), o)
 	asm := find(t, plan, "group", "web-assembly")
-	if want := []string{"cmd " + cmd + ": the pack's env YARDR_LAND=rebase YARDR_PUSH=origin is set on a new group only"}; asm.Action != pack.Unchanged || !slices.Equal(asm.Keeps, want) || len(asm.Env) != 0 || asm.Group.Config["cmd"] != cmd {
-		t.Fatalf("web-assembly = %s, keeps %q, env %v, cmd %q, want it unchanged and keeping %q", asm.Action, asm.Keeps, asm.Env, asm.Group.Config["cmd"], want)
+	if asm.Action != pack.Unchanged || len(asm.Keeps) != 0 || len(asm.Env) != 0 || asm.Group.Config["cmd"] != cmd {
+		t.Fatalf("web-assembly = %s, keeps %q, env %v, cmd %q, want it unchanged with no keeps", asm.Action, asm.Keeps, asm.Env, asm.Group.Config["cmd"])
 	}
 	if res := apply(t, st, plan, nil); res.Wrote() {
-		t.Fatalf("an import that only keeps wrote: %+v", res)
+		t.Fatalf("an import with another env wrote: %+v", res)
 	}
 	if got := groupOf(t, st, "web-assembly").Config["cmd"]; got != cmd {
 		t.Fatalf("web-assembly cmd = %q after the import, want %q", got, cmd)
 	}
 
+	// Over a yard whose group limit and role differ from the pack, both are
+	// differs and nothing is written; a third apply says the same.
 	changed := strings.Replace(string(text), "roles/builder.md,  limit: 5", "roles/builder.md,  limit: 2", 1)
 	if changed == string(text) {
 		t.Fatal("the starter's builders line is not what this test replaces")
@@ -840,14 +845,11 @@ func TestSecondImportChangesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	plan = build(t, st, load(t, dir), o)
-	if got, want := actions(plan, pack.Change), []string{"group web-builders"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("change = %v, want %v", got, want)
+	if c, ch := actions(plan, pack.Create), actions(plan, pack.Change); len(c)+len(ch) != 0 {
+		t.Fatalf("create %v, change %v; want none", c, ch)
 	}
-	if got, want := actions(plan, pack.Differs), []string{"file roles/reviewer.md"}; !reflect.DeepEqual(got, want) {
+	if got, want := actions(plan, pack.Differs), []string{"file roles/reviewer.md", "group web-builders"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("differs = %v, want %v", got, want)
-	}
-	if c := actions(plan, pack.Create); len(c) != 0 {
-		t.Fatalf("create %v", c)
 	}
 	if got, want := find(t, plan, "group", "web-builders").Changes, []pack.Diff{{Field: "limit", Old: 5, New: 2}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("web-builders changes = %v", got)
@@ -855,13 +857,46 @@ func TestSecondImportChangesNothing(t *testing.T) {
 	if got := find(t, plan, "file", "roles/reviewer.md").Changes; len(got) != 1 || got[0].Field != "content" {
 		t.Fatalf("reviewer.md changes = %v", got)
 	}
-	// Applying the group change and replacing the role brings the yard level again.
+	if res := apply(t, st, plan, nil); res.Wrote() || res.Differs != 2 || groupOf(t, st, "web-builders").Limit != 5 {
+		t.Fatalf("apply over differing limit and role = %+v, limit %d", res, groupOf(t, st, "web-builders").Limit)
+	}
+	// A third apply says the same and writes nothing.
+	plan = build(t, st, load(t, dir), o)
+	if got, want := actions(plan, pack.Differs), []string{"file roles/reviewer.md", "group web-builders"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("third plan differs = %v, want %v", got, want)
+	}
+	if res := apply(t, st, plan, nil); res.Wrote() || res.Recorded || res.Differs != 2 {
+		t.Fatalf("third apply = %+v", res)
+	}
+	// Replacing the role leaves only web-builders differing.
 	if _, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Answers: answered(t, plan, nil), Actor: "me", Replace: []string{"roles/reviewer.md"}}); err != nil {
 		t.Fatal(err)
 	}
 	plan = build(t, st, load(t, dir), o)
-	if got := actions(plan, pack.Unchanged); len(got) != 39 {
-		t.Fatalf("after applying the change: %d unchanged of %d", len(got), len(plan.Objects))
+	if got, want := actions(plan, pack.Differs), []string{"group web-builders"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("after replacing role: differs = %v, want %v", got, want)
+	}
+	// Cutting a group, a route and a crew member restores each as create on
+	// the next plan.
+	if _, err := st.DeleteGroup(ctx, "web-builders", "me"); err != nil {
+		t.Fatal(err)
+	}
+	routes, _ = st.Routes(ctx)
+	for _, r := range routes {
+		if r.Stage == "new" && r.Depot != nil && *r.Depot == "web" {
+			if err := st.DeleteRoute(ctx, r.ID, "me"); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := st.DeleteCrew(ctx, "yardmaster", "", "me"); err != nil {
+		t.Fatal(err)
+	}
+	plan = build(t, st, load(t, dir), o)
+	for _, want := range []string{"group web-builders", "route depot web stage new -> web-builders", "crew yardmaster"} {
+		if !slices.Contains(actions(plan, pack.Create), want) {
+			t.Errorf("plan after cutting %s lacks create: %v", want, actions(plan, pack.Create))
+		}
 	}
 }
 
@@ -911,34 +946,24 @@ func TestYardSetUpByHand(t *testing.T) {
 			t.Errorf("%s %s is planned as new", o.Kind, o.Name)
 		}
 	}
-	if got, want := actions(plan, pack.Change), []string{"subscription boss linear involved"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("change = %v\nwant %v", got, want)
+	if got := actions(plan, pack.Change); len(got) != 0 {
+		t.Fatalf("change = %v, want none", got)
 	}
 	b := find(t, plan, "group", "web-builders")
-	if b.Action != pack.Unchanged || len(b.Changes) != 0 || b.Group.Config["prompt"] != "roles/builder.md" {
-		t.Fatalf("web-builders = %s %v %v, want the hand's prompt kept", b.Action, b.Changes, b.Group.Config["prompt"])
-	}
-	if joined := strings.Join(b.Keeps, "\n"); !strings.Contains(joined, "roles/builder.md") || !strings.Contains(joined, "by hand") {
-		t.Fatalf("web-builders keeps %q", b.Keeps)
+	wantPrompt := filepath.Join(config.At(o.Home).PackRoles("starter"), "builder.md")
+	if b.Action != pack.Differs || !reflect.DeepEqual(b.Changes, []pack.Diff{{Field: "prompt", Old: "roles/builder.md", New: wantPrompt}}) || len(b.Keeps) != 0 || b.Group.Config["prompt"] != "roles/builder.md" {
+		t.Fatalf("web-builders = %s %v keeps %v %v, want differs on prompt", b.Action, b.Changes, b.Keeps, b.Group.Config["prompt"])
 	}
 	if c := b.Group.Config; c["kind"] != "claude" || c["model"] != "opus" || c["idle"] != "5m" || !reflect.DeepEqual(c["args"], []any{"--permission-mode", "auto"}) {
 		t.Fatalf("web-builders would lose what the yard chose: %v", c)
 	}
 	r := find(t, plan, "group", "web-assembly")
-	if r.Action != pack.Unchanged || len(r.Changes) != 0 || r.Group.Config["cmd"] != "YARDR_PUSH=origin YARDR_NOTIFY=boss /old/scripts/merge-local" {
-		t.Fatalf("web-assembly = %s %v %v, want the hand's cmd kept", r.Action, r.Changes, r.Group.Config["cmd"])
+	wantCmd := "YARDR_PUSH=origin YARDR_NOTIFY=boss " + filepath.Join(config.At(o.Home).Pack("starter"), "scripts", "merge-local")
+	if r.Action != pack.Differs || !reflect.DeepEqual(r.Changes, []pack.Diff{{Field: "cmd", Old: "YARDR_PUSH=origin YARDR_NOTIFY=boss /old/scripts/merge-local", New: wantCmd}}) || len(r.Keeps) != 0 || len(r.Env) != 0 || r.Group.Config["cmd"] != "YARDR_PUSH=origin YARDR_NOTIFY=boss /old/scripts/merge-local" {
+		t.Fatalf("web-assembly = %s %v keeps %q %v, want differs on cmd", r.Action, r.Changes, r.Keeps, r.Group.Config["cmd"])
 	}
 	if r.Group.Config["log"] != "/logs/landing.log" {
 		t.Fatalf("web-assembly = %+v", r.Group)
-	}
-	// The pack's script is not set on a group the yard has, said first, and
-	// its env is for a group the import creates, said as before.
-	want := []string{
-		"cmd YARDR_PUSH=origin YARDR_NOTIFY=boss /old/scripts/merge-local: set by hand, and the pack's script scripts/merge-local is not set on it",
-		"cmd YARDR_PUSH=origin YARDR_NOTIFY=boss /old/scripts/merge-local: the pack's env YARDR_LAND=squash is set on a new group only",
-	}
-	if !slices.Equal(r.Keeps, want) || len(r.Env) != 0 {
-		t.Fatalf("web-assembly keeps %q, env %v, want %q", r.Keeps, r.Env, want)
 	}
 	// People groups: the pack names no limit and no members, so both stay.
 	if g := find(t, plan, "group", "backlog"); g.Action != pack.Unchanged || g.Group.Limit != 50 || !reflect.DeepEqual(g.Group.Members, []string{"ann", "boss"}) {
@@ -951,9 +976,11 @@ func TestYardSetUpByHand(t *testing.T) {
 	if len(res.Changes) != 0 || res.CrewMember.Pack != "yardmaster" || len(res.Asks) != 0 {
 		t.Fatalf("boss = %+v (it hears the class as the pack has it, and its prompt is the yard's own: no change)", res)
 	}
+	// Existing linear subscription with scope all is unchanged despite the
+	// pack asking for involved.
 	sub := find(t, plan, "subscription", "boss linear involved")
-	if want := []pack.Diff{{Field: "scope", Old: "all", New: "involved"}}; !reflect.DeepEqual(sub.Changes, want) || sub.Subscription.Remove == nil {
-		t.Fatalf("linear subscription = %+v", sub)
+	if sub.Action != pack.Unchanged || len(sub.Changes) != 0 || sub.Subscription.Remove != nil {
+		t.Fatalf("linear subscription = %+v, want unchanged", sub)
 	}
 	for _, n := range plan.Sources[0].Needs {
 		if n.What == "credential" && (n.Status != "missing" || !strings.Contains(n.Detail, "LINEAR_API_KEY")) {
@@ -1071,9 +1098,8 @@ func TestTypeFileIsGovernedOnceAfterImport(t *testing.T) {
 	}
 }
 
-// yardr route add mints an id per call, so a yard may hold two routes for
-// one depot and stage, and a route to another group cannot be changed in
-// place. The plan replaces them all by one.
+// Existing depot routes that differ from the pack's group (or have more than
+// one route for the stage) are reported as differs and never deleted.
 func TestRoutesAreReplacedNotAdded(t *testing.T) {
 	st, o := yard(t)
 	apply(t, st, build(t, st, load(t, starter), o), answers)
@@ -1081,22 +1107,23 @@ func TestRoutesAreReplacedNotAdded(t *testing.T) {
 	if err := st.PutGroup(ctx, store.Group{Name: "others", Runner: "manual"}, "me"); err != nil {
 		t.Fatal(err)
 	}
-	extra, err := st.AddRoute(ctx, store.Route{Stage: "new", Depot: &depot, Group: "others"}, "me")
-	if err != nil {
+	if _, err := st.AddRoute(ctx, store.Route{Stage: "new", Depot: &depot, Group: "others"}, "me"); err != nil {
 		t.Fatal(err)
 	}
 	plan := build(t, st, load(t, starter), o)
-	if got, want := actions(plan, pack.Change), []string{"route depot web stage new -> web-builders"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("change = %v, want %v", got, want)
+	if got, want := actions(plan, pack.Differs), []string{"route depot web stage new -> web-builders"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("differs = %v, want %v", got, want)
 	}
 	rt := find(t, plan, "route", "depot web stage new -> web-builders")
-	if len(rt.Route.Delete) != 2 || !slices.Contains(rt.Route.Delete, extra.ID) {
-		t.Fatalf("route = %+v, want both routes of the stage deleted", rt.Route)
+	if len(rt.Route.Delete) != 0 {
+		t.Fatalf("route = %+v, want no delete", rt.Route)
 	}
 	if want := []pack.Diff{{Field: "group", Old: "others", New: "web-builders"}, {Field: "routes", Old: "2 for this stage", New: "1"}}; !reflect.DeepEqual(rt.Changes, want) {
 		t.Fatalf("changes = %v", rt.Changes)
 	}
-	apply(t, st, plan, nil)
+	if res := apply(t, st, plan, nil); res.Wrote() || res.Differs != 1 {
+		t.Fatalf("apply = %+v, want nothing written", res)
+	}
 	routes, _ := st.Routes(ctx)
 	n := 0
 	for _, r := range routes {
@@ -1104,13 +1131,13 @@ func TestRoutesAreReplacedNotAdded(t *testing.T) {
 			n++
 		}
 	}
-	if n != 1 || len(routes) != 11 {
-		t.Fatalf("%d routes for new, %d in all; want 1 and 11", n, len(routes))
+	if n != 2 || len(routes) != 12 {
+		t.Fatalf("%d routes for new, %d in all; want 2 and 12 (left standing)", n, len(routes))
 	}
 }
 
-// A stage with no group replaces any existing route with no route. Leaving
-// the old route behind would keep sending beads to a group the pack removed.
+// A stage with no group leaves any existing depot route standing and reports
+// it as differs with no delete.
 func TestStageWithoutGroupRemovesExistingRoute(t *testing.T) {
 	st, o := yard(t)
 	if err := st.PutGroup(ctx, store.Group{Name: "old", Runner: "manual"}, "me"); err != nil {
@@ -1128,11 +1155,11 @@ func TestStageWithoutGroupRemovesExistingRoute(t *testing.T) {
 	}
 	plan := build(t, st, load(t, dir), o)
 	want := "depot web stage triage -> (no route)"
-	if got := actions(plan, pack.Change); !slices.Contains(got, "route "+want) {
-		t.Fatalf("changes = %v, want %q", got, "route "+want)
+	if got := actions(plan, pack.Differs); !slices.Contains(got, "route "+want) {
+		t.Fatalf("differs = %v, want %q", got, "route "+want)
 	}
 	route := find(t, plan, "route", want)
-	if route.Route.Group != "" || !slices.Equal(route.Route.Delete, []string{old.ID}) || route.Changes[0].New != "(no route)" {
+	if route.Route.Group != "" || len(route.Route.Delete) != 0 || route.Changes[0].New != "(no route)" {
 		t.Fatalf("route operation = %+v", route)
 	}
 	apply(t, st, plan, nil)
@@ -1140,10 +1167,8 @@ func TestStageWithoutGroupRemovesExistingRoute(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, r := range routes {
-		if r.Stage == "triage" && r.Depot != nil && *r.Depot == depot {
-			t.Fatalf("route survived import: %+v", r)
-		}
+	if !slices.ContainsFunc(routes, func(r store.Route) bool { return r.ID == old.ID }) {
+		t.Fatalf("route %s was deleted: %+v", old.ID, routes)
 	}
 }
 
@@ -1450,8 +1475,8 @@ func TestGroupOfTheYardTakesThePacks(t *testing.T) {
 	if d := actions(plan, pack.Dropped); slices.Contains(d, "group yardr-builders") {
 		t.Fatalf("dropped = %v", d)
 	}
-	if got := find(t, plan, "route", "depot web stage new -> web-builders"); got.Action != pack.Change {
-		t.Fatalf("the route to the builders = %s", got.Action)
+	if got := find(t, plan, "route", "depot web stage new -> web-builders"); got.Action != pack.Differs {
+		t.Fatalf("the route to the builders = %s, want differs", got.Action)
 	}
 }
 
@@ -1518,23 +1543,17 @@ func TestGroupFlagTakesTheYardsGroupOfThePacksOwnName(t *testing.T) {
 		}
 	}
 
-	// The same without the flag keeps the yard's groups, said under Keeps:
-	// a group the pack did not make is never repointed to the pack's.
+	// The same without the flag leaves the yard's groups untouched and reports
+	// them as differs with their prompt/cmd diffs.
 	st, o = ownNamed(t)
 	plan = build(t, st, load(t, starter), o)
 	r := find(t, plan, "group", "web-reviewers")
-	if r.Action != pack.Unchanged || slices.ContainsFunc(r.Changes, func(d pack.Diff) bool { return d.Field == "prompt" }) {
-		t.Fatalf("web-reviewers = %s %v", r.Action, r.Changes)
-	}
-	if joined := strings.Join(r.Keeps, "\n"); !strings.Contains(joined, "/roles/reviewer.md") || !strings.Contains(joined, "by hand") {
-		t.Fatalf("web-reviewers keeps %q", r.Keeps)
+	if r.Action != pack.Differs || !slices.ContainsFunc(r.Changes, func(d pack.Diff) bool { return d.Field == "prompt" }) || len(r.Keeps) != 0 {
+		t.Fatalf("web-reviewers = %s %v keeps %v", r.Action, r.Changes, r.Keeps)
 	}
 	a := find(t, plan, "group", "web-assembly")
-	if a.Action != pack.Unchanged || slices.ContainsFunc(a.Changes, func(d pack.Diff) bool { return d.Field == "cmd" }) {
-		t.Fatalf("web-assembly = %s %v", a.Action, a.Changes)
-	}
-	if joined := strings.Join(a.Keeps, "\n"); !strings.Contains(joined, "/scripts/land") || !strings.Contains(joined, "by hand") {
-		t.Fatalf("web-assembly keeps %q", a.Keeps)
+	if a.Action != pack.Differs || !slices.ContainsFunc(a.Changes, func(d pack.Diff) bool { return d.Field == "cmd" }) || len(a.Keeps) != 0 {
+		t.Fatalf("web-assembly = %s %v keeps %v", a.Action, a.Changes, a.Keeps)
 	}
 	apply(t, st, plan, nil)
 	got, _ := st.GetGroup(ctx, "web-reviewers")
@@ -1757,27 +1776,19 @@ func TestSecondPackKeepsTheFirstPacksGroups(t *testing.T) {
 		t.Helper()
 		for _, tc := range []struct{ name, want string }{{"web-builders", bPrompt}, {"web-reviewers", rPrompt}} {
 			obj := find(t, plan, "group", tc.name)
-			if got := obj.Group.Config["prompt"]; got != tc.want {
-				t.Errorf("%s prompt = %v, want %v (starter's)", tc.name, got, tc.want)
+			if obj.Action != pack.Differs || obj.Group.Config["prompt"] != tc.want || len(obj.Keeps) != 0 {
+				t.Errorf("%s = %s prompt %v keeps %v, want differs with starter's %v", tc.name, obj.Action, obj.Group.Config["prompt"], obj.Keeps, tc.want)
 			}
-			if slices.ContainsFunc(obj.Changes, func(d pack.Diff) bool { return d.Field == "prompt" }) {
-				t.Errorf("%s changes %v, want no prompt change", tc.name, obj.Changes)
-			}
-			joined := strings.Join(obj.Keeps, "\n")
-			if !strings.Contains(joined, tc.want) || !strings.Contains(joined, "made by pack starter") {
-				t.Errorf("%s keeps %q, want starter's prompt named as made by pack starter", tc.name, obj.Keeps)
+			if !slices.ContainsFunc(obj.Changes, func(d pack.Diff) bool { return d.Field == "prompt" && d.Old == tc.want }) {
+				t.Errorf("%s changes %v, want prompt diff from %v", tc.name, obj.Changes, tc.want)
 			}
 		}
 		obj := find(t, plan, "group", "web-assembly")
-		if got := obj.Group.Config["cmd"]; got != aCmd {
-			t.Errorf("web-assembly cmd = %v, want %v (starter's)", got, aCmd)
+		if obj.Action != pack.Differs || obj.Group.Config["cmd"] != aCmd || len(obj.Keeps) != 0 {
+			t.Errorf("web-assembly = %s cmd %v keeps %v, want differs with starter's %v", obj.Action, obj.Group.Config["cmd"], obj.Keeps, aCmd)
 		}
-		if slices.ContainsFunc(obj.Changes, func(d pack.Diff) bool { return d.Field == "cmd" }) {
-			t.Errorf("web-assembly changes %v, want no cmd change", obj.Changes)
-		}
-		joined := strings.Join(obj.Keeps, "\n")
-		if !strings.Contains(joined, aCmd) || !strings.Contains(joined, "made by pack starter") {
-			t.Errorf("web-assembly keeps %q, want starter's cmd named as made by pack starter", obj.Keeps)
+		if !slices.ContainsFunc(obj.Changes, func(d pack.Diff) bool { return d.Field == "cmd" && d.Old == aCmd }) {
+			t.Errorf("web-assembly changes %v, want cmd diff from %v", obj.Changes, aCmd)
 		}
 	}
 
@@ -1792,21 +1803,16 @@ func TestSecondPackKeepsTheFirstPacksGroups(t *testing.T) {
 	}
 	kept(build(t, st, load(t, design), o))
 
-	// The pack that made them, re-planned, is unchanged with no prompt keep.
+	// The pack that made them, re-planned, is unchanged with no keeps.
 	planS := build(t, st, load(t, starter), o)
 	for _, name := range []string{"web-builders", "web-reviewers", "web-assembly"} {
 		obj := find(t, planS, "group", name)
-		if obj.Action != pack.Unchanged {
-			t.Errorf("starter re-plan: %s = %s, want unchanged", name, obj.Action)
-		}
-		for _, k := range obj.Keeps {
-			if strings.HasPrefix(k, "prompt ") || strings.HasPrefix(k, "cmd ") {
-				t.Errorf("starter re-plan: %s keeps %q, want no prompt or cmd keep", name, k)
-			}
+		if obj.Action != pack.Unchanged || len(obj.Keeps) != 0 {
+			t.Errorf("starter re-plan: %s = %s keeps %v, want unchanged", name, obj.Action, obj.Keeps)
 		}
 	}
 
-	// A hand-changed prompt is kept, said under Keeps.
+	// A hand-changed prompt is left alone and reported as differs.
 	st2, o2 := yard(t)
 	apply(t, st2, build(t, st2, load(t, starter), o2), nil)
 	g := groupOf(t, st2, "web-builders")
@@ -1815,11 +1821,9 @@ func TestSecondPackKeepsTheFirstPacksGroups(t *testing.T) {
 		t.Fatal(err)
 	}
 	obj := find(t, build(t, st2, load(t, starter), o2), "group", "web-builders")
-	if got := obj.Group.Config["prompt"]; got != "/hand.md" {
-		t.Errorf("hand-changed prompt = %v, want /hand.md", got)
-	}
-	if joined := strings.Join(obj.Keeps, "\n"); !strings.Contains(joined, "/hand.md") || !strings.Contains(joined, "by hand") {
-		t.Errorf("hand-changed keeps %q, want /hand.md named as by hand", obj.Keeps)
+	if obj.Action != pack.Differs || obj.Group.Config["prompt"] != "/hand.md" || len(obj.Keeps) != 0 ||
+		!slices.ContainsFunc(obj.Changes, func(d pack.Diff) bool { return d.Field == "prompt" && d.Old == "/hand.md" }) {
+		t.Errorf("hand-changed prompt = %+v, want differs with /hand.md kept", obj)
 	}
 
 	// The second pack's own file updates stand while its groups keep.

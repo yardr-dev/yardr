@@ -861,10 +861,11 @@ func TestPackApplyPresets(t *testing.T) {
 		t.Fatalf("boss = %+v", r)
 	}
 
-	// Again, with other presets: the groups are the yard's now and stay.
+	// Again, with other presets: the groups are the yard's now and stay;
+	// pre-existing web-reviewers still differs and nothing is written.
 	head, _ := a.st.Head(ctx)
 	out, err = apply("builders=claude,bypass", "reviewers=codex,bypass", "crew:yardmaster=claude")
-	if err != nil || !strings.Contains(out, "nothing changed") {
+	if err != nil || !strings.Contains(out, "nothing written; the yard's own version of 1 object stands") {
 		t.Fatalf("second apply: %v\n%s", err, out)
 	}
 	if evs, _ := a.st.EventsSince(ctx, head, 0); len(evs) != 1 || evs[0].Kind != "pack_unchanged" {
@@ -1103,15 +1104,25 @@ func TestPackApplyRolesChoice(t *testing.T) {
 		t.Fatalf("apply without flags after --depot-roles: %v, prompt %v\n%s", err, prompt(), out)
 	}
 
+	// --pack-roles leaves existing web-builders on its depot role while
+	// recording the choice for future new groups.
 	out, err = run(t, a.packCmd(), "check", "../../packs/starter", "--depot", "web", "--pack-roles")
-	if err != nil || !strings.Contains(out, "  change           web-builders\n                     shadows .yardr/roles/builder.md\n                     prompt: roles/builder.md -> "+copied+"\n") {
+	if err != nil || !strings.Contains(out, "  unchanged        web-builders\n") {
 		t.Fatalf("check --pack-roles: %v\n%s", err, out)
 	}
-	if out, err = run(t, a.packCmd(), append(args, "--pack-roles")...); err != nil || prompt() != copied {
+	if out, err = run(t, a.packCmd(), append(args, "--pack-roles")...); err != nil || prompt() != "roles/builder.md" {
 		t.Fatalf("--pack-roles: %v, prompt %v\n%s", err, prompt(), out)
 	}
 	if out, err = run(t, a.packCmd(), "list"); err != nil || !strings.Contains(out, "  roles      the pack's\n") {
 		t.Fatalf("pack list after --pack-roles: %v\n%s", err, out)
+	}
+	// Deleting web-builders and applying again without flags creates it with
+	// the pack's copy, matching the recorded --pack-roles choice.
+	if _, err = a.st.DeleteGroup(ctx, "web-builders", "me"); err != nil {
+		t.Fatal(err)
+	}
+	if out, err = run(t, a.packCmd(), args...); err != nil || prompt() != copied {
+		t.Fatalf("re-create after --pack-roles: %v, prompt %v\n%s", err, prompt(), out)
 	}
 	if out, err = run(t, a.packCmd(), "apply", "../../packs/starter", "--depot", "web"); err != nil || !strings.Contains(out, "nothing changed") || prompt() != copied {
 		t.Fatalf("apply without flags after --pack-roles: %v, prompt %v\n%s", err, prompt(), out)

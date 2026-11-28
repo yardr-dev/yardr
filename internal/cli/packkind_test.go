@@ -199,7 +199,7 @@ func TestPackCheckYardWidePackNeedsNoDepot(t *testing.T) {
 		"pack ci-red (embedded in yardr ",
 		", kind git, into no depot (--depot <depot> plans the import)\n",
 		"\nwhat the events of source github say of a bead, and make\n  the pack makes conclusion=failure event=workflow_run head_branch=main -> task:new\n",
-		"  would be set on hook github, which has none\n",
+		"  would add the makes line \"conclusion=failure event=workflow_run head_branch=main -> task:new\" to hook github\n",
 		"the makes line \"conclusion=failure event=workflow_run head_branch=main -> task:new\" waits for the depot: its stage is held to the flow the depot follows\n",
 	} {
 		if !strings.Contains(out, want) {

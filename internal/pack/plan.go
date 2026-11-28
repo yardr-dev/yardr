@@ -211,10 +211,9 @@ type Object struct {
 	// Unexported: it is the record's, not the plan's to show.
 	bindsKept string
 	// Keeps says what the import leaves as the yard has it though the pack
-	// carries it, and why: a prompt, where the depot has its own role and the
-	// import was told to keep those; the role and the limit of a group of
-	// the yard that takes the pack's, where they differ from the pack's; the
-	// pack's env, where the cmd of a script group of the yard lacks it.
+	// carries it, and why: a prompt on a new group where the depot has its
+	// own role and the import was told to keep those; or the role, script,
+	// env or limit of a group of the yard that takes the pack's.
 	Keeps []string `json:"keeps,omitempty"`
 	// Shadows are the depot's files that are not used while the object is as
 	// the pack sets it: the depot's own role, under a prompt from the pack.
@@ -303,16 +302,9 @@ type SubscriptionOp struct {
 }
 
 // MapOp sets on the yard's hook Hook the crew member it moves tracked issues
-// as and its map (store.Hook's As and Map), and the pack's lines of the
-// tables of what the source's events say of a bead (Says) and make (Makes),
-// and leaves the rest of the hook. It sets the parts it has: without As, the
-// crew member and map stay; without Says and DropSays, the says table stays;
-// without Makes and DropMakes, the makes table stays. As and Map replace the
-// hook's whole. Says and Makes are set among the lines the hook
-// has, whose others stay (see merged): DropSays and DropMakes are the pack's
-// own lines from its last import that it no longer gives, which are taken
-// off. A dropped one clears As and Map when no other pack acts as one on the
-// hook, and removes its own lines from the tables.
+// as and its map (store.Hook's As and Map) where the hook has none, and adds
+// the pack's missing lines to the tables of what the source's events say of a
+// bead (Says) and make (Makes), leaving the rest of the hook as it is.
 type MapOp struct {
 	Hook   string            `json:"hook"`
 	Source string            `json:"source"`
@@ -320,9 +312,6 @@ type MapOp struct {
 	Map    map[string]string `json:"map"`
 	Says   []store.Say       `json:"says,omitempty"`
 	Makes  []store.Make      `json:"makes,omitempty"`
-
-	DropSays  []store.Say  `json:"drop_says,omitempty"`
-	DropMakes []store.Make `json:"drop_makes,omitempty"`
 }
 
 // SourceOp adds a declared source to the yard, or replaces the one of its
@@ -432,10 +421,10 @@ type DeclaredPlan struct {
 	Warnings []string `json:"warnings,omitempty"`
 }
 
-// MapPlan is what an import does about the stage map a pack carries for
-// one source. The import sets the map and the crew member on a hook the yard
-// has; it never makes the hook, and never lets the crew member set a status:
-// Needs says which of those the yard lacks and the command for each.
+// MapPlan is what an import does about the stage map a pack carries for one
+// source. It fills a missing as or map and adds missing table lines on a hook
+// the yard has; it never makes the hook or lets the crew member set a status.
+// Needs says what the yard lacks and the command for each.
 type MapPlan struct {
 	Source string `json:"source"`
 	Pack   string `json:"pack"` // the pack's name for the crew member
@@ -450,28 +439,16 @@ type MapPlan struct {
 	Makes []store.Make `json:"makes,omitempty"`
 	// Hook is the yard's hook of the source, "" when it has none.
 	Hook string `json:"hook,omitempty"`
-	// Action is create for a hook without a map, change for one with
-	// another (Was), unchanged, NotSet, or Skipped.
+	// Action is create when anything is written to the hook, differs when
+	// the hook has its own as or map and nothing is written, unchanged,
+	// NotSet, or Skipped.
 	Action string `json:"action"`
-	Was    *MapOp `json:"was,omitempty"`
-	// Drops are the hook's says and makes lines the import takes off: the
-	// pack's own from its last import into the depot that it no longer
-	// gives. The hook's other lines, another pack's and the operator's,
-	// stay where they are, and are never among them.
-	Drops []HookDrop `json:"drops,omitempty"`
 	// Skipped is why the lines are not set: the yard has no source of the
 	// name, or they do not fit the one it has. Empty when they are not
 	// skipped.
 	Skipped string `json:"skipped,omitempty"`
 	// Needs are hook, identity and set_state, each ok or missing.
 	Needs []Need `json:"needs"`
-}
-
-// HookDrop is one says or makes line on the yard's hook that the pack set at
-// its last import and no longer gives: the line as the hook has it.
-type HookDrop struct {
-	Table string `json:"table"` // says or makes
-	Line  string `json:"line"`
 }
 
 // Missing is the detail of the need what when the yard lacks it, else "".
@@ -923,6 +900,18 @@ func action(exists bool, changes []Diff) string {
 		return Create
 	case len(changes) > 0:
 		return Change
+	}
+	return Unchanged
+}
+
+// kept is create for an object the yard lacks, else differs or unchanged by
+// whether anything reads otherwise than the line says.
+func kept(exists bool, changes []Diff) string {
+	switch {
+	case !exists:
+		return Create
+	case len(changes) > 0:
+		return Differs
 	}
 	return Unchanged
 }

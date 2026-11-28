@@ -237,10 +237,8 @@ func (b *planner) routes(flows []Flow) error {
 						continue
 					}
 				}
-				// A stage in the flow with no group still replaces the yard's
-				// route for that depot, stage and type. Leaving that route in
-				// place would make the stage look unassigned in the plan while
-				// beads continued going to its old group.
+				// A stage the line routes to nobody leaves any existing route
+				// of the depot standing and reports it as differs.
 				var old []store.Route
 				for _, r := range have {
 					if r.Stage == s.Name && r.Depot != nil && *r.Depot == b.o.Depot && !r.ByBead() && deref(r.Type) == f.Type {
@@ -252,16 +250,12 @@ func (b *planner) routes(flows []Flow) error {
 					if f.Type != "" {
 						name += " type " + f.Type
 					}
-					var deletes []string
-					for _, r := range old {
-						deletes = append(deletes, r.ID)
-					}
 					changes := []Diff{{"group", old[0].Group, "(no route)"}}
 					if len(old) > 1 {
 						changes = append(changes, Diff{"routes", fmt.Sprintf("%d for this stage", len(old)), "0"})
 					}
-					b.add(Object{Kind: "route", Name: name + " -> (no route)", Action: Change, Changes: changes,
-						Route: &RouteOp{Stage: s.Name, Depot: b.o.Depot, Type: f.Type, Delete: deletes}})
+					b.add(Object{Kind: "route", Name: name + " -> (no route)", Action: Differs, Changes: changes,
+						Route: &RouteOp{Stage: s.Name, Depot: b.o.Depot, Type: f.Type}})
 				}
 				continue
 			}
@@ -324,24 +318,19 @@ func (b *planner) routes(flows []Flow) error {
 			if len(old) > 0 {
 				// The first route to another group, whichever ranks first:
 				// two routes of the stage that ask as much are ranked by
-				// id, which says nothing of which one the pack replaces.
+				// id, which says nothing of which one the pack names.
 				if i := slices.IndexFunc(old, func(r store.Route) bool { return r.Group != op.Group }); i >= 0 {
 					changes = append(changes, Diff{"group", old[i].Group, op.Group})
 				}
 				if len(old) > 1 {
 					changes = append(changes, Diff{"routes", fmt.Sprintf("%d for this stage", len(old)), "1"})
 				}
-				if len(changes) > 0 {
-					for _, r := range old {
-						op.Delete = append(op.Delete, r.ID)
-					}
-				}
 			}
 			name := "depot " + b.o.Depot + " stage " + s.Name
 			if f.Type != "" {
 				name += " type " + f.Type
 			}
-			b.add(Object{Kind: "route", Name: name + " -> " + op.Group, Action: action(len(old) > 0, changes), Changes: changes, Route: op})
+			b.add(Object{Kind: "route", Name: name + " -> " + op.Group, Action: kept(len(old) > 0, changes), Changes: changes, Route: op})
 		}
 	}
 	return nil

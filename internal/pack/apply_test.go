@@ -224,8 +224,8 @@ func TestApplyOverAYardSetUpByHand(t *testing.T) {
 	g, err := st.GetGroup(ctx, "web-builders")
 	must(err)
 	want := map[string]any{"kind": "codex", "model": "luna", "args": []any{"--yolo"}, "env_file": "/secrets.env", "idle": "20m", "nice": float64(10), "prompt": "/old/builder.md"}
-	if !reflect.DeepEqual(g.Config, want) || g.Limit != 5 {
-		t.Fatalf("web-builders = %+v, want the hand's prompt kept and the pack's limit set", g)
+	if !reflect.DeepEqual(g.Config, want) || g.Limit != 2 {
+		t.Fatalf("web-builders = %+v, want the yard's group left whole (limit 2, prompt /old/builder.md)", g)
 	}
 	g, err = st.GetGroup(ctx, "web-assembly")
 	must(err)
@@ -251,10 +251,10 @@ func TestApplyOverAYardSetUpByHand(t *testing.T) {
 	}
 	boss, err := st.GetCrew(ctx, "boss")
 	must(err)
-	// Its prompt is the yard's own business: the pack sets none for the
-	// yardmaster, so the hand-set one stays.
+	// Existing crew member is left whole: prompt and event kinds stay as the
+	// yard has them, and an existing linear subscription keeps its scope.
 	if boss.Dir != "/home/boss" || boss.MaxAge != "6h" || boss.Config["kind"] != "codex" || boss.Config["env_file"] != "/boss.env" ||
-		boss.Identities["linear"].ID != "u1" || boss.Config["prompt"] != "/old/yardmaster.md" || !slices.Equal(boss.On, []string{store.KindAttention}) {
+		boss.Identities["linear"].ID != "u1" || boss.Config["prompt"] != "/old/yardmaster.md" || !slices.Equal(boss.On, []string{"held"}) {
 		t.Fatalf("boss = %+v", boss)
 	}
 	var subs []string
@@ -262,7 +262,7 @@ func TestApplyOverAYardSetUpByHand(t *testing.T) {
 		subs = append(subs, s.String())
 	}
 	slices.Sort(subs)
-	if want := []string{"linear all team=ENG", "linear involved", "yardr all depot=web stage=clear", "yardr all depot=web stage=decide", "yardr all depot=web state=done"}; !slices.Equal(subs, want) {
+	if want := []string{"linear all", "linear all team=ENG", "yardr all depot=web stage=clear", "yardr all depot=web stage=decide", "yardr all depot=web state=done"}; !slices.Equal(subs, want) {
 		t.Fatalf("subscriptions = %v, want %v", subs, want)
 	}
 }
@@ -327,8 +327,8 @@ func TestApplyFailsLoudSubscribingAnotherCrew(t *testing.T) {
 		t.Fatalf("a failed import was recorded: %+v", recs)
 	}
 
-	// A changed scope is a change of the same subscription, and fails the
-	// same way, leaving what was there.
+	// A subscription the crew member already holds by source and Where is
+	// unchanged whatever its scope: rescoping in the pack writes nothing.
 	dir := copyStarter(t)
 	st, o = yard(t)
 	withLinear(t, st)
@@ -336,75 +336,13 @@ func TestApplyFailsLoudSubscribingAnotherCrew(t *testing.T) {
 	apply(t, st, build(t, st, load(t, dir), o), answers)
 	edit(t, dir, "linear: involved", "linear: all")
 	plan = build(t, st, load(t, dir), o)
-	if so := find(t, plan, "subscription", "boss linear all"); so.Action != pack.Change {
-		t.Fatalf("the rescoped subscription = %+v, want a change", so)
-	}
-	res, err = pack.Apply(ctx, st, plan, pack.ApplyOptions{Answers: answered(t, plan, answers), Actor: "clerk"})
-	if res != nil || err == nil || !strings.Contains(err.Error(), "subscription boss linear all") ||
-		!strings.Contains(err.Error(), want) || !strings.Contains(err.Error(), "the import stopped here") {
-		t.Fatalf("change as another crew = %+v, %v; want the refusal loud", res, err)
-	}
-	boss, err := st.GetCrew(ctx, "boss")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var subs []string
-	for _, s := range boss.Subscriptions {
-		subs = append(subs, s.String())
-	}
-	if slices.Contains(subs, "linear all") || !slices.Contains(subs, "linear involved") {
-		t.Fatalf("boss's subscriptions after the failed change = %v", subs)
+	if so := find(t, plan, "subscription", "boss linear all"); so.Action != pack.Unchanged {
+		t.Fatalf("the rescoped subscription = %+v, want unchanged", so)
 	}
 }
 
-// A dropped subscription pruned by anyone but the crew member or the
-// operator degrades like any failed removal: it is left, with why, and
-// what is still there stays. The import still ends at the record, which
-// only the operator writes: the error names that, with the prune refusal
-// kept in the result.
-func TestApplyPruneDegradesRemovingAnotherCrewsSubscription(t *testing.T) {
-	const want = "only boss or the operator (me) changes what boss is told; this is clerk"
-
-	st, o := yard(t)
-	withLinear(t, st)
-	if _, err := st.PutCrew(ctx, store.CrewMember{Name: "clerk", Runner: "herdr"}, "me"); err != nil {
-		t.Fatal(err)
-	}
-	dir := copyStarter(t)
-	o.Crew = map[string]string{"yardmaster": "boss"}
-	apply(t, st, build(t, st, load(t, dir), o), answers)
-	edit(t, dir, "    subscribe:\n      linear: involved\n", "")
-	plan := build(t, st, load(t, dir), o)
-	if so := find(t, plan, "subscription", "boss linear involved"); so.Action != pack.Dropped {
-		t.Fatalf("the unlisted subscription = %+v, want it dropped", so)
-	}
-	res, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Prune: true, Actor: "clerk"})
-	if err == nil || !strings.Contains(err.Error(), "only the operator (me) may record the import of pack starter; this is clerk") ||
-		!strings.Contains(err.Error(), "applying again records nothing") {
-		t.Fatalf("prune as another crew = %+v, %v; want it left, with why, and the record refused", res, err)
-	}
-	if res == nil || !slices.Equal(res.Left, []string{"subscription boss linear involved"}) {
-		t.Fatalf("result = %+v, want the subscription left", res)
-	}
-	if len(res.PruneErrors) != 1 || !strings.Contains(res.PruneErrors[0], want) {
-		t.Fatalf("prune errors = %v, want the refusal", res.PruneErrors)
-	}
-	boss, err := st.GetCrew(ctx, "boss")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var subs []string
-	for _, s := range boss.Subscriptions {
-		subs = append(subs, s.String())
-	}
-	if !slices.Contains(subs, "linear involved") {
-		t.Fatalf("boss's subscriptions after the refused prune = %v", subs)
-	}
-}
-
-// A pack that dropped a group: the group, its routes, its role file and its
-// stage's file, which the last import brought, are reported and left; --prune
-// removes them, and nothing else, not a group of the depot the pack never had.
+// A line that drops a group, route or subscription lists nothing as dropped
+// and leaves the yard's objects standing.
 func TestDroppedObjectsAreReportedAndPrunedOnlyWhenAsked(t *testing.T) {
 	st, o := yard(t)
 	dir := copyStarter(t)
@@ -424,19 +362,16 @@ func TestDroppedObjectsAreReportedAndPrunedOnlyWhenAsked(t *testing.T) {
 		"stage=review stage=review-security type=train\"", "stage=review type=train\"")
 
 	plan := build(t, st, load(t, dir), o)
-	gone := []string{"group web-security-reviewers",
-		"route depot web stage review-security -> web-security-reviewers"}
-	if got := actions(plan, pack.Dropped); !slices.Equal(slices.Sorted(slices.Values(got)), gone) {
-		t.Fatalf("dropped = %v, want %v", got, gone)
+	if got := actions(plan, pack.Dropped); len(got) != 0 {
+		t.Fatalf("dropped = %v, want none", got)
 	}
-
 	res := apply(t, st, plan, nil)
-	if len(res.Pruned) != 0 || !slices.Equal(slices.Sorted(slices.Values(res.Left)), gone) {
-		t.Fatalf("without --prune: %+v", res)
+	if len(res.Pruned) != 0 || len(res.Left) != 0 {
+		t.Fatalf("apply = %+v, want nothing pruned or left", res)
 	}
 	role := filepath.Join(config.At(o.Home).PackRoles("starter"), "review-security.md")
 	if _, err := st.GetGroup(ctx, "web-security-reviewers"); err != nil {
-		t.Fatalf("web-security-reviewers was removed without --prune: %v", err)
+		t.Fatalf("web-security-reviewers was removed: %v", err)
 	}
 	stage := filepath.Join(o.Home, "flows", "starter.default", "review-security.md")
 	for _, f := range []string{role, stage} {
@@ -444,95 +379,12 @@ func TestDroppedObjectsAreReportedAndPrunedOnlyWhenAsked(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Still reported the next time: the record keeps what was not pruned.
-	plan = build(t, st, load(t, dir), o)
-	if got := actions(plan, pack.Dropped); len(got) != len(gone) {
-		t.Fatalf("dropped after an import without --prune = %v", got)
-	}
-
-	a := pack.Answers{}
-	res, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Answers: a, Prune: true, Actor: "me"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !slices.Equal(slices.Sorted(slices.Values(res.Pruned)), gone) || len(res.Left) != 0 || !res.Recorded {
-		t.Fatalf("with --prune: %+v", res)
-	}
-	if _, err := st.GetGroup(ctx, "web-security-reviewers"); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("web-security-reviewers after --prune: %v", err)
-	}
-	// Files are never pruned.
-	for _, f := range []string{role, stage} {
-		if _, err := os.Stat(f); err != nil {
-			t.Fatalf("%s was removed: %v", f, err)
-		}
-	}
-	// The stages the pack still has keep their files.
-	if _, err := os.Stat(filepath.Join(filepath.Dir(stage), "review.md")); err != nil {
-		t.Fatalf("--prune removed the stage file of a stage the pack has: %v", err)
-	}
 	if _, err := st.GetGroup(ctx, "web-extra"); err != nil {
-		t.Fatalf("--prune removed a group the pack never had: %v", err)
+		t.Fatalf("web-extra was removed: %v", err)
 	}
 	routes, _ := st.Routes(ctx)
-	if len(routes) != 10 || slices.ContainsFunc(routes, func(r store.Route) bool { return r.Stage == "review-security" }) {
-		t.Fatalf("routes = %+v", routes)
-	}
-	plan = build(t, st, load(t, dir), o)
-	if got := actions(plan, pack.Dropped); len(got) != 0 {
-		t.Fatalf("dropped after --prune = %v", got)
-	}
-	recs, _ := st.Packs(ctx)
-	if len(recs) != 1 || slices.ContainsFunc(recs[0].Objects, func(o store.PackObject) bool { return o.Name == "web-security-reviewers" }) {
-		t.Fatalf("record = %+v", recs)
-	}
-}
-
-// A people group is the yard's: one that a second depot's import names too,
-// or another depot routes to, is held even from a prune.
-func TestPruneHoldsAGroupAnotherDepotUses(t *testing.T) {
-	st, o := yard(t)
-	if err := st.PutDepot(ctx, store.Depot{Name: "api", Base: "main"}, "me"); err != nil {
-		t.Fatal(err)
-	}
-	dir := copyStarter(t)
-	apply(t, st, build(t, st, load(t, dir), o), answers)
-	other := o
-	other.Depot = "api"
-	apply(t, st, build(t, st, load(t, starter), other), answers)
-
-	edit(t, dir,
-		"      decide:   { group: decisions, file: flows/default/decide.md,   manual: [backlog, new] }", "      decide:   { manual: [backlog, new] }",
-		"      clear:    { group: decisions, file: flows/default/clear.md,    outcomes: { done: approved, changes: { to: new, max: 3, then: decide }, question: decide } }", "      clear:    { group: backlog, file: flows/default/clear.md,    outcomes: { done: approved, changes: { to: new, max: 3, then: decide }, question: decide } }",
-		"      in-pr:   { group: decisions, file: flows/train/in-pr.md, outcomes: { done: land, changes: open, question: decide, merged: merged } }", "      in-pr:   { group: backlog, file: flows/train/in-pr.md, outcomes: { done: land, changes: open, question: decide, merged: merged } }",
-		"      merge:   { group: decisions, file: flows/train/merge.md, outcomes: { done: open, rework: open, question: decide } }", "      merge:   { group: backlog, file: flows/train/merge.md, outcomes: { done: open, rework: open, question: decide } }",
-		"      decide:  { group: decisions, manual: [open, backlog] }", "      decide:  { group: backlog, manual: [open, backlog] }",
-		"  decisions: { people: true }\n", "")
-	plan := build(t, st, load(t, dir), o)
-	g := find(t, plan, "group", "decisions")
-	if g.Action != pack.Dropped || !strings.Contains(g.Held, "pack starter in depot api names it too") {
-		t.Fatalf("decisions = %+v", g)
-	}
-	res, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Prune: true, Actor: "me"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !slices.Contains(res.Left, "group decisions") {
-		t.Fatalf("result = %+v", res)
-	}
-	if _, err := st.GetGroup(ctx, "decisions"); err != nil {
-		t.Fatalf("decisions was pruned from under depot api: %v", err)
-	}
-	// Depot web's route to it went with the stage's group; depot api's stays.
-	routes, _ := st.Routes(ctx)
-	var depots []string
-	for _, r := range routes {
-		if r.Group == "decisions" {
-			depots = append(depots, *r.Depot)
-		}
-	}
-	if !slices.Equal(depots, []string{"api", "api", "api", "api"}) {
-		t.Fatalf("routes to decisions are of depots %v, want api's task and train stages", depots)
+	if !slices.ContainsFunc(routes, func(r store.Route) bool { return r.Stage == "review-security" }) {
+		t.Fatalf("review-security route was removed: %+v", routes)
 	}
 }
 
@@ -722,7 +574,8 @@ func record(t *testing.T, st store.API) store.PackImport {
 // The pack's roles win by default, as its flow does: a group is pointed at
 // the pack's copied role though the depot has its own
 // .yardr/roles/<name>.md, the plan shows the change of prompt and names the
-// depot's file that stops being used, and a second import changes nothing.
+// New groups get the pack's roles by default (and name the depot's file they
+// shadow), while an existing group using the depot's role stays unchanged.
 // The yardmaster is the exception: its prompt is the yard's own, so the
 // pack sets none for it and the depot's yardmaster role shadows nothing.
 func TestPacksRolesWinOverTheDepotsOwn(t *testing.T) {
@@ -731,10 +584,21 @@ func TestPacksRolesWinOverTheDepotsOwn(t *testing.T) {
 	install := config.At(o.Home).Pack("starter")
 
 	plan := build(t, st, load(t, starter), o)
+	// Existing web-builders already uses the depot's role (roles/builder.md),
+	// which reads as the line says where the depot has its own role.
 	b := find(t, plan, "group", "web-builders")
-	want := []pack.Diff{{Field: "prompt", Old: "roles/builder.md", New: filepath.Join(install, "roles", "builder.md")}}
-	if b.Action != pack.Change || !reflect.DeepEqual(b.Changes, want) || len(b.Keeps) != 0 || !slices.Equal(b.Shadows, []string{".yardr/roles/builder.md"}) {
-		t.Fatalf("web-builders = %+v", b)
+	if b.Action != pack.Unchanged || len(b.Changes) != 0 || len(b.Keeps) != 0 || len(b.Shadows) != 0 || b.Group.Config["prompt"] != "roles/builder.md" {
+		t.Fatalf("existing web-builders = %+v", b)
+	}
+	// Delete web-builders so the pack creates it anew: the pack's role wins
+	// and shadows .yardr/roles/builder.md.
+	if _, err := st.DeleteGroup(ctx, "web-builders", "me"); err != nil {
+		t.Fatal(err)
+	}
+	plan = build(t, st, load(t, starter), o)
+	b = find(t, plan, "group", "web-builders")
+	if b.Action != pack.Create || len(b.Keeps) != 0 || !slices.Equal(b.Shadows, []string{".yardr/roles/builder.md"}) || b.Group.Config["prompt"] != filepath.Join(install, "roles", "builder.md") {
+		t.Fatalf("new web-builders = %+v", b)
 	}
 	// The depot has no reviewer.md of its own: nothing is shadowed there.
 	if r := find(t, plan, "group", "web-reviewers"); len(r.Shadows) != 0 || r.Group.Config["prompt"] != filepath.Join(install, "roles", "reviewer.md") {
@@ -755,23 +619,19 @@ func TestPacksRolesWinOverTheDepotsOwn(t *testing.T) {
 		t.Fatalf("the record says the depot's roles were kept: %+v", rec)
 	}
 
-	// Again, with no flag: nothing to write, the shadowed file still named.
+	// Again, with no flag: nothing to write, and no record written.
 	plan = build(t, st, load(t, starter), o)
 	if got := append(actions(plan, pack.Change), actions(plan, pack.Create)...); len(got) != 0 {
 		t.Fatalf("a second import would write %v", got)
-	}
-	if b := find(t, plan, "group", "web-builders"); !slices.Equal(b.Shadows, []string{".yardr/roles/builder.md"}) {
-		t.Fatalf("web-builders, second plan = %+v", b)
 	}
 	if res := apply(t, st, plan, nil); res.Wrote() || res.Recorded {
 		t.Fatalf("the second import: %+v", res)
 	}
 }
 
-// DepotRoles is the opposite choice: a group or crew member whose depot has its
-// own role keeps it. The record remembers the choice, so the next import
-// repeats it without the flag and changes nothing; PackRoles undoes it, and
-// DepotRoles after that takes a group off the pack's copy again.
+// DepotRoles is the opposite choice: a new group whose depot has its own role
+// gets the depot's role by name. The record remembers the choice, and an
+// existing group is left whole under either flag.
 func TestDepotRolesKeepsTheDepotsOwnAndIsRemembered(t *testing.T) {
 	st, o := yard(t)
 	depotWithRoles(t, st)
@@ -822,31 +682,23 @@ func TestDepotRolesKeepsTheDepotsOwnAndIsRemembered(t *testing.T) {
 		t.Fatalf("the second import: %+v", res)
 	}
 
-	// Told anew: the pack's roles, and the record says so afterwards.
+	// Told PackRoles: existing web-builders keeps its depot role untouched,
+	// while the record remembers the flag for future new groups.
 	o.PackRoles = true
 	plan = build(t, st, load(t, starter), o)
 	b = find(t, plan, "group", "web-builders")
-	want := []pack.Diff{{Field: "prompt", Old: "roles/builder.md", New: filepath.Join(install, "roles", "builder.md")}}
-	if plan.DepotRoles || len(b.Keeps) != 0 || !reflect.DeepEqual(b.Changes, want) || !slices.Equal(b.Shadows, []string{".yardr/roles/builder.md"}) {
+	if plan.DepotRoles || b.Action != pack.Unchanged || len(b.Keeps) != 0 || len(b.Shadows) != 0 {
 		t.Fatalf("with PackRoles: %+v", b)
 	}
-	if m := find(t, plan, "crew", "yardmaster"); m.CrewMember.Prompt != "" {
-		t.Fatalf("with PackRoles: yardmaster %+v", m.CrewMember)
-	}
 	apply(t, st, plan, nil)
+	if g, _ := st.GetGroup(ctx, "web-builders"); g.Config["prompt"] != "roles/builder.md" {
+		t.Fatalf("web-builders after PackRoles: %+v", g)
+	}
 	if rec := record(t, st); rec.DepotRoles {
 		t.Fatalf("the record after PackRoles: %+v", rec)
 	}
 
-	// And back: a group on the pack's copy gets the depot's role by name.
-	o.PackRoles, o.DepotRoles = false, true
-	b = find(t, build(t, st, load(t, starter), o), "group", "web-builders")
-	want = []pack.Diff{{Field: "prompt", Old: filepath.Join(install, "roles", "builder.md"), New: "roles/builder.md"}}
-	if !reflect.DeepEqual(b.Changes, want) {
-		t.Fatalf("back to DepotRoles: %+v", b)
-	}
-
-	o.PackRoles = true
+	o.DepotRoles = true
 	if _, err := pack.Build(ctx, st, load(t, starter), o); err == nil || !strings.Contains(err.Error(), "opposite choices") {
 		t.Fatalf("both choices at once: %v", err)
 	}
@@ -882,13 +734,12 @@ func TestFlowChoiceIsAskedAndRemembered(t *testing.T) {
 
 	o.Flow = "default"
 	plan = build(t, st, load(t, dir), o)
-	// Existing pointer is not overwritten, and starter.short is not dropped.
+	// Existing pointer is not overwritten, and nothing is dropped.
 	if ptr := find(t, plan, "pointer", "depot web -> starter.short"); ptr.Action != pack.Differs {
 		t.Fatalf("pointer = %+v, want differs", ptr)
 	}
-	wantDropped := []string{"route depot web stage backlog type train -> backlog", "route depot web stage review type train -> web-reviewers", "route depot web stage review-security type train -> web-security-reviewers", "route depot web stage approved type train -> web-assembly", "route depot web stage decide type train -> decisions"}
-	if got := actions(plan, pack.Dropped); !slices.Equal(got, wantDropped) {
-		t.Fatalf("dropped = %v", got)
+	if got := actions(plan, pack.Dropped); len(got) != 0 {
+		t.Fatalf("dropped = %v, want none", got)
 	}
 	apply(t, st, plan, answers)
 	if _, err := st.GetFlow(ctx, "starter.short"); err != nil {

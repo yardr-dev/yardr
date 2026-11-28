@@ -63,7 +63,7 @@ func TestPackApplySetsTheStageMapOnTheYardsHook(t *testing.T) {
 	}
 	for _, want := range []string{
 		"\nstage maps\n  create           hook linear as boss\n",
-		"\nstage map of source linear, as crew member boss\n  the pack says " + starterMapLines + "\n  would be set on hook linear, which has none\n",
+		"\nstage map of source linear, as crew member boss\n  the pack says " + starterMapLines + "\n  would set as boss on hook linear\n  would set map on hook linear\n",
 		"  ok       hook         hook linear\n",
 		"  ok       identity     crew member boss has an identity in linear\n",
 		"  missing  set state    " + grant,
@@ -133,7 +133,7 @@ func TestPackApplySetsTheMakesLineOnTheYardsHook(t *testing.T) {
 	const line = "conclusion=failure event=workflow_run head_branch=main -> task:new"
 	for _, want := range []string{
 		"\nwhat the events of source github say of a bead, and make\n  the pack makes " + line + "\n",
-		"  would be set on hook github, which has none\n",
+		"  would add the makes line \"" + line + "\" to hook github\n",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("pack check lacks %q:\n%s", want, out)
@@ -308,8 +308,8 @@ func TestPackApplyByAnotherSessionSetsNoStageMap(t *testing.T) {
 	}
 }
 
-// A hook with another map gets the pack's, and the plan shows both.
-func TestPackApplyShowsTheMapItReplaces(t *testing.T) {
+// A hook with its own map keeps it, reported as differs, and apply writes nothing.
+func TestPackApplyKeepsTheHooksOwnMap(t *testing.T) {
 	t.Parallel()
 	a := mapApp(t, "linear")
 	ctx := context.Background()
@@ -318,24 +318,25 @@ func TestPackApplyShowsTheMapItReplaces(t *testing.T) {
 	}
 	out := applyStarter(t, a)
 	for _, want := range []string{
-		"\nstage maps\n  change           hook linear as boss\n                     map: task:review=done -> " + starterMapLines + "\n",
-		"  would replace what hook linear has: as boss, task:review=done\n",
-		"\nhook linear now moves tracked linear issues as boss: " + starterMapLines + "\n",
+		"\nstage maps\n  differs          hook linear as boss\n                     the yard's version reads otherwise; nothing is written\n                     map: task:review=done -> " + starterMapLines + "\n",
+		"  hook linear keeps its own map (task:review=done)\n",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("pack apply lacks %q:\n%s", want, out)
 		}
 	}
-	if h := linearHook(t, a); len(h.Map) != 4 || h.SecretFile != "/yard/secret" {
-		t.Fatalf("hook = %+v", h)
+	if strings.Contains(out, "now moves tracked linear issues") {
+		t.Errorf("pack apply wrote over the hook's map:\n%s", out)
+	}
+	if h := linearHook(t, a); len(h.Map) != 1 || h.Map["task:review"] != "done" || h.SecretFile != "/yard/secret" {
+		t.Fatalf("hook = %+v, want its own map kept", h)
 	}
 }
 
 // A hook's tables are shared by the packs that carry the source: pack check
-// shows the lines the pack would add and the ones it would drop, which are
-// its own from its last import and no others, so the lines of another pack
-// on the hook are never offered as drops and nothing needs --yes.
-func TestPackCheckShowsTheLinesItAddsAndDrops(t *testing.T) {
+// shows missing lines it would add. Existing lines, including ones from a
+// pack that no longer carries them, stay on the hook and need no --yes.
+func TestPackCheckShowsTheLinesItAddsAndKeeps(t *testing.T) {
 	t.Parallel()
 	a := openApp(t, "github")
 	requireNonInteractive(t)
@@ -354,10 +355,25 @@ func TestPackCheckShowsTheLinesItAddsAndDrops(t *testing.T) {
 	if len(trains) != 6 {
 		t.Fatalf("the starter's lines on the hook: %v", store.SayLines(trains))
 	}
+	// Matching as with an empty table gets the missing lines, not a message
+	// that the hook has no map.
+	standing := hook()
+	standing.Says = nil
+	if _, err := a.st.PutHook(ctx, standing, "me"); err != nil {
+		t.Fatal(err)
+	}
+	out, err := run(t, a.packCmd(), "check", "../../packs/starter", "--depot", "web", "--crew", "yardmaster=boss")
+	if err != nil || !strings.Contains(out, "would add the says line ") || strings.Contains(out, "would be set on hook github, which has none") {
+		t.Fatalf("pack check over a hook with its as and an empty table: %v\n%s", err, out)
+	}
+	standing.Says = trains
+	if _, err := a.st.PutHook(ctx, standing, "me"); err != nil {
+		t.Fatal(err)
+	}
 
 	// The contributors pack onto the starter's hook: lines to add, none to drop.
 	check := []string{"--depot", "web", "--crew", "yardmaster=boss"}
-	out, err := run(t, a.packCmd(), append([]string{"check", "../../packs/contributors"}, check...)...)
+	out, err = run(t, a.packCmd(), append([]string{"check", "../../packs/contributors"}, check...)...)
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
@@ -392,7 +408,7 @@ func TestPackCheckShowsTheLinesItAddsAndDrops(t *testing.T) {
 		t.Fatalf("hook after the contributors pack: %v, makes %v", store.SayLines(h.Says), store.MakeLines(h.Makes))
 	}
 
-	// A pack that lets go of a line would drop that one alone.
+	// A pack that lets go of a line drops nothing from the hook.
 	dir := filepath.Join(t.TempDir(), "contributors")
 	if err := os.CopyFS(dir, os.DirFS("../../packs/contributors")); err != nil {
 		t.Fatal(err)
@@ -411,8 +427,7 @@ func TestPackCheckShowsTheLinesItAddsAndDrops(t *testing.T) {
 	if out, err = run(t, a.packCmd(), append([]string{"check", dir}, check...)...); err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	if want := "  would drop the says line \"action=closed event=issues stage=backlog stage=decide stage=new stage=review stage=review-security stage=triage type=issue -> dropped\" from hook github: the pack set it at its last import and no longer gives it\n"; !strings.Contains(out, want) ||
-		strings.Count(out, "would drop") != 1 || strings.Contains(out, "would add") {
+	if !strings.Contains(out, "  hook github has it\n") || strings.Contains(out, "would drop") || strings.Contains(out, "would add") {
 		t.Fatalf("pack check of the pack without the line:\n%s", out)
 	}
 }

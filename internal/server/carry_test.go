@@ -898,6 +898,9 @@ func depotYard(t *testing.T) (*store.Store, string, string, string) {
 	t.Helper()
 	ctx := context.Background()
 	st, home, bead := carryYard(t)
+	if _, err := st.PutCrew(ctx, store.CrewMember{Name: "yardmaster", Runner: "herdr", Dir: home, On: []string{store.KindAttention}}, "mckean"); err != nil {
+		t.Fatal(err)
+	}
 	dir := t.TempDir()
 	writeMiniPack(t, dir, "build v1\n", "review v1\n")
 	if err := st.PutDepot(ctx, store.Depot{Name: "yardr", Path: t.TempDir()}, "mckean"); err != nil {

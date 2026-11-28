@@ -221,35 +221,34 @@ func delegatedBody(t *testing.T, st store.API, rec *store.Delegation) store.Dele
 }
 
 // A delegated apply past 4 KiB of before-state holds the complete prior
-// state in its record's blob: setting a changed file and a changed group
-// back from the blob restores what stood.
+// state in its record's blob: setting a changed hook back from the blob
+// restores what stood, while differing files and groups are left untouched.
 func TestDelegatedApplyPastInlineBeforeStateRestores(t *testing.T) {
 	st, o, dctx, setPlan := delegatedPackYard(t)
 	withLinearAs(t, st)
+	ghText, err := os.ReadFile(filepath.Join("..", "..", "packs", "github", "github.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.PutSource(ctx, "github.yaml", string(ghText), "jo"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetIdentity(ctx, "yardmaster", "github", store.Identity{ID: "ym-bot"}, "jo"); err != nil {
+		t.Fatal(err)
+	}
 	dir := copyStarter(t)
-	role := filepath.Join(dir, "roles", "builder.md")
-	v1, err := os.ReadFile(role)
-	if err != nil {
-		t.Fatal(err)
-	}
-	v1 = append(v1, []byte("\n"+strings.Repeat("the first builder role. ", 300))...)
-	if err := os.WriteFile(role, v1, 0o644); err != nil {
-		t.Fatal(err)
-	}
 	applyAs(t, st, build(t, st, load(t, dir), o), answers, "jo")
-	// Give the group a large standing config so its before-state exceeds the
-	// 4 KiB inline threshold and goes into a blob on the delegated apply.
-	g0, err := st.GetGroup(ctx, "web-builders")
-	if err != nil {
+	// Give the github hook a large standing says table so its before-state
+	// exceeds the 4 KiB inline threshold and goes into a blob on the delegated
+	// apply when the pack adds a new line.
+	bigNote := strings.Repeat("standing-note ", 350)
+	standing := store.Hook{Name: "gh", Source: "github", SecretFile: "/yard/gh.secret", As: "yardmaster",
+		Says: []store.Say{{Where: map[string]string{"event": "pull_request", "action": "labeled", "label": "standing"}, Outcome: "question", Note: bigNote}}}
+	if _, err := st.PutHook(ctx, standing, "jo"); err != nil {
 		t.Fatal(err)
 	}
-	g0.Config["args"] = []any{strings.Repeat("standing-arg ", 300)}
-	if err := st.PutGroup(ctx, *g0, "jo"); err != nil {
-		t.Fatal(err)
-	}
-	// The pack's next word changes the builders' limit, as a pack upgrade
-	// would: the group as it stands (limit 5) is the record's before-state.
-	// Changing the role in the pack reports differs and leaves the yard's copy.
+	// Changing a group limit and role in the pack reports differs and leaves
+	// both untouched; adding the starter's missing says lines writes the hook.
 	manifest := filepath.Join(dir, "pack.yaml")
 	text, err := os.ReadFile(manifest)
 	if err != nil {
@@ -258,8 +257,8 @@ func TestDelegatedApplyPastInlineBeforeStateRestores(t *testing.T) {
 	if err := os.WriteFile(manifest, []byte(strings.Replace(string(text), "limit: 5", "limit: 2", 1)), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	v2 := append([]byte("the second builder role\n"), []byte(strings.Repeat("changed. ", 100))...)
-	if err := os.WriteFile(role, v2, 0o644); err != nil {
+	role := filepath.Join(dir, "roles", "builder.md")
+	if err := os.WriteFile(role, []byte("the second builder role\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -276,7 +275,7 @@ func TestDelegatedApplyPastInlineBeforeStateRestores(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !res.Recorded || res.Changed == 0 {
+	if !res.Recorded || res.Created == 0 {
 		t.Fatalf("delegated import = %+v", res)
 	}
 	rec := latestDelegated(t, st)
@@ -287,20 +286,25 @@ func TestDelegatedApplyPastInlineBeforeStateRestores(t *testing.T) {
 	if body.Pack != "starter" || body.Digest != plan.Digest {
 		t.Errorf("record holds pack %q digest %q, want starter %q", body.Pack, body.Digest, plan.Digest)
 	}
-	var fileObj, groupObj *store.DelegatedPackObject
+	var fileObj, groupObj, mapObj *store.DelegatedPackObject
 	for i := range body.Objects {
 		switch body.Objects[i].Kind + " " + body.Objects[i].Name {
 		case "file roles/builder.md":
 			fileObj = &body.Objects[i]
 		case "group web-builders":
 			groupObj = &body.Objects[i]
+		case "map hook gh as yardmaster":
+			mapObj = &body.Objects[i]
 		}
 	}
 	if fileObj == nil || fileObj.Action != pack.Differs {
 		t.Fatalf("file object in the record = %+v, want differs", fileObj)
 	}
-	if groupObj == nil || !groupObj.Had || !strings.Contains(groupObj.Before, `"limit":5`) || len(groupObj.Before) < 4096 {
-		t.Fatalf("group object in the record = %+v, want the full group before-state in the blob", groupObj)
+	if groupObj == nil || groupObj.Action != pack.Differs {
+		t.Fatalf("group object in the record = %+v, want differs", groupObj)
+	}
+	if mapObj == nil || !mapObj.Had || !strings.Contains(mapObj.Before, "standing-note") || len(mapObj.Before) < 4096 {
+		t.Fatalf("map object in the record = %+v, want the full hook before-state in the blob", mapObj)
 	}
 	if _, err := st.Delegation(ctx, rec.ID, "ada"); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("ada reads the record: %v", err)
@@ -311,20 +315,23 @@ func TestDelegatedApplyPastInlineBeforeStateRestores(t *testing.T) {
 		}
 	}
 
-	// The differing role was left untouched; restoring the group from the blob
-	// restores limit 5.
+	// Differing role and group stayed untouched; restoring the hook from the
+	// blob restores what stood.
 	if data, err := os.ReadFile(installed); err != nil || string(data) != string(stood) {
 		t.Fatalf("installed role after the apply = %d bytes, %v; want the standing text untouched", len(data), err)
 	}
-	var g store.Group
-	if err := json.Unmarshal([]byte(groupObj.Before), &g); err != nil {
+	if g, err := st.GetGroup(ctx, "web-builders"); err != nil || g.Limit != 5 {
+		t.Fatalf("builders after apply = %+v, %v; want limit 5 untouched", g, err)
+	}
+	var h store.Hook
+	if err := json.Unmarshal([]byte(mapObj.Before), &h); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.PutGroup(ctx, g, "jo"); err != nil {
+	if _, err := st.PutHook(ctx, h, "jo"); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := st.GetGroup(ctx, "web-builders"); err != nil || got.Limit != 5 {
-		t.Errorf("restored builders = %+v, %v; want limit 5 as it stood", got, err)
+	if got, err := st.GetHook(ctx, "gh"); err != nil || !store.SameSays(got.Says, standing.Says) {
+		t.Errorf("restored hook = %+v, %v; want standing says", got, err)
 	}
 }
 
@@ -502,67 +509,48 @@ func TestDelegatedApplyAskingPlanAndOverCapRefuse(t *testing.T) {
 // from and the digest that stood before it, its before-state past 4 KiB in
 // the record's blob as an embedded pack's is; the next apply, pinned to
 // that prior digest, restores what stood, where the origin still serves
-// those bytes; and a pin on bytes the origin no longer serves refuses before
+// A delegated apply of a pack of the packs repository records the URL and
+// the digest that stood before: applying again pinned to that digest restores
+// what stood, while a pin on bytes the origin no longer serves refuses before
 // anything is written.
 func TestDelegatedRepositoryApplyRestoresThePriorDigest(t *testing.T) {
-	dir := copyStarter(t)
-	origin, _ := serveRepository(t, "starter", dir)
-	from := origin + "starter/"
-	st, o, dctx, setPlan := delegatedPackYardAt(t, origin)
-	withLinearAs(t, st)
-	role := filepath.Join(dir, "roles", "builder.md")
-	manifest := filepath.Join(dir, "pack.yaml")
-	pin := func() string { return build(t, st, load(t, dir), o).Digest }
+	dir := t.TempDir()
 	write := func(path string, data []byte) {
 		t.Helper()
 		if err := os.WriteFile(path, data, 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
-	read := func(path string) []byte {
-		t.Helper()
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return data
-	}
-	manifest1, role0 := read(manifest), read(role)
+	write(filepath.Join(dir, "pack.yaml"), []byte("name: acme\nkind: source\nsources:\n  acme:\n    declaration: acme.yaml\n"))
+	declPath := filepath.Join(dir, "acme.yaml")
+	declBase := "name: acme\nbase: https://acme.example.com/api\ncalls:\n  ping: { kind: read, request: { method: GET, path: /ping } }\n"
+	decl1 := []byte(declBase + "# " + strings.Repeat("first declaration. ", 250) + "\n")
+	decl2 := []byte(declBase + "# second declaration\n")
+	write(declPath, decl1)
+
+	origin, _ := serveRepository(t, "acme", dir)
+	from := origin + "acme/"
+	st, o, dctx, setPlan := delegatedPackYardAt(t, origin)
+	o.Depot = ""
+	pin := func() string { return build(t, st, load(t, dir), o).Digest }
 
 	// The first install: nothing stood before it, and the record says so.
-	role1 := append(role0, []byte("\n"+strings.Repeat("the first builder role. ", 300))...)
-	write(role, role1)
 	digest1 := pin()
-	plan1, err := repositoryRun(t, st, o, dctx, setPlan, origin, "starter", digest1)
-	if err != nil {
+	if _, err := repositoryRun(t, st, o, dctx, setPlan, origin, "acme", digest1); err != nil {
 		t.Fatal(err)
 	}
-	installed := find(t, plan1, "file", "roles/builder.md").File.To
-	stood := read(installed)
 	rec1 := latestDelegated(t, st)
 	body1 := delegatedBody(t, st, rec1)
 	if rec1.State != "done" || body1.From != from || body1.Digest != digest1 || body1.Prior != "" || !strings.Contains(body1.Back, "no earlier delegated run") {
 		t.Fatalf("first record = state %q, %+v; want done from %s with no prior digest", rec1.State, body1, from)
 	}
 
-	// Give the group a large standing config so its before-state goes into a blob.
-	g0, err := st.GetGroup(ctx, "web-builders")
-	if err != nil {
-		t.Fatal(err)
-	}
-	g0.Config["args"] = []any{strings.Repeat("standing-arg ", 300)}
-	if err := st.PutGroup(ctx, *g0, "jo"); err != nil {
-		t.Fatal(err)
-	}
-
-	// The pack's next word changes the builders' limit and the role: the
-	// record holds the digest that stood, the complete before-state past
-	// 4 KiB in its blob, and the words that take the run back; the role
-	// reports differs and stays untouched.
-	write(manifest, []byte(strings.Replace(string(manifest1), "limit: 5", "limit: 2", 1)))
-	write(role, []byte("the second builder role\n"))
+	// The pack's next word updates the declaration: the record holds the
+	// digest that stood, the complete before-state past 4 KiB in its blob,
+	// and the words that take the run back.
+	write(declPath, decl2)
 	digest2 := pin()
-	if _, err := repositoryRun(t, st, o, dctx, setPlan, origin, "starter", digest2); err != nil {
+	if _, err := repositoryRun(t, st, o, dctx, setPlan, origin, "acme", digest2); err != nil {
 		t.Fatal(err)
 	}
 	rec2 := latestDelegated(t, st)
@@ -570,54 +558,44 @@ func TestDelegatedRepositoryApplyRestoresThePriorDigest(t *testing.T) {
 	if rec2.State != "done" || rec2.Blob == nil || body2.From != from || body2.Prior != digest1 {
 		t.Fatalf("second record = state %q blob %v, %+v; want done, in a blob, over %s", rec2.State, rec2.Blob, body2, digest1)
 	}
-	for _, want := range []string{"yardr pack apply " + from, "--sha256 sha256:" + digest1, "--depot web"} {
+	for _, want := range []string{"yardr pack apply " + from, "--sha256 sha256:" + digest1} {
 		if !strings.Contains(body2.Back, want) {
 			t.Errorf("the taking-back words lack %q: %s", want, body2.Back)
 		}
 	}
-	var fileObj, groupObj *store.DelegatedPackObject
+	var srcObj *store.DelegatedPackObject
 	for i := range body2.Objects {
-		switch body2.Objects[i].Kind + " " + body2.Objects[i].Name {
-		case "file roles/builder.md":
-			fileObj = &body2.Objects[i]
-		case "group web-builders":
-			groupObj = &body2.Objects[i]
+		if body2.Objects[i].Kind == "source" && body2.Objects[i].Name == "acme" {
+			srcObj = &body2.Objects[i]
 		}
 	}
-	if fileObj == nil || fileObj.Action != pack.Differs {
-		t.Fatalf("the role in the record = %+v, want differs", fileObj)
-	}
-	if groupObj == nil || !groupObj.Had || !strings.Contains(groupObj.Before, `"limit":5`) {
-		t.Fatalf("the group in the record = %+v, want limit 5 before-state", groupObj)
+	if srcObj == nil || !srcObj.Had || !strings.Contains(srcObj.Before, "first declaration.") {
+		t.Fatalf("the source in the record = %+v, want v1 before-state", srcObj)
 	}
 	if text := packTelling(t, st); !strings.Contains(text, "from "+from) || !strings.Contains(text, "sha256:"+digest1) {
 		t.Errorf("the telling = %q, want where it came from and the digest that stood", text)
 	}
-	if g, err := st.GetGroup(ctx, "web-builders"); err != nil || g.Limit != 2 {
-		t.Fatalf("builders after the second apply = %+v, %v; want limit 2", g, err)
+	if s, err := st.GetSource(ctx, "acme"); err != nil || s.Text != string(decl2) {
+		t.Fatalf("source after second apply = %+v, %v; want v2", s, err)
 	}
 
 	// The origin serves the second pack, so a pin on the first refuses
 	// before anything is written.
-	if _, err := repositoryRun(t, st, o, dctx, setPlan, origin, "starter", body2.Prior); err == nil || !strings.Contains(err.Error(), "is not the one pinned") {
+	if _, err := repositoryRun(t, st, o, dctx, setPlan, origin, "acme", body2.Prior); err == nil || !strings.Contains(err.Error(), "is not the one pinned") {
 		t.Fatalf("a pin on bytes the origin does not serve: err = %v", err)
 	}
-	if latestDelegated(t, st).ID != rec2.ID || string(read(installed)) != string(stood) {
-		t.Error("a refused pin wrote a record or touched the role")
+	if latestDelegated(t, st).ID != rec2.ID {
+		t.Error("a refused pin wrote a record")
 	}
 
 	// The origin serves the first pack again: applying pinned to the
-	// recorded prior digest restores the group limit.
-	write(manifest, manifest1)
-	write(role, role1)
-	if _, err := repositoryRun(t, st, o, dctx, setPlan, origin, "starter", body2.Prior); err != nil {
+	// recorded prior digest restores v1.
+	write(declPath, decl1)
+	if _, err := repositoryRun(t, st, o, dctx, setPlan, origin, "acme", body2.Prior); err != nil {
 		t.Fatal(err)
 	}
-	if got := read(installed); string(got) != string(stood) {
-		t.Errorf("restored role = %d bytes, want the %d that stood", len(got), len(stood))
-	}
-	if g, err := st.GetGroup(ctx, "web-builders"); err != nil || g.Limit != 5 {
-		t.Errorf("restored builders = %+v, %v; want limit 5 as it stood", g, err)
+	if s, err := st.GetSource(ctx, "acme"); err != nil || s.Text != string(decl1) {
+		t.Errorf("restored source = %+v, %v; want v1", s, err)
 	}
 	if body3 := delegatedBody(t, st, latestDelegated(t, st)); body3.Digest != digest1 || body3.Prior != digest2 {
 		t.Errorf("third record = %+v, want the first digest over the second", body3)

@@ -429,7 +429,7 @@
     {
       "kind": "crew",
       "name": "keeper",
-      "action": "change",
+      "action": "differs",
       "changes": [
         {
           "field": "prompt",
@@ -447,10 +447,7 @@
       "crew": {
         "pack": "keeper",
         "crew": "keeper",
-        "prompt": "<home>/packs/api1-line/roles/keeper.md",
-        "on": [
-          "attention"
-        ]
+        "on": []
       }
     },
     {

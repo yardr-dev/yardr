@@ -3,7 +3,6 @@ package pack
 import (
 	"errors"
 	"fmt"
-	"maps"
 	"path/filepath"
 	"slices"
 
@@ -110,11 +109,10 @@ func Ident(o Object) (po store.PackObject, ok bool) {
 	return po, false
 }
 
-// dropped adds what the last import of this pack into the depot brought and
-// the pack no longer carries, as far as the yard still has it: a group the
-// pack dropped, the routes and subscriptions of a stage it lost, a file
-// nothing names any more. Each takes the place of the object's "not in the
-// pack" entry, if it had one. A prune removes them, except those held.
+// dropped adds declared sources that the last import of this pack brought
+// and the pack no longer carries, as far as the yard still has them. A prune
+// removes them, except those held. A line's dropped groups, routes, crew
+// members, subscriptions and hook lines stay untouched and are not listed.
 func (b *planner) dropped() error {
 	if b.rec == nil {
 		return nil
@@ -123,11 +121,6 @@ func (b *planner) dropped() error {
 	for _, o := range b.plan.Objects {
 		if po, ok := Ident(o); ok {
 			carried[po.Key()] = true
-		}
-	}
-	for pk, name := range b.rec.Crew {
-		if now, ok := b.plan.Crew[pk]; !ok || now != name {
-			b.plan.Notes = append(b.plan.Notes, fmt.Sprintf("crew member %s took the pack's %s at the last import and no longer does: it is the yard's, so its role and the event kinds it hears stay as that import left them", name, pk))
 		}
 	}
 	for _, po := range b.rec.Objects {
@@ -147,94 +140,11 @@ func (b *planner) dropped() error {
 	return nil
 }
 
-// gone is the object an earlier import recorded as po, as the yard has it
-// now and with what removing it takes; nil when the yard no longer has it.
+// gone is the declared source an earlier import recorded as po, as the yard
+// has it now and with what removing it takes; nil for every other kind or
+// when the yard no longer has it.
 func (b *planner) gone(po store.PackObject) (*Object, error) {
 	switch po.Kind {
-	case "group":
-		if _, err := b.st.GetGroup(b.ctx, po.Name); errors.Is(err, store.ErrNotFound) {
-			return nil, nil
-		} else if err != nil {
-			return nil, err
-		}
-		o := &Object{Kind: po.Kind, Name: po.Name}
-		// A people group is the yard's, shared by its depots: it stays while
-		// another import or another depot's route still uses it.
-		for _, r := range b.all {
-			if (r.Pack != b.p.Name || r.Depot != b.o.Depot) && slices.ContainsFunc(r.Objects, func(x store.PackObject) bool { return x.Kind == "group" && x.Name == po.Name }) {
-				o.Held = fmt.Sprintf("pack %s in %s names it too", r.Pack, inDepot(r.Depot))
-			}
-		}
-		routes, err := b.st.Routes(b.ctx)
-		if err != nil {
-			return nil, err
-		}
-		for _, r := range routes {
-			if o.Held == "" && r.Names(po.Name) && (r.Depot == nil || *r.Depot != b.o.Depot) {
-				o.Held = "a route outside depot " + b.o.Depot + " leads to it"
-			}
-		}
-		return o, nil
-	case "route":
-		routes, err := b.st.Routes(b.ctx)
-		if err != nil {
-			return nil, err
-		}
-		op := &RouteOp{Stage: po.Stage, Depot: b.o.Depot, Type: po.Type, Group: po.Group}
-		for _, r := range routes {
-			if r.Stage == po.Stage && r.Depot != nil && *r.Depot == b.o.Depot && !r.ByBead() && deref(r.Type) == po.Type && !r.Quotaed() && r.Worker() == po.Group {
-				op.Delete = append(op.Delete, r.ID)
-			}
-		}
-		if len(op.Delete) == 0 {
-			return nil, nil
-		}
-		name := "depot " + b.o.Depot + " stage " + po.Stage
-		if po.Type != "" {
-			name += " type " + po.Type
-		}
-		return &Object{Kind: po.Kind, Name: name + " -> " + po.Group, Route: op}, nil
-	case "subscription":
-		if po.Subscription == nil {
-			return nil, nil
-		}
-		r, err := b.st.GetCrew(b.ctx, po.CrewMember)
-		if errors.Is(err, store.ErrNotFound) {
-			return nil, nil
-		} else if err != nil {
-			return nil, err
-		}
-		sub := *po.Subscription
-		if !slices.ContainsFunc(r.Subscriptions, func(s store.Subscription) bool { return s.String() == sub.String() }) {
-			return nil, nil
-		}
-		return &Object{Kind: po.Kind, Name: po.CrewMember + " " + sub.String(), Subscription: &SubscriptionOp{CrewMember: po.CrewMember, Remove: &sub}}, nil
-	case "map":
-		h, err := b.st.GetHook(b.ctx, po.Name)
-		if errors.Is(err, store.ErrNotFound) {
-			return nil, nil
-		} else if err != nil {
-			return nil, err
-		}
-		// A source the pack still carries is not dropped, though nothing can
-		// be set for it now; and a map set by hand since is the yard's. The
-		// tables hold other lines too, so only the pack's own are the
-		// import's to remove: those the hook still has, and no other pack's
-		// last import lists (a line taken off by hand since is gone). The
-		// crew member and the map are the hook's whole, so another pack
-		// acting as one on it keeps them.
-		other := b.others(h.Name)
-		says, makes := leftOf(h.Says, po.Says, nil, other.says), leftOf(h.Makes, po.Makes, nil, other.makes)
-		as, mp := po.CrewMember, po.Map
-		if other.as {
-			as, mp = "", nil
-		}
-		byHand := as != "" && (h.As != as || !maps.Equal(h.Map, mp))
-		if slices.ContainsFunc(b.p.Sources, func(m StageMap) bool { return m.Source == h.Source }) || byHand ||
-			(as == "" && len(says)+len(makes) == 0) {
-			return nil, nil
-		}
-		return &Object{Kind: po.Kind, Name: mapName(h.Name, po.CrewMember), Map: &MapOp{Hook: h.Name, Source: h.Source, As: as, Map: mp, Says: says, Makes: makes}}, nil
 	case "source":
 		src, err := b.st.GetSource(b.ctx, po.Name)
 		if errors.Is(err, store.ErrNotFound) {

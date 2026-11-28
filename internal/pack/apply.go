@@ -711,15 +711,15 @@ func write(ctx context.Context, st store.API, p *Plan, obj *Object, o ApplyOptio
 		// another pack and the operator's stay.
 		if obj.Map.As != "" {
 			h.As = obj.Map.As
-			if obj.Map.Map != nil {
-				h.Map = obj.Map.Map
-			}
 		}
-		if len(obj.Map.Says) > 0 || len(obj.Map.DropSays) > 0 {
-			h.Says = merged(h.Says, obj.Map.DropSays, obj.Map.Says)
+		if len(obj.Map.Map) > 0 {
+			h.Map = obj.Map.Map
 		}
-		if len(obj.Map.Makes) > 0 || len(obj.Map.DropMakes) > 0 {
-			h.Makes = merged(h.Makes, obj.Map.DropMakes, obj.Map.Makes)
+		if len(obj.Map.Says) > 0 {
+			h.Says = merged(h.Says, nil, obj.Map.Says)
+		}
+		if len(obj.Map.Makes) > 0 {
+			h.Makes = merged(h.Makes, nil, obj.Map.Makes)
 		}
 		_, err = st.PutHook(ctx, *h, o.Actor)
 		return err
@@ -819,9 +819,9 @@ func installFile(op *FileOp, text []byte, once bool) error {
 	return os.Rename(tmp.Name(), op.To)
 }
 
-// pruneOrder is the order dropped objects are removed in: a route before
-// the group it leads to.
-var pruneOrder = []string{"route", "group", "subscription", "map", "source"}
+// pruneOrder is the order dropped objects are removed in. Only a connector's
+// declared sources are ever dropped or pruned.
+var pruneOrder = []string{"source"}
 
 // prune removes the plan's dropped objects, or with no prune asked for
 // only lists them as left. It returns the keys of those removed.
@@ -855,31 +855,6 @@ func prune(ctx context.Context, st store.API, p *Plan, o ApplyOptions, res *Resu
 // remove removes one dropped object; note is what else went with it.
 func remove(ctx context.Context, st store.API, p *Plan, obj Object, actor string) (note string, err error) {
 	switch obj.Kind {
-	case "route":
-		for _, id := range obj.Route.Delete {
-			if err := st.DeleteRoute(ctx, id, actor); err != nil {
-				return "", err
-			}
-		}
-	case "group":
-		var released int
-		if released, err = st.DeleteGroup(ctx, obj.Name, actor); released > 0 {
-			note = fmt.Sprintf(" (%d of its beads released)", released)
-		}
-	case "subscription":
-		err = st.RemoveSubscriptionKind(ctx, obj.Subscription.CrewMember, "crew", *obj.Subscription.Remove, actor)
-	case "map":
-		var h *store.Hook
-		if h, err = st.GetHook(ctx, obj.Map.Hook); err == nil {
-			if obj.Map.As != "" {
-				h.As, h.Map = "", nil
-			}
-			// The pack's own lines alone: the plan left out those another
-			// pack's import lists too, and the hook's other lines stay.
-			h.Says = merged(h.Says, obj.Map.Says, nil)
-			h.Makes = merged(h.Makes, obj.Map.Makes, nil)
-			_, err = st.PutHook(ctx, *h, actor)
-		}
 	case "source":
 		err = st.DeleteSource(ctx, obj.Name, actor)
 		// The commands' files with it, as yardr source rm removes them.

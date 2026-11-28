@@ -511,7 +511,7 @@ func TestStageMapWaitsForTheYardsHook(t *testing.T) {
 	hook(t, st, store.Hook{Name: "lin", Source: "linear"})
 	plan = build(t, st, p, o)
 	m = mapPlan(t, plan, "linear")
-	if m.Hook != "lin" || m.Action != pack.Create || m.Was != nil || !slices.Equal(mapObjects(plan), []string{"create hook lin as boss"}) {
+	if m.Hook != "lin" || m.Action != pack.Create || !slices.Equal(mapObjects(plan), []string{"create hook lin as boss"}) {
 		t.Fatalf("with a hook: %+v, objects %v", m, mapObjects(plan))
 	}
 	if got := actions(plan, pack.Create); !slices.Equal(got, []string{"map hook lin as boss"}) {
@@ -550,8 +550,9 @@ func TestStageMapWaitsForTheYardsHook(t *testing.T) {
 	}
 }
 
-// A hook that has another map gets the pack's, and the plan shows both.
-func TestStageMapReplacesTheHooksAndThePlanShowsBoth(t *testing.T) {
+// A hook that has its own as or map keeps it, reported as differs, and apply
+// writes nothing.
+func TestStageMapDiffersWhenTheHookHasItsOwnAsOrMap(t *testing.T) {
 	st, o := yard(t)
 	o.Crew = map[string]string{"yardmaster": "boss"}
 	member(t, st, "boss", true, map[string]any{store.SetState: "linear"})
@@ -561,32 +562,33 @@ func TestStageMapReplacesTheHooksAndThePlanShowsBoth(t *testing.T) {
 
 	plan := build(t, st, load(t, starter), o)
 	m := mapPlan(t, plan, "linear")
-	if m.Action != pack.Change || m.Was == nil || m.Was.As != "clerk" || !maps.Equal(m.Was.Map, old) || !maps.Equal(m.Map, starterMap) {
-		t.Fatalf("map plan = %+v (was %+v)", m, m.Was)
+	if m.Action != pack.Differs || !maps.Equal(m.Map, starterMap) {
+		t.Fatalf("map plan = %+v, want differs", m)
 	}
 	if n := need(t, m, store.SetState); n.Status != "ok" {
 		t.Fatalf("set_state: %+v", n)
 	}
-	obj := find(t, plan, "map", "hook linear as boss")
+	obj := find(t, plan, "map", "hook linear")
 	want := []pack.Diff{
 		{Field: "as", Old: "clerk", New: "boss"},
 		{Field: "map", Old: "task:review=done train:open=started", New: "task:merged=done task:new=started task:review-security=review task:review=review"},
 	}
-	if obj.Action != pack.Change || !slices.Equal(obj.Changes, want) {
+	if obj.Action != pack.Differs || !slices.Equal(obj.Changes, want) || obj.Map.As != "" || obj.Map.Map != nil {
 		t.Fatalf("object = %+v", obj)
 	}
 	res := apply(t, st, plan, nil)
-	if h := getHook(t, st, "linear"); h.As != "boss" || !maps.Equal(h.Map, starterMap) {
-		t.Fatalf("hook = %+v", h)
+	if h := getHook(t, st, "linear"); h.As != "clerk" || !maps.Equal(h.Map, old) {
+		t.Fatalf("hook = %+v, want clerk and old map kept", h)
 	}
-	if len(res.Mapped) != 1 {
-		t.Fatalf("result = %+v", res)
+	if len(res.Mapped) != 0 {
+		t.Fatalf("result = %+v, want nothing mapped", res)
 	}
-	// Who takes the pack's crew member is the import's to say: another one
-	// changes whom the hook acts as, and the map stays.
+	// A hook with the pack's map under another crew member differs in as alone
+	// and keeps its as.
+	hook(t, st, store.Hook{Name: "linear", Source: "linear", As: "boss", Map: starterMap})
 	o.Crew = map[string]string{"yardmaster": "clerk"}
 	plan = build(t, st, load(t, starter), o)
-	if obj := find(t, plan, "map", "hook linear as clerk"); obj.Action != pack.Change || !slices.Equal(obj.Changes, []pack.Diff{{Field: "as", Old: "boss", New: "clerk"}}) {
+	if obj := find(t, plan, "map", "hook linear"); obj.Action != pack.Differs || !slices.Equal(obj.Changes, []pack.Diff{{Field: "as", Old: "boss", New: "clerk"}}) {
 		t.Fatalf("under --crew yardmaster=clerk: %+v", obj)
 	}
 }
@@ -673,10 +675,9 @@ func TestStageMapRefusedLeavesTheRestOfTheImport(t *testing.T) {
 	}
 }
 
-// A pack that drops its block leaves the map on the hook unless told to
-// prune, as with its other objects; a prune clears the map and the crew member
-// and keeps the hook. A map changed by hand since the import is the yard's.
-func TestDroppedStageMapIsPrunedOnlyWhenAsked(t *testing.T) {
+// A line that drops its source block leaves the hook's map and as untouched
+// and lists nothing as dropped.
+func TestDroppedStageMapStaysOnTheHook(t *testing.T) {
 	st, o := yard(t)
 	o.Crew = map[string]string{"yardmaster": "boss"}
 	member(t, st, "boss", true, nil)
@@ -690,40 +691,12 @@ func TestDroppedStageMapIsPrunedOnlyWhenAsked(t *testing.T) {
 		githubSays, "")
 
 	plan := build(t, st, load(t, dir), o)
-	if got := actions(plan, pack.Dropped); !slices.Equal(got, []string{"map hook linear as boss"}) || len(plan.Maps) != 0 {
-		t.Fatalf("dropped = %v, maps %+v", got, plan.Maps)
+	if got := actions(plan, pack.Dropped); len(got) != 0 || len(plan.Maps) != 0 {
+		t.Fatalf("dropped = %v, maps %+v; want none", got, plan.Maps)
 	}
 	res := apply(t, st, plan, nil)
-	if h := getHook(t, st, "linear"); h.As != "boss" || !maps.Equal(h.Map, starterMap) || !slices.Equal(res.Left, []string{"map hook linear as boss"}) {
-		t.Fatalf("without --prune: hook %+v, left %v", h, res.Left)
-	}
-
-	plan = build(t, st, load(t, dir), o)
-	a := pack.Answers{}
-	res, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Answers: a, Prune: true, Actor: "me"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	h := getHook(t, st, "linear")
-	if h.As != "" || len(h.Map) != 0 || h.Source != "linear" || h.SecretFile != "/yard/linear.secret" || !slices.Equal(res.Pruned, []string{"map hook linear as boss"}) {
-		t.Fatalf("with --prune: hook %+v, pruned %v", h, res.Pruned)
-	}
-	if got := actions(build(t, st, load(t, dir), o), pack.Dropped); len(got) != 0 {
-		t.Fatalf("after the prune, dropped = %v", got)
-	}
-
-	// Set by hand since the import: not the pack's to remove.
-	st2, o2 := yard(t)
-	o2.Crew = map[string]string{"yardmaster": "boss"}
-	member(t, st2, "boss", true, nil)
-	hook(t, st2, store.Hook{Name: "linear", Source: "linear"})
-	dir = copyStarter(t)
-	apply(t, st2, build(t, st2, load(t, dir), o2), nil)
-	hook(t, st2, store.Hook{Name: "linear", Source: "linear", As: "boss", Map: map[string]string{"task:new": "done"}})
-	edit(t, dir, "sources:\n  linear:\n    as: yardmaster\n    hears:\n      task: { new: started, review: review, review-security: review, merged: done }\n", "",
-		githubSays, "")
-	if got := actions(build(t, st2, load(t, dir), o2), pack.Dropped); len(got) != 0 {
-		t.Fatalf("a map set by hand is dropped: %v", got)
+	if h := getHook(t, st, "linear"); h.As != "boss" || !maps.Equal(h.Map, starterMap) || len(res.Left) != 0 || len(res.Pruned) != 0 {
+		t.Fatalf("hook %+v, left %v, pruned %v", h, res.Left, res.Pruned)
 	}
 }
 
@@ -832,11 +805,9 @@ func TestStarterCarriesWhatGitHubSays(t *testing.T) {
 	}
 }
 
-// The import sets a source's table on the yard's hook of it and the crew
-// member its reads act as, and needs the hook and that member's identity.
-// A table set otherwise is replaced, and the plan shows both; a pack that
-// drops the block has it cleared only by a prune, and only while it is as
-// the import left it, the crew member with it, the hook kept.
+// The import fills missing fields on the yard's hook and adds the source's
+// missing table lines. It needs the hook and the crew member's identity; a
+// pack that drops the block leaves the hook as it is.
 func TestPackSetsWhatTheSourceSaysOnTheYardsHook(t *testing.T) {
 	st, o := yard(t)
 	withGitHub(t, st)
@@ -872,31 +843,29 @@ func TestPackSetsWhatTheSourceSaysOnTheYardsHook(t *testing.T) {
 		t.Fatalf("the next plan: %+v", got)
 	}
 
-	// A table set by hand is replaced by the pack's, and the plan shows both.
+	// A hook missing lines of the pack gets those added without repeating what
+	// it has.
 	byHand := want[:1]
 	hook(t, st, store.Hook{Name: "gh", Source: "github", As: "boss", Says: byHand})
 	plan = build(t, st, load(t, dir), o)
 	mp = plan.Maps[i]
-	if mp.Action != pack.Change || mp.Was == nil || !store.SameSays(mp.Was.Says, byHand) {
-		t.Fatalf("plan over another table = %+v", mp)
+	if mp.Action != pack.Create {
+		t.Fatalf("plan over partial table = %+v, want create", mp)
 	}
 	apply(t, st, plan, nil)
 	if h := getHook(t, st, "gh"); !store.SameSays(h.Says, want) || h.As != "boss" {
 		t.Fatalf("hook = %+v", h)
 	}
 
-	// Dropped: left without a prune; with one the table and the crew member
-	// go and the hook stays.
+	// Dropped block: nothing is listed as dropped and the hook stays as it is.
 	edit(t, dir, githubSays, "")
 	plan = build(t, st, load(t, dir), o)
-	if got := actions(plan, pack.Dropped); !slices.Equal(got, []string{"map hook gh as boss"}) {
-		t.Fatalf("dropped = %v", got)
+	if got := actions(plan, pack.Dropped); len(got) != 0 {
+		t.Fatalf("dropped = %v, want none", got)
 	}
-	if _, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Answers: pack.Answers{}, Prune: true, Actor: "me"}); err != nil {
-		t.Fatal(err)
-	}
-	if h := getHook(t, st, "gh"); h.Says != nil || h.As != "" || h.Source != "github" {
-		t.Fatalf("with --prune: hook %+v", h)
+	apply(t, st, plan, nil)
+	if h := getHook(t, st, "gh"); !store.SameSays(h.Says, want) || h.As != "boss" {
+		t.Fatalf("after dropping block: hook %+v", h)
 	}
 }
 
@@ -985,7 +954,7 @@ func TestPackSetsWhatTheSourceMakesOnTheYardsHook(t *testing.T) {
 		t.Fatalf("maps = %+v", plan.Maps)
 	}
 	mp := plan.Maps[i]
-	if mp.Action != pack.Change || mp.Hook != "gh" || !store.SameMakes(mp.Makes, want) || mp.Was == nil || !store.SameMakes(mp.Was.Makes, byHand) {
+	if mp.Action != pack.Create || mp.Hook != "gh" || !store.SameMakes(mp.Makes, want) {
 		t.Fatalf("plan = %+v", mp)
 	}
 	obj := find(t, plan, "map", "hook gh")
@@ -1006,17 +975,15 @@ func TestPackSetsWhatTheSourceMakesOnTheYardsHook(t *testing.T) {
 		t.Fatalf("the next plan: %+v", got)
 	}
 
-	// Dropped: cleared with a prune, the rest of the hook kept.
+	// Dropped block: nothing is listed as dropped and the hook stays as it is.
 	edit(t, dir, block, "")
 	plan = build(t, st, load(t, dir), o)
-	if got := actions(plan, pack.Dropped); !slices.Contains(got, "map hook gh") {
-		t.Fatalf("dropped = %v", got)
+	if got := actions(plan, pack.Dropped); len(got) != 0 {
+		t.Fatalf("dropped = %v, want none", got)
 	}
-	if _, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Answers: pack.Answers{}, Prune: true, Actor: "me"}); err != nil {
-		t.Fatal(err)
-	}
-	if h := getHook(t, st, "gh"); h.Makes != nil || h.Says != nil || h.Source != "github" {
-		t.Fatalf("with --prune: hook %+v", h)
+	apply(t, st, plan, nil)
+	if h := getHook(t, st, "gh"); !store.SameMakes(h.Makes, want) || len(h.Says) != 1 {
+		t.Fatalf("after dropping block: hook %+v", h)
 	}
 }
 
@@ -1060,11 +1027,9 @@ func githubOf(t *testing.T, dir string) pack.StageMap {
 	return pack.StageMap{}
 }
 
-// An import sets the pack's lines among the hook's and takes off none but
-// those the pack set at its last import and no longer gives: the operator's
-// lines stay where they stand, the plan never offers them as drops, and
-// nothing is asked for them. A line the pack gains goes where the pack wrote
-// it (first match counts), the last after the rest.
+// An import adds the pack's missing lines among the hook's and takes no line
+// off: the operator's lines stay, lines from an earlier import that the line
+// no longer carries stay, and a gained line goes where the pack wrote it.
 func TestPackImportKeepsTheHooksOtherLines(t *testing.T) {
 	st, o := githubYard(t)
 	dir := copyStarter(t)
@@ -1077,8 +1042,8 @@ func TestPackImportKeepsTheHooksOtherLines(t *testing.T) {
 	have := slices.Concat([]store.Say{first}, was[:3], []store.Say{among}, was[3:])
 	hook(t, st, store.Hook{Name: "gh", Source: "github", As: "boss", Says: have})
 
-	// The pack lets go of its second line for another in its place, and gains
-	// one after its last.
+	// The pack drops its second line, adds a new line in its place, and gains
+	// one after its last: the dropped line stays, and both new lines are added.
 	edit(t, dir, `      - { where: "event=pull_request action=closed merged=false type=train", outcome: question, note: "PR closed unmerged: reopen, or drop the train?" }
 `, `      - { where: "event=pull_request action=labeled label=drop type=train", outcome: question }
 `, `      - { where: "event=ci conclusion=failure stage=in-pr type=train", outcome: changes }
@@ -1087,39 +1052,28 @@ func TestPackImportKeepsTheHooksOtherLines(t *testing.T) {
 `)
 	replaced := say(t, "event=pull_request action=labeled label=drop type=train -> question")
 	last := say(t, "event=pull_request action=labeled label=last type=train -> question")
-	next := slices.Concat([]store.Say{first}, was[:1], []store.Say{replaced}, was[2:3], []store.Say{among}, was[3:], []store.Say{last})
+	next := slices.Concat([]store.Say{first}, was[:2], []store.Say{replaced}, was[2:3], []store.Say{among}, was[3:], []store.Say{last})
 
 	plan := build(t, st, load(t, dir), o)
 	mp := mapPlan(t, plan, "github")
-	if mp.Action != pack.Change || !slices.Equal(mp.Drops, []pack.HookDrop{{Table: "says", Line: was[1].String()}}) {
-		t.Fatalf("plan = %+v, want the pack's second line the one drop", mp)
+	if mp.Action != pack.Create {
+		t.Fatalf("plan = %+v, want create", mp)
 	}
 	want := []pack.Diff{{Field: "says", Old: strings.Join(store.SayLines(have), "; "), New: strings.Join(store.SayLines(next), "; ")}}
 	if got := find(t, plan, "map", "hook gh as boss").Changes; !slices.Equal(got, want) {
 		t.Fatalf("changes = %+v, want %+v", got, want)
 	}
-	// Nothing is refused for the operator's lines, and none is told as one to
-	// drop.
 	if _, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Answers: answered(t, plan, nil), Actor: "me"}); err != nil {
 		t.Fatalf("applying: %v", err)
 	}
 	if h := getHook(t, st, "gh"); !store.SameSays(h.Says, next) {
 		t.Fatalf("hook = %v\nwant %v", store.SayLines(h.Says), store.SayLines(next))
 	}
-	// The record keeps the pack's lines alone, and a second import is once.
-	if rec := record(t, st); !slices.ContainsFunc(rec.Objects, func(po store.PackObject) bool {
-		return po.Kind == "map" && po.Name == "gh" && store.SameSays(po.Says, githubOf(t, dir).Says)
-	}) {
-		t.Fatalf("record = %+v", rec.Objects)
-	}
-	if got := mapPlan(t, build(t, st, load(t, dir), o), "github"); got.Action != pack.Unchanged || len(got.Drops) != 0 {
+	if got := mapPlan(t, build(t, st, load(t, dir), o), "github"); got.Action != pack.Unchanged {
 		t.Fatalf("the next plan: %+v", got)
 	}
 
-	// The source block can stay after the pack lets go of its last table.
-	// Its own lines still have to come off before the new empty table is
-	// recorded, while the operator's lines stay.
-	owned := slices.Clone(githubOf(t, dir).Says)
+	// Dropping the says table altogether leaves every existing line standing.
 	path := filepath.Join(dir, "pack.yaml")
 	text, err := os.ReadFile(path)
 	if err != nil {
@@ -1135,25 +1089,21 @@ func TestPackImportKeepsTheHooksOtherLines(t *testing.T) {
 		t.Fatal(err)
 	}
 	plan = build(t, st, load(t, dir), o)
-	mp = mapPlan(t, plan, "github")
-	if mp.Action != pack.Change || len(mp.Drops) != len(owned) || slices.ContainsFunc(mp.Drops, func(d pack.HookDrop) bool {
-		return d.Table != "says" || !slices.Contains(store.SayLines(owned), d.Line)
-	}) {
-		t.Fatalf("plan for the empty table = %+v, want the pack's %d old lines dropped", mp, len(owned))
+	if mp = mapPlan(t, plan, "github"); mp.Action != pack.Create {
+		t.Fatalf("plan with new hears on empty map = %+v, want create", mp)
 	}
 	if _, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Answers: answered(t, plan, nil), Actor: "me"}); err != nil {
-		t.Fatalf("applying the empty table: %v", err)
+		t.Fatalf("applying: %v", err)
 	}
-	if h := getHook(t, st, "gh"); !store.SameSays(h.Says, []store.Say{first, among}) {
-		t.Fatalf("hook after the pack drops its last lines = %v, want the operator's lines", store.SayLines(h.Says))
+	if h := getHook(t, st, "gh"); !store.SameSays(h.Says, next) {
+		t.Fatalf("hook after pack drops its says = %v, want all lines kept", store.SayLines(h.Says))
 	}
 }
 
-// Two packs set their lines on the one hook of a source, in either order and
+// Two packs add their lines to the one hook of a source, in either order and
 // into either depot: each import keeps every line of the other where it
-// stands and adds its own after the rest, a plan of the second shows lines
-// to add and none to drop, and a pack that lets go of a line takes off that
-// one alone, the other pack's lines with it staying.
+// stands and adds its own, and dropping a line or table from either pack
+// takes nothing off the hook.
 func TestTwoPacksShareOneHooksTables(t *testing.T) {
 	for _, c := range []struct {
 		name          string
@@ -1175,8 +1125,8 @@ func TestTwoPacksShareOneHooksTables(t *testing.T) {
 			apply(t, st, build(t, st, load(t, first), o), nil)
 			plan := build(t, st, load(t, second), o)
 			mp := mapPlan(t, plan, "github")
-			if mp.Action != pack.Change || len(mp.Drops) != 0 {
-				t.Fatalf("the second pack's plan: %+v, want lines to add and none to drop", mp)
+			if mp.Action != pack.Create {
+				t.Fatalf("the second pack's plan: %+v, want create", mp)
 			}
 			apply(t, st, plan, nil)
 			if h := getHook(t, st, "gh"); !store.SameSays(h.Says, all) || !store.SameMakes(h.Makes, makes) {
@@ -1186,7 +1136,7 @@ func TestTwoPacksShareOneHooksTables(t *testing.T) {
 			for _, dir := range []string{first, second} {
 				for _, o := range []pack.Options{o, o2} {
 					plan := build(t, st, load(t, dir), o)
-					if mp := mapPlan(t, plan, "github"); mp.Action != pack.Unchanged || len(mp.Drops) != 0 {
+					if mp := mapPlan(t, plan, "github"); mp.Action != pack.Unchanged {
 						t.Fatalf("%s again into %s: %+v", dir, o.Depot, mp)
 					}
 					if o.Depot == "web2" {
@@ -1198,114 +1148,19 @@ func TestTwoPacksShareOneHooksTables(t *testing.T) {
 				t.Fatalf("hook after both into the second depot = %v", store.SayLines(h.Says))
 			}
 
-			// Each pack lets go of a line: that one goes, the rest stays.
-			cdir, sdir := dirs[contributors], dirs[starter]
+			// Dropping a line or table from a pack takes nothing off the hook.
+			cdir := dirs[contributors]
 			edit(t, cdir, `      - { where: "event=issues action=closed stage=triage stage=backlog stage=new stage=review stage=review-security stage=decide type=issue", outcome: dropped }
 `, "")
-			gone := say(t, "event=issues action=closed stage=triage stage=backlog stage=new stage=review stage=review-security stage=decide type=issue -> dropped")
 			plan = build(t, st, load(t, cdir), o)
-			if mp := mapPlan(t, plan, "github"); !slices.Equal(mp.Drops, []pack.HookDrop{{Table: "says", Line: gone.String()}}) {
-				t.Fatalf("contributors' drops = %+v, want %s alone", mp.Drops, gone)
+			if mp := mapPlan(t, plan, "github"); mp.Action != pack.Unchanged {
+				t.Fatalf("contributors after dropping a line = %+v, want unchanged", mp)
 			}
 			apply(t, st, plan, nil)
-			all = slices.DeleteFunc(all, func(s store.Say) bool { return s.String() == gone.String() })
-			if h := getHook(t, st, "gh"); !store.SameSays(h.Says, all) {
-				t.Fatalf("hook = %v", store.SayLines(h.Says))
-			}
-			edit(t, sdir, `      - { where: "event=ci conclusion=failure stage=in-pr type=train", outcome: changes }
-`, "")
-			gone = say(t, "event=ci conclusion=failure stage=in-pr type=train -> changes")
-			plan = build(t, st, load(t, sdir), o)
-			if mp := mapPlan(t, plan, "github"); !slices.Equal(mp.Drops, []pack.HookDrop{{Table: "says", Line: gone.String()}}) {
-				t.Fatalf("the starter's drops = %+v, want %s alone", mp.Drops, gone)
-			}
-			apply(t, st, plan, nil)
-			all = slices.DeleteFunc(all, func(s store.Say) bool { return s.String() == gone.String() })
 			if h := getHook(t, st, "gh"); !store.SameSays(h.Says, all) || !store.SameMakes(h.Makes, makes) {
-				t.Fatalf("hook = %v", store.SayLines(h.Says))
-			}
-
-			// The contributors still carries the source, but no makes table:
-			// its last import's makes are taken off while both packs' says stay.
-			oldMakes := slices.Clone(githubOf(t, cdir).Makes)
-			path := filepath.Join(cdir, "pack.yaml")
-			text, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			contents := string(text)
-			start := strings.Index(contents, "    makes:\n")
-			if start < 0 {
-				t.Fatal("the copied contributors pack has no makes table")
-			}
-			relEnd := strings.Index(contents[start:], "\n    # SAYS")
-			if relEnd < 0 {
-				t.Fatal("the copied contributors pack has no makes table")
-			}
-			end := start + relEnd
-			if err := os.WriteFile(path, []byte(contents[:start]+contents[end:]), 0o644); err != nil {
-				t.Fatal(err)
-			}
-			plan = build(t, st, load(t, cdir), o)
-			if mp := mapPlan(t, plan, "github"); mp.Action != pack.Change || len(mp.Drops) != len(oldMakes) || slices.ContainsFunc(mp.Drops, func(d pack.HookDrop) bool {
-				return d.Table != "makes" || !slices.Contains(store.MakeLines(oldMakes), d.Line)
-			}) {
-				t.Fatalf("contributors' plan for the empty makes table = %+v, want its %d old lines dropped", mp, len(oldMakes))
-			}
-			apply(t, st, plan, nil)
-			if h := getHook(t, st, "gh"); len(h.Makes) != 0 || !store.SameSays(h.Says, all) {
-				t.Fatalf("hook after contributors drops makes = %v / %v", store.SayLines(h.Says), store.MakeLines(h.Makes))
+				t.Fatalf("hook = %v / %v", store.SayLines(h.Says), store.MakeLines(h.Makes))
 			}
 		})
-	}
-}
-
-// A pack that drops its block from the sources has its own lines, those it
-// set and the hook still has, removed by a prune, and only those: another
-// pack's lines stay, and so do the crew member and the map, which the other
-// pack acts as too.
-func TestPrunedBlockTakesOnlyItsOwnLines(t *testing.T) {
-	st, o := githubYard(t)
-	cdir := copyPack(t, contributors)
-	apply(t, st, build(t, st, load(t, cdir), o), nil)
-	apply(t, st, build(t, st, load(t, starter), o), nil)
-	mine := githubOf(t, cdir)
-	h := getHook(t, st, "gh")
-	if want := slices.Concat(mine.Says, starterSays(t)); !store.SameSays(h.Says, want) || h.As != "boss" || !maps.Equal(h.Map, mine.Map) {
-		t.Fatalf("hook = %+v", h)
-	}
-
-	// The pack's source block is the last thing in its pack.yaml.
-	text, err := os.ReadFile(filepath.Join(cdir, "pack.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(cdir, "pack.yaml"), text[:strings.Index(string(text), "\nsources:\n")+1], 0o644); err != nil {
-		t.Fatal(err)
-	}
-	plan := build(t, st, load(t, cdir), o)
-	// The starter's plain routes stand for the typed ones of the pack's, which
-	// are dropped too: the block is the one under test.
-	if got := actions(plan, pack.Dropped); !slices.Contains(got, "map hook gh as boss") {
-		t.Fatalf("dropped = %v", got)
-	}
-	if _, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Answers: answered(t, plan, nil), Actor: "me"}); err != nil {
-		t.Fatal(err)
-	}
-	if got := getHook(t, st, "gh"); !store.SameSays(got.Says, h.Says) || !store.SameMakes(got.Makes, h.Makes) {
-		t.Fatalf("without --prune: hook = %+v", got)
-	}
-
-	plan = build(t, st, load(t, cdir), o)
-	if _, err := pack.Apply(ctx, st, plan, pack.ApplyOptions{Answers: answered(t, plan, nil), Prune: true, Actor: "me"}); err != nil {
-		t.Fatal(err)
-	}
-	got := getHook(t, st, "gh")
-	if !store.SameSays(got.Says, starterSays(t)) || got.Makes != nil || got.As != "boss" || !maps.Equal(got.Map, mine.Map) {
-		t.Fatalf("with --prune: hook = %+v, want the starter's lines alone, and the crew member and the map kept", got)
-	}
-	if mp := mapPlan(t, build(t, st, load(t, starter), o), "github"); mp.Action != pack.Unchanged {
-		t.Fatalf("the starter's plan after: %+v", mp)
 	}
 }
 
@@ -1434,25 +1289,16 @@ func TestALineTwoPacksGiveStaysWhileOneDoes(t *testing.T) {
 		t.Fatalf("the line both packs give is on the hook %d times, want once", n)
 	}
 
-	// The contributors let go of it: the starter still gives it.
-	edit(t, cdir, line, "")
-	plan := build(t, st, load(t, cdir), o)
-	if mp := mapPlan(t, plan, "github"); len(mp.Drops) != 0 {
-		t.Fatalf("contributors' drops = %+v, want none: the starter gives the line", mp.Drops)
-	}
-	apply(t, st, plan, nil)
-	if n := count(); n != 1 {
-		t.Fatalf("the line is on the hook %d times after the contributors let go of it, want once", n)
-	}
-
-	// The starter lets go of it too: nobody gives it, and it is taken off.
-	edit(t, sdir, line, "")
-	plan = build(t, st, load(t, sdir), o)
-	if mp := mapPlan(t, plan, "github"); !slices.Equal(mp.Drops, []pack.HookDrop{{Table: "says", Line: both.String()}}) {
-		t.Fatalf("the starter's drops = %+v, want the line", mp.Drops)
-	}
-	apply(t, st, plan, nil)
-	if n := count(); n != 0 {
-		t.Fatalf("the line is on the hook %d times after both let go of it, want none", n)
+	// Dropping the line from either or both packs leaves it standing on the hook.
+	for _, dir := range []string{cdir, sdir} {
+		edit(t, dir, line, "")
+		plan := build(t, st, load(t, dir), o)
+		if mp := mapPlan(t, plan, "github"); mp.Action != pack.Unchanged {
+			t.Fatalf("%s after dropping line = %+v, want unchanged", dir, mp)
+		}
+		apply(t, st, plan, nil)
+		if n := count(); n != 1 {
+			t.Fatalf("the line is on the hook %d times, want once", n)
+		}
 	}
 }

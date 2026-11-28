@@ -63,7 +63,7 @@ func openApp(t *testing.T, sources ...string) *app {
 	if err := os.WriteFile(env, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	def := store.CrewMember{Name: "boss", Runner: "herdr", Dir: t.TempDir(), Config: map[string]any{"kind": "claude", "env_file": env}}
+	def := store.CrewMember{Name: "boss", Runner: "herdr", Dir: t.TempDir(), Config: map[string]any{"kind": "claude", "env_file": env}, On: []string{store.KindAttention}}
 	if _, err := a.st.PutCrew(ctx, def, "me"); err != nil {
 		t.Fatal(err)
 	}

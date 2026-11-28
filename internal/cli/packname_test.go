@@ -154,8 +154,7 @@ func TestPackApplyTheEmbeddedPack(t *testing.T) {
 		t.Fatalf("check after the import: %v\n%s", err, out)
 	}
 	// A group the yard set to the script alone (it predates the env, or
-	// opted out) is not set to the env by the import: check says what it
-	// keeps and changes nothing.
+	// opted out) is left untouched and reads unchanged.
 	ctx := context.Background()
 	g, err := a.st.GetGroup(ctx, "web-assembly")
 	if err != nil {
@@ -166,7 +165,7 @@ func TestPackApplyTheEmbeddedPack(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, err = run(t, a.packCmd(), "check", "starter", "--depot", "web")
-	if want := "  unchanged        web-assembly\n                     kept: cmd " + script + ": the pack's env YARDR_LAND=squash is set on a new group only\n"; err != nil || !strings.Contains(out, want) || !strings.Contains(out, "0 to create, 0 to change, ") {
+	if want := "  unchanged        web-assembly\n"; err != nil || !strings.Contains(out, want) || !strings.Contains(out, "0 to create, 0 to change, ") || strings.Contains(out, "kept:") {
 		t.Fatalf("check over a group set to the script alone: %v\n%s\nwant %q", err, out, want)
 	}
 }

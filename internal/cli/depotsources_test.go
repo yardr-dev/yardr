@@ -114,6 +114,11 @@ func TestDepotSourcesAppliedPack(t *testing.T) {
 	t.Parallel()
 	a, home, _ := sourcesYard(t)
 	requireNonInteractive(t)
+	for _, name := range []string{"web-builders", "web-reviewers"} {
+		if _, err := a.st.DeleteGroup(context.Background(), name, "me"); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if out, err := run(t, a.packCmd(), append([]string{"apply", "../../packs/starter", "--depot", "web", "--yes"}, starterFlags...)...); err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}

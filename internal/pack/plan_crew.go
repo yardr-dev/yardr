@@ -65,59 +65,75 @@ func (b *planner) crew() error {
 		if exists {
 			old = have[i]
 		}
-		op := &CrewOp{Pack: pr.Name, CrewMember: name, On: slices.Clone(pr.Events)}
-		if op.On == nil {
-			op.On = []string{}
+		wantOn := slices.Clone(pr.Events)
+		if wantOn == nil {
+			wantOn = []string{}
 		}
+		op := &CrewOp{Pack: pr.Name, CrewMember: name, On: wantOn}
 		o := Object{Kind: "crew", Name: name, CrewMember: op}
 		var changes []Diff
-		if pr.Name == "yardmaster" {
-			// The yardmaster's prompt is the yard's own file, which no pack
-			// sets: a pack's role for it is refused above. The one move an
-			// import makes is off a pack's role: a yardmaster still prompted
-			// from under <home>/packs/ is repointed at the local file,
-			// seeded from the role it reads now when there is none, so the
-			// yard keeps working exactly as it does today. A prompt already
-			// the yard's own, or anywhere else, is left as it is.
-			prompt, _ := old.Config["prompt"].(string)
-			if exists && packPrompt(b.o.Home, prompt) {
-				local := LocalYardmaster(b.o.Home)
-				op.Prompt = local
-				if _, err := os.Lstat(local); errors.Is(err, fs.ErrNotExist) {
-					op.SeedFrom = prompt
-					b.plan.Notes = append(b.plan.Notes, fmt.Sprintf("the yardmaster's local role %s is seeded from %s's role", local, promptPack(b.o.Home, prompt)))
-				} else if err != nil {
-					return err
-				} else {
-					b.plan.Notes = append(b.plan.Notes, fmt.Sprintf("the yardmaster's prompt moves to %s, which is already there and is kept as it is", local))
+		if exists {
+			op.On = slices.Clone(old.On)
+			if op.On == nil {
+				op.On = []string{}
+			}
+			moved := false
+			if pr.Name == "yardmaster" {
+				// The yardmaster's prompt is the yard's own file, which no pack
+				// sets: a pack's role for it is refused above. The one move an
+				// import makes is off a pack's role: a yardmaster still prompted
+				// from under <home>/packs/ is repointed at the local file,
+				// seeded from the role it reads now when there is none, so the
+				// yard keeps working exactly as it does today. A prompt already
+				// the yard's own, or anywhere else, is left as it is.
+				prompt, _ := old.Config["prompt"].(string)
+				if packPrompt(b.o.Home, prompt) {
+					moved = true
+					local := LocalYardmaster(b.o.Home)
+					op.Prompt = local
+					if _, err := os.Lstat(local); errors.Is(err, fs.ErrNotExist) {
+						op.SeedFrom = prompt
+						b.plan.Notes = append(b.plan.Notes, fmt.Sprintf("the yardmaster's local role %s is seeded from %s's role", local, promptPack(b.o.Home, prompt)))
+					} else if err != nil {
+						return err
+					} else {
+						b.plan.Notes = append(b.plan.Notes, fmt.Sprintf("the yardmaster's prompt moves to %s, which is already there and is kept as it is", local))
+					}
+					changes = append(changes, Diff{"prompt", prompt, op.Prompt})
 				}
-				changes = append(changes, Diff{"prompt", prompt, op.Prompt})
+			} else if pr.Role != "" {
+				wantPrompt := b.installed(pr.Role)
+				prompt, _ := old.Config["prompt"].(string)
+				own, err := b.depotRole(pr.Role)
+				if err != nil {
+					return err
+				}
+				if own != "" && b.plan.DepotRoles && prompt != "" && prompt != wantPrompt {
+					wantPrompt = prompt
+				}
+				if prompt != wantPrompt {
+					changes = append(changes, Diff{"prompt", prompt, wantPrompt})
+				}
 			}
-		} else if pr.Role != "" {
-			op.Prompt = b.installed(pr.Role)
-			prompt, _ := old.Config["prompt"].(string)
-			own, err := b.depotRole(pr.Role)
-			if err != nil {
-				return err
+			if moved {
+				o.Action, o.Changes = Change, changes
+			} else {
+				if !sameSet(old.On, wantOn) {
+					changes = append(changes, Diff{"on", old.On, wantOn})
+				}
+				o.Action, o.Changes = kept(true, changes), changes
 			}
-			switch {
-			case own == "":
-			case !b.plan.DepotRoles:
-				o.Shadows = append(o.Shadows, own)
-			case prompt != "" && prompt != op.Prompt:
-				// A crew member is the yard's, not the depot's, so only one that
-				// has a prompt of its own keeps it; a new one gets the pack's.
-				op.Prompt = prompt
-				o.Keeps = append(o.Keeps, fmt.Sprintf("prompt %s: the depot has its own %s", prompt, own))
+		} else {
+			if pr.Name != "yardmaster" && pr.Role != "" {
+				op.Prompt = b.installed(pr.Role)
+				own, err := b.depotRole(pr.Role)
+				if err != nil {
+					return err
+				}
+				if own != "" && !b.plan.DepotRoles {
+					o.Shadows = append(o.Shadows, own)
+				}
 			}
-			if exists && prompt != op.Prompt {
-				changes = append(changes, Diff{"prompt", prompt, op.Prompt})
-			}
-		}
-		if exists && !sameSet(old.On, op.On) {
-			changes = append(changes, Diff{"on", old.On, op.On})
-		}
-		if !exists {
 			if !told {
 				names := make([]string, len(have))
 				for i, r := range have {
@@ -133,8 +149,8 @@ func (b *planner) crew() error {
 			b.ask(&o, "model", "which model does crew member "+name+" run (empty: the agent's own default)?", "")
 			b.ask(&o, "args", "which permission arguments does crew member "+name+"'s agent run with (empty: none, and it stops at every permission prompt)?", "")
 			b.ask(&o, "dir", "which directory does crew member "+name+" work in?", "")
+			o.Action = kept(false, nil)
 		}
-		o.Action, o.Changes = action(exists, changes), changes
 		b.add(o)
 
 		var want []store.Subscription
@@ -159,18 +175,15 @@ func (b *planner) crew() error {
 			}
 			want = append(want, store.Subscription{Source: s.Name, Scope: s.Scope})
 		}
-		hears := len(changes) > 0
+		hears := false
 		for _, w := range want {
 			so := Object{Kind: "subscription", Name: name + " " + w.String(), Action: Create, Subscription: &SubscriptionOp{CrewMember: name, Add: &w}}
 			if j := slices.IndexFunc(old.Subscriptions, func(s store.Subscription) bool { return reflect.DeepEqual(s.Where, w.Where) && s.Source == w.Source }); j >= 0 {
-				// The same source and filters: it is this subscription,
-				// whatever its scope is now.
+				// The same source and filters: the crew member holds this
+				// subscription already, whatever its scope is now.
 				so.Action = Unchanged
-				if have := old.Subscriptions[j]; have.Scope != w.Scope {
-					so.Action, so.Changes, so.Subscription.Remove = Change, []Diff{{"scope", have.Scope, w.Scope}}, &have
-				}
 			}
-			hears = hears || so.Action != Unchanged
+			hears = hears || so.Action == Create
 			subs = append(subs, so)
 		}
 		if old.Live() && hears {

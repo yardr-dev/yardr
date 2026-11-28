@@ -3,7 +3,6 @@ package pack
 import (
 	"fmt"
 	"maps"
-	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -59,50 +58,6 @@ func (b *planner) groupName(g Group, have []store.Group) (name string, takes boo
 // name the pack's own group, rather than one of the yard's taking it.
 func (b *planner) owned(name string) bool {
 	return b.rec != nil && slices.ContainsFunc(b.rec.Objects, func(po store.PackObject) bool { return po.Kind == "group" && po.Name == name })
-}
-
-// makers are the packs, other than the one planned, whose last import into
-// the depot made name their own group: who a kept prompt or cmd stands from.
-// Sorted, for a plan that reads the same every time.
-func (b *planner) makers(name string) []string {
-	var out []string
-	for _, r := range b.all {
-		if r.Depot != b.o.Depot || (r.Pack == b.p.Name && r.Depot == b.o.Depot) {
-			continue
-		}
-		if slices.ContainsFunc(r.Objects, func(po store.PackObject) bool { return po.Kind == "group" && po.Name == name }) {
-			out = append(out, r.Pack)
-		}
-	}
-	slices.Sort(out)
-	return slices.Compact(out)
-}
-
-// keptPrompt is the Keeps line for a prompt the import leaves as the yard
-// has it though the pack carries a role: under whose prompt it stands, the
-// pack that made the group or a hand.
-func (b *planner) keptPrompt(name, oldPrompt, role string) string {
-	by := "set by hand"
-	if makers := b.makers(name); len(makers) > 0 {
-		by = "made by pack " + strings.Join(makers, ", ")
-		if len(makers) > 1 {
-			by = "made by packs " + strings.Join(makers, ", ")
-		}
-	}
-	return fmt.Sprintf("prompt %s: %s, and the pack's role %s is not set on it", or(oldPrompt, "(none)"), by, role)
-}
-
-// keptCmd is the Keeps line for a cmd the import leaves as the yard has it
-// though the pack carries a script, as keptPrompt is for a prompt.
-func (b *planner) keptCmd(name, oldCmd, script string) string {
-	by := "set by hand"
-	if makers := b.makers(name); len(makers) > 0 {
-		by = "made by pack " + strings.Join(makers, ", ")
-		if len(makers) > 1 {
-			by = "made by packs " + strings.Join(makers, ", ")
-		}
-	}
-	return fmt.Sprintf("cmd %s: %s, and the pack's script %s is not set on it", or(oldCmd, "(none)"), by, script)
 }
 
 // fitting are the names of the yard's groups that may take the pack's g.
@@ -199,18 +154,52 @@ func (b *planner) groups() error {
 			b.add(b.taken(g, have[slices.IndexFunc(have, func(h store.Group) bool { return h.Name == name })]))
 			continue
 		}
-		want := store.Group{Name: name, Config: map[string]any{}}
 		i := slices.IndexFunc(have, func(h store.Group) bool { return h.Name == name })
-		exists := i >= 0
-		var old store.Group
-		if exists {
-			// What the pack does not carry stays as the yard has it.
-			old = have[i]
-			want.Limit, want.Members, want.Subscriptions = old.Limit, slices.Clone(old.Members), old.Subscriptions
-			for k, v := range old.Config {
-				want.Config[k] = v
+		if i >= 0 {
+			old := have[i]
+			o := Object{Kind: "group", Name: name, Group: &old}
+			var changes []Diff
+			if wantRunner := g.runner(); old.Runner != wantRunner {
+				changes = append(changes, Diff{"runner", old.Runner, wantRunner})
 			}
+			switch {
+			case g.Agent != "":
+				installed := b.installed(g.Agent)
+				own, err := b.depotRole(g.Agent)
+				if err != nil {
+					return err
+				}
+				prompt, _ := old.Config["prompt"].(string)
+				if prompt != installed && (own == "" || prompt != g.Agent) {
+					wantPrompt := installed
+					if own != "" && b.plan.DepotRoles {
+						wantPrompt = g.Agent
+					}
+					changes = append(changes, Diff{"prompt", prompt, wantPrompt})
+				}
+			case g.Run != "":
+				cmd, _ := old.Config["cmd"].(string)
+				if wantCmd := setScript(cmd, b.installed(g.Run)); cmd != wantCmd {
+					changes = append(changes, Diff{"cmd", cmd, wantCmd})
+				}
+			}
+			if g.Limit > 0 && g.Limit != old.Limit {
+				changes = append(changes, Diff{"limit", old.Limit, g.Limit})
+			}
+			o.Action, o.Changes = kept(true, changes), changes
+			// A group the yard has keeps the last import's binding in the
+			// record while the pack still says binds_as: the import binds
+			// nothing anew, so the record must not change either, or no
+			// re-import is ever unchanged.
+			if o.Binds == "" && g.BindsAs != "" && !slices.Contains(b.o.Bound, g.Name) && b.rec != nil {
+				if j := slices.IndexFunc(b.rec.Objects, func(po store.PackObject) bool { return po.Kind == "group" && po.Name == name }); j >= 0 {
+					o.bindsKept = b.rec.Objects[j].Binds
+				}
+			}
+			b.add(o)
+			continue
 		}
+		want := store.Group{Name: name, Config: map[string]any{}}
 		if g.Limit > 0 {
 			want.Limit = g.Limit
 		}
@@ -221,17 +210,15 @@ func (b *planner) groups() error {
 		// unless the caller binds it itself: --group names the one that
 		// takes it.
 		binds := g.BindsAs != "" && !slices.Contains(b.o.Bound, g.Name)
-		if _, told := b.o.Groups[g.Name]; !exists && !told && g.Run == "" && !binds {
+		if _, told := b.o.Groups[g.Name]; !told && g.Run == "" && !binds {
 			if fit := fitting(g, have); len(fit) > 0 {
 				b.ask(&o, "group", fmt.Sprintf("which group of the yard takes the pack's %s (--group %s=<name>)? The yard has: %s.", g.Name, g.Name, strings.Join(fit, ", ")), "a new group "+name)
 			}
 		}
-		var field string
 		switch {
 		case g.Agent != "":
-			want.Runner, field = "herdr", "prompt"
-			installed := b.installed(g.Agent)
-			want.Config[field] = installed
+			want.Runner = "herdr"
+			want.Config["prompt"] = b.installed(g.Agent)
 			own, err := b.depotRole(g.Agent)
 			if err != nil {
 				return err
@@ -239,109 +226,32 @@ func (b *planner) groups() error {
 			switch {
 			case own == "":
 			case b.plan.DepotRoles:
-				// Told to keep the depot's own role: an existing prompt stays,
-				// and a new group, or one the pack's copy was set on, gets
-				// the role by the name the depot's file is found under.
-				prompt, _ := old.Config[field].(string)
-				if prompt == "" || prompt == installed {
-					prompt = g.Agent
-				}
-				want.Config[field] = prompt
-				o.Keeps = append(o.Keeps, fmt.Sprintf("prompt %s: the depot has its own %s", prompt, own))
+				want.Config["prompt"] = g.Agent
+				o.Keeps = append(o.Keeps, fmt.Sprintf("prompt %s: the depot has its own %s", g.Agent, own))
 			default:
 				o.Shadows = append(o.Shadows, own)
 			}
-			if exists && own == "" && old.Runner == want.Runner {
-				// A group the yard has keeps its prompt when it is not the
-				// pack's: one another pack made, or one set by hand. The
-				// record holds no prompt, so a pack's changed role reads as a
-				// hand's, and the hand wins; a group the pack made with its
-				// prompt still on is unchanged, and a new one gets the pack's.
-				// Where the depot has its own role the choice above stands:
-				// DepotRoles keeps it, PackRoles sets the pack's.
-				oldPrompt, _ := old.Config[field].(string)
-				if oldPrompt != installed {
-					if v, ok := old.Config[field]; ok {
-						want.Config[field] = v
-					} else {
-						delete(want.Config, field)
-					}
-					o.Keeps = append(o.Keeps, b.keptPrompt(name, oldPrompt, g.Agent))
-				}
-			}
-			if !exists {
-				if o.Binds = b.bindsAs(g, have, &want); o.Binds == "" {
-					b.ask(&o, "kind", "which agent runs group "+name+" (claude, codex, ...)?", settings["default_kind"])
-					b.ask(&o, "model", "which model does group "+name+" run (empty: the agent's own default)?", "")
-					b.ask(&o, "args", "which permission arguments does group "+name+"'s agent run with (empty: none, and it stops at every permission prompt)?", "")
-				}
+			if o.Binds = b.bindsAs(g, have, &want); o.Binds == "" {
+				b.ask(&o, "kind", "which agent runs group "+name+" (claude, codex, ...)?", settings["default_kind"])
+				b.ask(&o, "model", "which model does group "+name+" run (empty: the agent's own default)?", "")
+				b.ask(&o, "args", "which permission arguments does group "+name+"'s agent run with (empty: none, and it stops at every permission prompt)?", "")
 			}
 		case g.Run != "":
-			want.Runner, field = "exec", "cmd"
-			cmd, _ := old.Config["cmd"].(string)
-			if !exists {
-				// The assignments go before the script, where setScript keeps
-				// what a cmd has: from here on they are the yard's.
-				o.Env = g.EnvWords()
-				cmd = strings.Join(o.Env, " ")
-			}
-			installed := setScript(cmd, b.installed(g.Run))
-			want.Config[field] = installed
-			if exists {
-				if old.Runner == want.Runner && cmd != installed {
-					// As a prompt: a group the yard has keeps its cmd when it
-					// runs another script, one another pack's or one set by
-					// hand, said under Keeps; a new one gets the pack's.
-					if v, ok := old.Config[field]; ok {
-						want.Config[field] = v
-					} else {
-						delete(want.Config, field)
-					}
-					o.Keeps = append(o.Keeps, b.keptCmd(name, cmd, g.Run))
-				}
-				o.Keeps = append(o.Keeps, keptEnv(g, cmd)...)
-			}
+			want.Runner = "exec"
+			// The assignments go before the script, where setScript keeps
+			// what a cmd has: from here on they are the yard's.
+			o.Env = g.EnvWords()
+			want.Config["cmd"] = setScript(strings.Join(o.Env, " "), b.installed(g.Run))
 		default:
 			want.Runner = "manual"
-			if !exists {
-				b.ask(&o, "members", "who is in group "+name+" (actors who may move a bead out of its stages; empty: anyone)?", "")
-			}
+			b.ask(&o, "members", "who is in group "+name+" (actors who may move a bead out of its stages; empty: anyone)?", "")
 		}
-		if want.Runner != "manual" {
-			// Only people groups have members; one that becomes an agent
-			// or script group loses them, or the store refuses it.
-			want.Members = nil
-		}
-		if !exists && g.Limit == 0 {
+		if g.Limit == 0 {
 			// A pack that names no limit leaves it to the kind of group: a
 			// people group is not held back to one bead at a time.
 			want.Limit = store.DefaultLimit(want.Runner)
 		}
-		var changes []Diff
-		if exists {
-			if old.Runner != want.Runner {
-				changes = append(changes, Diff{"runner", old.Runner, want.Runner})
-			}
-			if field != "" && !reflect.DeepEqual(old.Config[field], want.Config[field]) {
-				changes = append(changes, Diff{field, old.Config[field], want.Config[field]})
-			}
-			if old.Limit != want.Limit {
-				changes = append(changes, Diff{"limit", old.Limit, want.Limit})
-			}
-			if len(old.Members) > 0 && want.Members == nil {
-				changes = append(changes, Diff{"members", old.Members, []string{}})
-			}
-		}
-		o.Action, o.Changes, o.Group = action(exists, changes), changes, &want
-		// A group the yard has keeps the last import's binding in the
-		// record while the pack still says binds_as: the import binds
-		// nothing anew, so the record must not change either, or no
-		// re-import is ever unchanged.
-		if exists && o.Binds == "" && g.BindsAs != "" && !slices.Contains(b.o.Bound, g.Name) && b.rec != nil {
-			if i := slices.IndexFunc(b.rec.Objects, func(po store.PackObject) bool { return po.Kind == "group" && po.Name == name }); i >= 0 {
-				o.bindsKept = b.rec.Objects[i].Binds
-			}
-		}
+		o.Action, o.Group = kept(false, nil), &want
 		b.add(o)
 	}
 	return nil

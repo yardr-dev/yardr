@@ -246,9 +246,9 @@ sources:
 | `crew.<name>.expose_to_peers` | optional, `true`: the yards this one is linked with should see the crew member and be able to write to it ([peers.md](peers.md#the-roster-whom-a-peer-may-see-and-write-to)). The pack only asks, and names no peer and no person: the import puts "Expose <name> to <peer>?" to the yard's operator, once per peer ([below](#how-a-pack-maps-to-the-yard)) |
 | `crew.<name>.calls.<source>` | optional: the same for a crew member (`calls: { crm: [customer] }`) |
 | `sources.<source>.as` | the crew member of the pack an issue's status is set as, in that source: a key of `crew` |
-| `sources.<source>.hears.<type>.<stage>` | the stage map, for any name: when a bead of that type enters that stage, the issue of the source it tracks goes to `started`, `review` or `done`, or, for a source whose threads take labels, gets the label of `label:<name>` (`review: "label:in review"`), which an issue and a pull request both take and yardr never removes ([links.md](links.md#a-beads-stage-moves-the-issue)). A stage left out changes nothing. The import sets it on the yard's hook of the source once the yard has the source; until then it skips the lines and says so ([Stage maps](#how-a-pack-maps-to-the-yard)) |
-| `sources.<source>.says` | what the source's events say of the bead the event is about, for any name: the one that tracks its thread, else the train of its branch. A list of lines, the first an event matches counting. `where` is the events the line is for, as a subscription's `--where` is typed (`"event=pull_request action=closed merged=true"`: every word must hold, a key given twice holds either value), over the source's keys and `stage` and `type`, the stage the bead is in and its type, for a line that holds in some stages or for some types only (`type=train` holds for a train, `type=pr` for a pr bead); the event's own type is named with `event` there. `outcome` is what such an event reports for the bead, which its flow routes; `note`, optional, begins the note of the move. A line is refused when its `where` parses wrong, when it names a key a source yardr has built in has not (for any other name the yard's source is asked when the plan is made), and when no flow of the pack has an edge for the outcome in the stage the line names (in any stage, when it names none): a line with `type` is held to the flows beads of that type follow alone, any other to every flow, since the bead may be of any type, and the refusal names each flow and what it lacks for the stage. A source may have `says` alone, without `as` and `hears`. The yard has one hook of a source and its table holds the lines of every pack that carries the source, so a pack whose lines meet events another pack's may meet names the bead's `type` on each (the starter's `type=train`, the contributors' `type=pr` and `type=issue`). The import sets the lines on the yard's hook of the source, once the yard has the source, among the lines it has ([What a source's events say](#how-a-pack-maps-to-the-yard)) |
-| `sources.<source>.makes` | what the source's events make, for any name: a bead for a thread no open bead tracks. A list of lines, the first an event matches counting. `where` is as in `says`, over the source's keys (for github `association` among them: whom the repository knows) and without `stage` and without `type`, which the line's bead already says; the event's own type is named with `event` there. `bead` is the bead such an event makes, its `type`, its `stage` and, optionally, the `depot` of the yard it is made in. A line is refused when its `where` parses wrong, when it names a key a source yardr has built in has not, when it names `type` (redundant with the bead the line makes), and when the flow of the pack that beads of the type follow has no such stage a bead can be made in. A source may have `makes` without `as` and `hears`. The import sets it on the yard's hook of the source, once the yard has the source ([What a source's events make](#how-a-pack-maps-to-the-yard)) |
+| `sources.<source>.hears.<type>.<stage>` | the stage map, for any name: when a bead of that type enters that stage, the issue of the source it tracks goes to `started`, `review` or `done`, or, for a source whose threads take labels, gets the label of `label:<name>` (`review: "label:in review"`), which an issue and a pull request both take and yardr never removes ([links.md](links.md#a-beads-stage-moves-the-issue)). A stage left out changes nothing. The import fills a missing `as` or map on the yard's hook once the yard has the source; if the hook already has either, it leaves it as it is and reports a difference when the value differs. Until then it skips the lines and says so ([Stage maps](#how-a-pack-maps-to-the-yard)) |
+| `sources.<source>.says` | what the source's events say of the bead the event is about, for any name: the one that tracks its thread, else the train of its branch. A list of lines, the first an event matches counting. `where` is the events the line is for, as a subscription's `--where` is typed (`"event=pull_request action=closed merged=true"`: every word must hold, a key given twice holds either value), over the source's keys and `stage` and `type`, the stage the bead is in and its type, for a line that holds in some stages or for some types only (`type=train` holds for a train, `type=pr` for a pr bead); the event's own type is named with `event` there. `outcome` is what such an event reports for the bead, which its flow routes; `note`, optional, begins the note of the move. A line is refused when its `where` parses wrong, when it names a key a source yardr has built in has not (for any other name the yard's source is asked when the plan is made), and when no flow of the pack has an edge for the outcome in the stage the line names (in any stage, when it names none): a line with `type` is held to the flows beads of that type follow alone, any other to every flow, since the bead may be of any type, and the refusal names each flow and what it lacks for the stage. A source may have `says` alone, without `as` and `hears`. The yard has one hook of a source and its table holds the lines of every pack that carries the source, so a pack whose lines meet events another pack's may meet names the bead's `type` on each (the starter's `type=train`, the contributors' `type=pr` and `type=issue`). The import adds missing lines to the yard's hook once the yard has the source, leaving its other lines standing ([What a source's events say](#how-a-pack-maps-to-the-yard)) |
+| `sources.<source>.makes` | what the source's events make, for any name: a bead for a thread no open bead tracks. A list of lines, the first an event matches counting. `where` is as in `says`, over the source's keys (for github `association` among them: whom the repository knows) and without `stage` and without `type`, which the line's bead already says; the event's own type is named with `event` there. `bead` is the bead such an event makes, its `type`, its `stage` and, optionally, the `depot` of the yard it is made in. A line is refused when its `where` parses wrong, when it names a key a source yardr has built in has not, when it names `type` (redundant with the bead the line makes), and when the flow of the pack that beads of the type follow has no such stage a bead can be made in. A source may have `makes` without `as` and `hears`. The import adds missing lines to the yard's hook and leaves its other lines standing ([What a source's events make](#how-a-pack-maps-to-the-yard)) |
 | `sources.<name>.declaration` | for a name yardr has not built in: the file in the pack that declares a service yardr has no Go for, as `yardr source add` takes it. The import adds it to the yard's declared sources ([Declared sources](#how-a-pack-maps-to-the-yard)). Such a source has this key and no other; in a pack of kind `source` its declaration may also name the commands the yard runs (`hook`, `thread`, `link`), and the credential helper git runs (`git`) |
 | `presets.<preset>.about` | optional, in a pack of kind `source`: one line saying what the preset grants, printed by `pack show` beside the preset's name |
 | `presets.<preset>.grants.<source>` | in a pack of kind `source`: the calls of a source the pack declares that the preset grants, in the words `yardr source grant` takes: `read` for every read call, an update call by its name, a single read call by its name where a preset wants one without the rest (`grants: { crm: [read, note] }`). `pack check` refuses a source the pack does not declare, a call the declaration does not name, an empty preset, and presets on a pack of another kind; `pack show` prints the presets numbered in file order. The pack only suggests: nothing is granted until the operator grants it, and a terminal `pack apply` ignores presets ([An integration pack](#an-integration-pack-kind-source)) |
@@ -517,14 +517,14 @@ neither to the store nor under the home:
 
 | it says | meaning |
 |---|---|
-| `create` | the yard has no object of that name |
+| `create` | the yard has no object of that name; for a hook map, the import writes an `as` or map field or adds a table line |
 | `change`, then `field: old -> new` per field | it has one that differs in what the pack carries |
 | `unchanged` | it has one and nothing would change |
-| `differs` | the yard has its own version of this file, flow or pointer and an import leaves it alone; `--replace <file>` overwrites a differing role, script or frame under `~/.yardr/packs/<pack>/` ([A line copies once](#yardr-pack-apply)) |
+| `differs` | the yard has its own version of this file, flow, pointer, group, route, crew member or hook line and an import leaves it alone; `--replace <file>` overwrites a differing role, script or frame under `~/.yardr/packs/<pack>/` ([A line copies once](#yardr-pack-apply)) |
 | `no longer in it` | for a pack of kind `source`, an earlier import brought this source and the pack has dropped it since: left alone unless the import is told to prune ([Pruning](#pruning)) |
 | `takes` | a group the yard has takes a group of the pack, as it is (`--group`): nothing of it would be changed, and it is not recorded as the pack's ([Groups](#how-a-pack-maps-to-the-yard)) |
 | `shadows …` under an object | a file of the depot that is not used while the object is as the pack sets it: the depot's own `.yardr/roles/builder.md`, under a group prompted from the pack's copy |
-| `kept: …` under an object | something the pack carries and the import leaves as the yard has it, with the reason: a prompt on an existing group that points elsewhere; a command on an existing script group that differs from the pack's; a depot role kept with `--depot-roles`; or the role, script or limit of a group that takes the pack's |
+| `kept: …` under an object | something the pack carries and the import leaves as the yard has it, with the reason: the role, script or limit of a group that takes the pack's, or a depot role kept with `--depot-roles` on a new object |
 
 then what an import would ask, which flow would govern the depot afterwards,
 what each subscribed source has and lacks, which sources the yard has
@@ -658,9 +658,9 @@ by every depot that imports a pack naming it.
 
 | pack | group in the yard | the pack sets | the yard keeps |
 |---|---|---|---|
-| `agent: <role>` | runner `herdr` | `prompt` (the copied role) for a new group or one already using that copy, subject to the depot-role choices above; `limit` | `prompt` when an existing group points elsewhere and the depot-role choice does not apply, plus `kind`, `model`, `args`, `env_file`, `idle` and every other setting |
-| `run: <script>` | runner `exec` | the copied script in `cmd` for a new group; `limit`; in the `cmd` of a group it creates, the assignments of `env` before the script | an existing group's `cmd` when it differs from the pack's script, plus its assignments before the command and arguments after it (`YARDR_PUSH=origin … merge-local`); `env` is never set on a group the yard has. `log`, `dir` and the rest |
-| `people: true` | runner `manual` | `limit`, when the pack gives one; a group it creates with none starts with 50 | `members`, subscriptions |
+| `agent: <role>` | runner `herdr` | `prompt` (the copied role) and `limit` on a new group, subject to the depot-role choices above | an existing group whole (reported as `differs` where `runner`, `prompt` or `limit` differs), plus `kind`, `model`, `args`, `env_file`, `idle` and every other setting |
+| `run: <script>` | runner `exec` | the copied script in `cmd`, `limit`, and the assignments of `env` before the script on a new group | an existing group whole (its `cmd` and `limit` are left and reported as `differs` when they differ from the pack's), plus its assignments before the command, arguments after it (`YARDR_PUSH=origin … merge-local`), `log`, `dir` and the rest |
+| `people: true` | runner `manual` | `limit` on a new group (50 when the pack gives none) | an existing group whole (`limit` reported as `differs` when the pack gives another), `members`, subscriptions |
 
 A group the yard lacks needs what a pack cannot say: the agent kind, model
 and permission arguments, or the members. These are the import's questions.
@@ -886,9 +886,9 @@ expose to peers, for crew member boss
 **Stage maps.** `sources.<source>` says which status an issue goes to when
 the bead tracking it ([links.md](links.md)) enters a stage, and as which
 crew member. Which stage means which status is opinion about the flow, so the
-pack carries it; the import puts it where the yard keeps it, on the yard's
-hook of that source, as `yardr hook add --as <crew member> --map
-<type>:<stage>=<state>` would:
+pack carries it; the import fills the hook's missing `as` and map fields and
+adds missing table lines, on the yard's hook of that source, as `yardr hook
+add --as <crew member> --map <type>:<stage>=<state>` would:
 
 | pack | hook |
 |---|---|
@@ -904,7 +904,8 @@ stage maps
 
 stage map of source linear, as crew member boss
   the pack says task:merged=done task:new=started task:review-security=review task:review=review
-  would be set on hook linear, which has none
+  would set as boss on hook linear
+  would set map on hook linear
   ok       hook         hook linear
   ok       identity     crew member boss has an identity in linear
   missing  set state    crew member boss may not set a status in linear, so no issue is moved. The import does not grant it: the operator allows it with yardr crew set boss set_state=linear
@@ -912,8 +913,10 @@ stage map of source linear, as crew member boss
 
 | the plan says | meaning |
 |---|---|
-| `would be set on hook <name>, which has none` | the hook gets the crew member and the map (`create`) |
-| `would replace what hook <name> has: as <crew member>, <map>` | the hook has another map or acts as another crew member: it gets the pack's, whole, and the object's `as:` and `map:` lines show old and new (`change`) |
+| `would set as <crew member> on hook <name>` | the hook has no `as`; the import sets the pack's crew member (`create`) |
+| `would set map on hook <name>` | the hook has no map; the import sets the pack's map (`create`) |
+| `would add the says/makes line … to hook <name>` | the hook lacks the line; the import adds it and leaves its other lines standing (`create`) |
+| `hook <name> keeps its own as/map (…)` | the hook already has an `as` or map that differs from the pack's, so the import leaves it as it is (`differs`) |
 | `hook <name> has it` | nothing to do (`unchanged`) |
 | `nothing would be set` | the yard has no hook of the source, or the crew member no identity in it. The import goes through without it; the next one sets the map once the yard has what is `missing` |
 | `skipped: …` | the pack's lines do not fit the source the yard has: a status it has none of, or a key its events carry none of. The import goes through without them; the next one sets them once they fit |
@@ -1126,9 +1129,10 @@ line.
 
 It makes the plan `pack check` shows, prints it with what the flags answer
 filled in, asks for what the pack cannot say, and creates what the yard
-lacks. An existing file, flow or flow pointer that differs from the pack is
-reported as `differs` and left as the yard has it ([A line copies
-once](#yardr-pack-apply)); nothing is added a second time. With `--sha256
+lacks. An existing file, flow, flow pointer, group, route, crew member or hook
+line that differs from the pack is reported as `differs` and left as the yard
+has it ([A line copies once](#yardr-pack-apply)); nothing is added a second
+time. With `--sha256
 <digest>` it first refuses, writing nothing, any pack but the one with that
 digest ([Pinning a pack](#naming-a-pack)); a script that applies a pack from
 a URL with `--yes` gives the digest it read in `pack check`.
@@ -1297,10 +1301,10 @@ of opening threads above. For each group or crew member with a call under
   show`. A session started afterwards has the call in its brief; one that
   runs already may make it at once.
 
-**Stage maps.** For each source under `sources` the import sets the map,
-and the crew member it is acted on as, on the yard's hook of that source, and
-leaves the hook's name, source and secret file. A hook that has another map
-gets the pack's.
+**Stage maps.** For each source under `sources` the import sets the map and
+the crew member it is acted on as on the yard's hook of that source only where
+the hook has none, leaving the hook's name, source and secret file. A hook that
+already has its own `as` or map keeps it (reported as `differs`).
 
 - No hook of the source, or a crew member without an identity in it: the
   import goes through, sets nothing for that source and says what to add
@@ -1325,37 +1329,29 @@ in the pack's order. The outcome is reported as the hook's `as` crew
 member when it has one, so a table whose outcomes cross a stage of people
 wants the pack's `as`; a source with `says` and no `as` asks for no
 identity and no `set_state`, and anyone who may apply the pack sets it.
-What the hook has besides (the crew member it acts as, its map) stays
-unless the pack carries those too, and then it is replaced whole.
+The hook keeps its name, source and secret file. Existing `as` and map fields
+stay as they are; missing fields are filled, and no existing field is replaced.
 
-The table is the hook's, and every pack that carries the source sets its
-lines in it: the starter's for the pull request of a train, the
+The table is the hook's, and every pack that carries the source adds its
+missing lines to it: the starter's for the pull request of a train, the
 contributors' for the pull requests and issues from outside. So an import
-sets the pack's lines among the hook's and replaces none of the others:
+adds the pack's lines where missing and leaves every other line standing:
 
-- It takes off the lines the pack set at its last import into the depot and
-  no longer gives, and no other. The plan names each as a drop; nothing
-  asks for `--yes`.
-- The pack's lines the hook has stay in the places they stand, put in the
-  pack's order, since the first line an event matches counts. A line the
-  pack gains goes before the pack line that follows it, where the pack wrote
-  it, and one that comes after its last line the hook has goes last, after
-  the rest.
-- Every other line stays where it is: another pack's, found by the
-  records of their imports, and the operator's, set by hand with `yardr hook
-  add`. The plan never offers one as a drop. A line that another pack's last
-  import lists as well stays when this pack lets go of it.
+- `as` and the stage map are set only where the hook has none; where the hook
+  has its own and it differs, it stays (`differs`).
+- A line the hook lacks is added in the pack's order, before the pack line
+  that follows it or last after the rest. A line already in the table is not
+  repeated, and no line is taken off — including lines an earlier import added
+  that the pack no longer carries.
 
-`yardr pack check` prints each line it would add and each of the pack's own
-it would drop. Two packs on one hook tell their lines apart by the type of
+`yardr pack check` prints each line it would add and any `as` or map left as
+the hook has it. Two packs on one hook tell their lines apart by the type of
 the bead, which a line names with `type` (`type=train` in the starter's,
 `type=pr` and `type=issue` in the contributors'): a pull request closed
 unmerged asks a person about the train that tracks it and drops a
 contributor's pull request, and no event meets the lines of both. Without a
 hook of the source the import sets nothing for it and names the command, as
-for a map. A pack that drops the block has its own lines removed by
-`--prune`, those the hook still has, while the crew member and the map stay
-for as long as another pack acts on the hook as one.
+for a map.
 
 **What a source's events make.** A source's `makes` goes on that hook too,
 as `yardr hook add --makes` would put it
@@ -1363,13 +1359,11 @@ as `yardr hook add --makes` would put it
 order: `- { where: "event=issues action=opened", bead: { type: issue, stage:
 triage } }` makes an issue bead in `triage` for an issue someone opens in
 the depot's repository, which tracks it, so that the lines of `says` find it
-afterwards. Like `says` it needs the hook alone, is set among the lines the hook
-has (the pack's own from its last import that it no longer gives are taken
-off, the others stay, and a plan shows what it would add and drop), and its
-own lines are removed by `--prune` once the pack drops it. A line that names
-no `depot` makes the bead in the depot whose `origin` remote is the event's
-repository; a pack that is imported into several depots of one repository
-must name it.
+afterwards. Like `says` it needs the hook alone, adds missing lines among the
+lines the hook has, leaves every existing line standing, and takes no line off.
+A line that names no `depot` makes the bead in the depot whose `origin` remote
+is the event's repository; a pack that is imported into several depots of one
+repository must name it.
 
 **Twice is once.** Applying a pack that is already applied writes no object
 and logs one event, `pack_unchanged`. A hook that has the pack's map and
@@ -1386,10 +1380,11 @@ gives it back unasked. An import whose only news is an answer writes the
 record and logs `pack_applied`.
 
 **A line copies once.** Applying a line creates the flows, stage files, role
-files, scripts, page frame and flow pointers that the yard lacks. What the
-yard already has under that name is compared directly with the pack: where
-it matches, the plan says `unchanged`; where it reads otherwise, the plan
-says `differs` with the differences, writes nothing, and removes nothing:
+files, scripts, page frame, flow pointers, groups, routes, crew members,
+subscriptions and hook lines that the yard lacks. What the yard already has
+under that name is compared directly with the pack: where it matches, the plan
+says `unchanged`; where it reads otherwise, the plan says `differs` with the
+differences, writes nothing, and removes nothing:
 
 ```
 flows
@@ -1420,7 +1415,6 @@ directory, and any pack of kind `source`. `--yes` answers confirmation
 prompts in a terminal or script; it never overwrites a differing file on its
 own. The commands of a declared source (`kind: source`) are still updated by
 applying the connector, and its sources stay as the connector declares them.
-Routes and groups have their own keeps, shown under them.
 
 **All or nothing, as far as the store allows.** Before the first write the
 import checks that the plan is not refused, that every question has a usable
@@ -2200,8 +2194,10 @@ and the `calls` it was granted; `expose` has `answers`, crew member -> peer
 -> yes or no as the form gave them, and `notes`, who was not exposed and
 which command or who would, and `result.exposed` lists each `crew` with the
 `peers` it was exposed to; `maps_refused` is source -> why this
-run set no stage map for it, and `result.mapped` the maps it set, each with
-`hook`, `source`, `as` and `map`; `sources_refused` is declared source ->
+run set no stage map for it, and `result.mapped` the hook updates it made,
+each with `hook`, `source`, `as`, `map`, `says` and `makes`; `as` and `map`
+are set only where absent, and the table fields carry the pack's lines, added
+where missing; `sources_refused` is declared source ->
 why this run did not add it, and `result.declared` the names of those it
 added or replaced; `sets` is what `--source-env`, `--notify` and
 `--source-base` set for the declared sources, `set` and `skip` each
@@ -2250,10 +2246,11 @@ Objects come in the order an import does them: files (roles and scripts,
 then stage files), groups, flows,
 pointers, routes, crew members, subscriptions, stage maps, declared sources; dropped objects come last.
 `action` is `create`, `change`, `unchanged`, `differs`, `dropped` or
-`takes`: `differs` is an existing file, flow or pointer that reads otherwise
-than the pack and is left alone (carrying its `changes`), and `takes` is a
-group of the yard that takes one of the pack's, which carries the group as
-it is and stays, and under `keeps` what of the pack's is not set on it.
+`takes`: `differs` is an existing file, flow, pointer, group, route, crew
+member or hook line that reads otherwise than the pack and is left alone
+(carrying its `changes`), and `takes` is a group of the yard that takes one
+of the pack's, which carries the group as it is and stays, and under `keeps`
+what of the pack's is not set on it.
 Each object carries what the import would write (for a dropped one, what a
 prune removes), under its kind:
 
@@ -2263,10 +2260,10 @@ prune removes), under its kind:
 | `group` | the whole group as it would be stored, what the yard keeps included |
 | `flow` | the whole flow, its stages in order |
 | `pointer` | `depot`, `type`, `flow` |
-| `route` | `stage`, `depot`, `type`, `group`, and `delete`: the ids of the routes it replaces |
-| `crew` | `pack` (its name in the pack), `crew` (in the yard), `prompt`, `on`, and `restart` when it is running and the import changes its role or what it hears |
-| `subscription` | `crew`, `add`, and `remove` when a scope changes |
-| `map` | `hook`, `source`, `as`, `map`, `says` and `makes`: what the hook is set to. Only a map the import can set is an object; `maps` has every source |
+| `route` | `stage`, `depot`, `type`, `group`, and `delete`: route ids removed by the object; a line import leaves existing routes standing and has no deletes |
+| `crew` | `pack` (its name in the pack), `crew` (in the yard), `prompt`, `on`, and `restart` when a live member gets a new subscription |
+| `subscription` | `crew` and `add`; a line import leaves an existing subscription as it is, regardless of scope |
+| `map` | `hook`, `source`, `as`, `map`, `says` and `makes`: the pack's values, set or added only where the hook lacks them. A map object is present when the import writes fields or lines or reports a differing `as` or map; `maps` has every source |
 | `source` | `name`, `from` (the declaration's file in the pack) and `declaration`, its text: what is added; `decl_dir` (the declaration's directory in the pack) and `commands`, each command's `key`, `program` and the `sha256` of the pack's file, when it brings command files. `declared` has, per source, `file`, `base`, `calls`, `commands`, `action` and `needs` |
 
 An object's `asks` are the ids of the questions whose answers it still
@@ -2283,18 +2280,15 @@ asked when the pack has several flows a depot could follow and the depot has
 no flow pointer yet. A plan with anything under `refused` must not be applied.
 
 `maps` has one entry per source under the pack's `sources`: the `map` keyed
-`<type>:<stage>` as a hook keeps it, `pack` and `as` (the crew member by the
-pack's name and the yard's), `says` and `makes` (the pack's tables), `hook`
-(absent when the yard has none), `action` (`create`, `change` with `was`,
-the hook's `as`, `map`, `says` and `makes` before, `unchanged`, `not_set`
-when the import sets nothing for want of a hook or an identity, or `skipped`
-with `skipped`, why: the yard has no source of the name, or the lines do not
-fit the one it has), `drops` (the hook's `says` and `makes` lines the import
-takes off, each with `table` and `line`: the pack's own from its last import
-that it no longer gives, and no other; the `map` of the plan's object and
-`result.mapped` carry them as `drop_says` and `drop_makes`), and `needs`: `hook`,
-`identity` and `set_state`, each `ok` or `missing` with the command in
-`detail`.
+`<type>:<stage>` as the pack carries it, `pack` and `as` (the crew member by
+the pack's name and the yard's), `says` and `makes` (the pack's tables), `hook`
+(absent when the yard has none), `action` (`create` when the import writes an
+`as`, map or missing table line; `differs` when the hook has its own differing
+`as` or map and nothing is written; `unchanged`; `not_set` when the import
+sets nothing for want of a hook or an identity; or `skipped` with `skipped`,
+why: the yard has no source of the name, or the lines do not fit the one it
+has), and `needs`: `hook`, `identity` and `set_state`, each `ok` or `missing`
+with the command in `detail`. It has no `was` or `drops` fields.
 
 `optional` names the sources the pack could use that the yard has nothing
 of: no source of the name and no hook of it. Each has `source`, `setup`

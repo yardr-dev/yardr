@@ -40,6 +40,7 @@ groups:
   support:  { run: scripts/note, calls: { crm: [note] } }
 crew:
   yardmaster:
+    hears: { events: [attention] }
     calls: { crm: [customer, note] }
 sources:
   crm:
